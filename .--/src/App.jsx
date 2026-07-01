@@ -5178,8 +5178,9 @@ function SADashboard({ staffUser, onLogout }) {
   }
 
   async function fetchNotifications() {
+    var token = localStorage.getItem('gh_staff_token');
+    if (!token || token === 'undefined' || token === 'null') return;
     try {
-      var token = localStorage.getItem('gh_staff_token');
       console.log('[fetchNotifications] token at', new Date().toISOString(), ':', token ? token.substring(0, 15) + '...' : 'NULL/EMPTY');
       var res = await fetch(API_URL + '/api/sa/notifications', { headers: { Authorization: 'Bearer ' + token } });
       if (res.ok) {
