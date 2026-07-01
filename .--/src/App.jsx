@@ -1,79 +1,35 @@
-import { useEffect, useState, useCallback } from 'react'
-// =========================================================
-// AD CONFIGURATION -- flip ENABLE_ADS to true when ready
-// =========================================================
-const ENABLE_ADS = false;
-const AD_CONFIG = {
-  BANNER_ANDROID: 'ca-app-pub-3940256099942544/6300978111', // TEST ID - replace with real
-  BANNER_IOS:     'ca-app-pub-3940256099942544/2934735716', // TEST ID - replace with real
-};
-// =========================================================
-// CONSTANTS
-// =========================================================
-const API_URL              = "https://gethome-backend-7ocr.onrender.com";
-const PAYSTACK_PUB_KEY     = "pk_test_REPLACE_WITH_YOUR_PAYSTACK_PUBLIC_KEY";
-const LOAN_PARTNER_URL     = "https://REPLACE_WITH_LOAN_PARTNER_WEBSITE.com/apply";
-const WHATSAPP_NUMBER      = "2349077246534";
-const ADDON_PRICES         = { cleaning: 92000, relocation: 230000 };
-const ESCROW_FEE_RATE      = 0.0075;
-const ESCROW_FEE_CAP       = 5000;
-const PROXY_INSPECTION_FEE = 12500;
-const AGENT_TIERS = {
-  free:    { listingLimit: 3,   label: 'Free',    price: 0     },
-  premium: { listingLimit: 15,  label: 'Premium', price: 8500  },
-  agency:  { listingLimit: 100, label: 'Agency',  price: 35000 },
-};
-// =========================================================
-// PAYSTACK SDK LOADER
-// =========================================================
-function usePaystackSDK() {
-  useEffect(() => {
-    if (document.getElementById('paystack-sdk')) return;
-    const s = document.createElement('script');
-    s.id = 'paystack-sdk'; s.src = 'https://js.paystack.co/v1/inline.js'; s.async = true;
-    document.head.appendChild(s);
-  }, []);
-}
-// =========================================================
-// SHARED STYLES
-// =========================================================
-const inputStyle = {
-  width: '100%', padding: '13px 16px', borderRadius: '10px',
-  border: '1.5px solid #e2e8f0', fontSize: '0.95rem', outline: 'none',
-  backgroundColor: '#ffffff', color: '#0a2240', boxSizing: 'border-box',
-  transition: 'border-color 0.2s ease',
-};
-const labelStyle = {
-  display: 'block', fontSize: '0.78rem', fontWeight: '700', color: '#64748b',
-  marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.6px',
-};
-const navButtonStyle = (isActive) => ({
-  background: 'none', border: 'none',
-  color: isActive ? '#27ae60' : '#94a3b8',
-  fontSize: '0.95rem', cursor: 'pointer', padding: '8px 6px', fontWeight: '600',
-  borderBottom: isActive ? '3px solid #27ae60' : '3px solid transparent',
-  transition: 'color 0.15s ease',
+﻿import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { SUPPORTED_COUNTRIES } from './constants/countries';
+import { CountryProvider, useCountry } from './context/CountryContext';
+import { formatLocalPrice } from './utils/pricing';
+const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
 });
-const fmtNGN = (n) => `NGN ${Number(n).toLocaleString('en-NG')}`;
-const cardStyle = {
-  backgroundColor: '#ffffff', borderRadius: '20px',
-  border: '1px solid #e8edf3',
-  boxShadow: '0 4px 6px -1px rgba(10,34,64,0.04), 0 2px 4px -1px rgba(10,34,64,0.03)',
+const ENABLE_ADS = false;
+const MASTER_ADMIN = "medibrhm07@gmail.com";
+const AD_CONFIG = { BANNER_ANDROID: 'ca-app-pub-3940256099942544/6300978111', BANNER_IOS: 'ca-app-pub-3940256099942544/2934735716' };
+const API_URL            = import.meta.env.VITE_API_URL;
+const PAYSTACK_PUB_KEY   = import.meta.env.VITE_PAYSTACK_PUB_KEY;
+const LOAN_PARTNER_URL    = import.meta.env.VITE_LOAN_PARTNER_URL;
+const LOAN_PARTNER_URL_GH = import.meta.env.VITE_LOAN_PARTNER_URL_GH;
+const WHATSAPP_NUMBER    = import.meta.env.VITE_WHATSAPP_NUMBER;
+const ADDON_PRICES       = { cleaning: 92000, relocation: 230000 };
+const ESCROW_FEE_RATE    = 0.0075;
+const ESCROW_FEE_CAP     = 5000;
+const COMMISSION_RATE    = 0.025;
+const PROXY_INSPECTION_FEE = 12500;
+const FEATURED_LISTING_FEE = 5000;
+const LOCAL_FEE_CONFIGS = {
+  Nigeria: { symbol: '₦',    featured: 5000, proxy: 12500 },
+  Ghana:   { symbol: 'GH₵ ', featured: 75,   proxy: 180   },
 };
-// =========================================================
-// HELPER: Paystack popup
-// =========================================================
-function openPaystack({ email, amountNaira, ref, metadata, onSuccess, onClose }) {
-  if (!window.PaystackPop) {
-    alert('[!] Payment gateway still loading --- please try again in a moment.');
-    return;
-  }
-  window.PaystackPop.setup({
-    key: PAYSTACK_PUB_KEY, email,
-    amount: Math.round(amountNaira * 100), currency: 'NGN',
-    ref, metadata, callback: onSuccess, onClose,
-  }).openIframe();
-}
+const AGENT_TIERS = {
+  free:    { listingLimit: 3,   label: 'Free',          price: 0     },
+  premium: { listingLimit: 15,  label: 'Premium Agent', price: 8500  },
+  agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
+};
+const fmtNGN = (n) => { const num = Number(n); if (!num || isNaN(num)) return 'NGN 0'; return 'NGN ' + num.toLocaleString('en-NG'); };
 function useWindowWidth() {
   var [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   useEffect(function() {
@@ -83,114 +39,43 @@ function useWindowWidth() {
   }, []);
   return width;
 }
-// =========================================================
-// LOADING SCREEN
-// Shown while properties are being fetched from the API.
-// =========================================================
+function usePaystackSDK() {
+  useEffect(() => {
+    if (document.getElementById('paystack-sdk')) return;
+    const s = document.createElement('script');
+    s.id = 'paystack-sdk'; s.src = 'https://js.paystack.co/v1/inline.js'; s.async = true;
+    document.head.appendChild(s);
+  }, []);
+}
+function openPaystack({ email, amountNaira, currency = 'NGN', ref, metadata, onSuccess, onClose }) {
+  if (!window.PaystackPop) { alert('Payment gateway still loading. Please try again.'); return; }
+  window.PaystackPop.setup({ key: PAYSTACK_PUB_KEY, email, amount: Math.round(amountNaira * 100), currency, ref, metadata, callback: onSuccess, onClose }).openIframe();
+}
+const cardStyle = { backgroundColor: '#fff', borderRadius: '16px', boxShadow: '0 2px 12px rgba(10,34,64,0.06), 0 1px 3px rgba(10,34,64,0.04)', border: '1px solid #e8edf5' };
+const inputStyle = { width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', outline: 'none', color: '#0f172a', backgroundColor: '#fff', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" };
+const labelStyle = { display: 'block', marginBottom: '6px', fontSize: '0.81rem', fontWeight: '600', color: '#475569', letterSpacing: '0.01em' };
 function LoadingScreen() {
+  const [dots, setDots] = useState('.');
+  useEffect(function(){ var t = setInterval(function(){ setDots(function(d){ return d.length >= 3 ? '.' : d + '.'; }); }, 600); return function(){ clearInterval(t); }; }, []);
   return (
-    <div style={{
-      minHeight: '100vh', backgroundColor: '#f1f5f9',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      fontFamily: '"Segoe UI", Roboto, Arial, sans-serif',
-      gap: '24px',
-    }}>
-      {/* Pulsing logo */}
+    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '28px', padding: '20px' }}>
       <div style={{ textAlign: 'center' }}>
-        <h1 style={{ fontSize: '2.4rem', fontWeight: '900', color: '#0a2240', margin: 0, letterSpacing: '-1px' }}>
-          Get<span style={{ color: '#27ae60' }}>Home</span>
-        </h1>
-        <p style={{ color: '#94a3b8', margin: '8px 0 0 0', fontSize: '0.9rem' }}>Loading verified listings...</p>
+        <h1 style={{ fontSize: '2.6rem', fontWeight: '800', color: '#0a2240', margin: '0 0 10px 0', letterSpacing: '-1.5px', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif" }}>Get<span style={{ color: '#22c55e' }}>Home</span></h1>
+        <p style={{ color: '#94a3b8', fontSize: '0.86rem', margin: '0 0 4px 0' }}>Loading verified listings{dots}</p>
+        <p style={{ color: '#cbd5e1', fontSize: '0.74rem', margin: 0 }}>First load may take up to 30 seconds</p>
       </div>
-      {/* Animated spinner */}
-      <div style={{ position: 'relative', width: '48px', height: '48px' }}>
-        <div style={{
-          width: '48px', height: '48px', borderRadius: '50%',
-          border: '4px solid #e2e8f0',
-          borderTopColor: '#27ae60',
-          animation: 'gh-spin 0.8s linear infinite',
-        }} />
-      </div>
-      {/* Inject the spin keyframe once */}
-      <style>{`
-        @keyframes gh-spin { to { transform: rotate(360deg); } }
-        @keyframes gh-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-      `}</style>
-      {/* Skeleton card hints */}
-      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', opacity: 0.5 }}>
-        {[1, 2, 3].map(i => (
-          <div key={i} style={{ width: '200px', borderRadius: '16px', backgroundColor: '#e2e8f0', overflow: 'hidden', animation: 'gh-pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.15}s` }}>
-            <div style={{ height: '120px', backgroundColor: '#cbd5e1' }} />
-            <div style={{ padding: '16px' }}>
-              <div style={{ height: '12px', backgroundColor: '#cbd5e1', borderRadius: '6px', marginBottom: '8px' }} />
-              <div style={{ height: '10px', backgroundColor: '#cbd5e1', borderRadius: '6px', width: '70%' }} />
-            </div>
-          </div>
-        ))}
-      </div>
+      <div style={{ width: '38px', height: '38px', border: '3px solid #e2e8f0', borderTopColor: '#22c55e', borderRadius: '50%', animation: 'spin 0.75s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
-// =========================================================
-// ERROR SCREEN
-// Shown when the API fetch fails. Retry button re-fires fetch.
-// =========================================================
 function ErrorScreen({ onRetry }) {
-  const [retrying, setRetrying] = useState(false);
-  const handleRetry = async () => {
-    setRetrying(true);
-    // Small delay so the spinner is visible before App re-fetches
-    await new Promise(r => setTimeout(r, 600));
-    onRetry();
-    setRetrying(false);
-  };
   return (
-    <div style={{
-      minHeight: '100vh', backgroundColor: '#f1f5f9',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      fontFamily: '"Segoe UI", Roboto, Arial, sans-serif',
-      padding: '32px', textAlign: 'center',
-    }}>
-      <style>{`@keyframes gh-spin { to { transform: rotate(360deg); } }`}</style>
-      {/* Icon */}
-      <div style={{ fontSize: '4rem', marginBottom: '20px', lineHeight: 1 }}>[signal]</div>
-      {/* Branding */}
-      <h1 style={{ fontSize: '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', letterSpacing: '-0.5px' }}>
-        Get<span style={{ color: '#27ae60' }}>Home</span>
-      </h1>
-      {/* Message */}
-      <div style={{ ...cardStyle, padding: '32px 36px', maxWidth: '420px', width: '100%', marginTop: '24px', marginBottom: '24px' }}>
-        <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '1.1rem', margin: '0 0 10px 0' }}>
-          Connection timed out
-        </p>
-        <p style={{ color: '#64748b', fontSize: '0.93rem', lineHeight: '1.65', margin: '0 0 24px 0' }}>
-          We could not reach the GetHome servers. Please check your internet connection and tap the button below to try again.
-        </p>
-        {/* Retry button */}
-        <button
-          onClick={handleRetry}
-          disabled={retrying}
-          style={{
-            width: '100%', padding: '14px', border: 'none', borderRadius: '12px',
-            background: retrying ? '#94a3b8' : 'linear-gradient(135deg, #27ae60, #00b894)',
-            color: '#fff', fontWeight: '700', fontSize: '1rem',
-            cursor: retrying ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-            boxShadow: retrying ? 'none' : '0 4px 12px rgba(39,174,96,0.3)',
-            transition: 'all 0.2s',
-          }}
-        >
-          {retrying
-            ? <><div style={{ width: '18px', height: '18px', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'gh-spin 0.7s linear infinite' }} /> Retrying...</>
-            : '[retry] Retry Loading'
-          }
-        </button>
-      </div>
-      <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0 }}>
-        If this keeps happening, check that your WiFi or mobile data is active.
-      </p>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
+      <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem' }}>⚠</div>
+      <h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Unable to Connect</h2>
+      <p style={{ color: '#64748b', textAlign: 'center', margin: 0, maxWidth: '300px', fontSize: '0.88rem', lineHeight: '1.6' }}>Could not load listings. Check your connection and try again.</p>
+      <button onClick={onRetry} style={{ padding: '12px 32px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 16px rgba(34,197,94,0.28)' }}>Retry</button>
     </div>
   );
 }
@@ -199,1276 +84,7581 @@ var LEGAL_CONTENT = {
     { heading: "1. Acceptance", body: "By using GetHome you accept these Terms." },
     { heading: "2. Platform", body: "GetHome is a Nigerian real estate listing platform." },
     { heading: "3. Accounts", body: "You must be 18+ and provide accurate information." },
-    { heading: "4. Escrow", body: "Payments via Paystack escrow. 0.75% fee (capped NGN5k)." },
+    { heading: "4. Escrow", body: "Payments via Paystack escrow. 0.75% fee (capped NGN 5,000)." },
     { heading: "5. Listings", body: "GetHome does not own listed properties." },
     { heading: "6. Prohibited", body: "No fraud, money laundering, or illegal activity." },
     { heading: "7. Liability", body: "GetHome is not liable for indirect damages." },
     { heading: "8. Law", body: "Governed by Nigerian law." },
     { heading: "9. Changes", body: "We may update terms at any time." },
-    { heading: "10. Contact", body: "Contact: REPLACE_WITH_CONTACT_EMAIL | WhatsApp: +2349077246534" }
+    { heading: "10. Contact", body: "Contact: gethome.realest@gmail.com | WhatsApp: +2349130649368" }
   ]},
   privacy: { title: "Privacy Policy", version: "1.0", sections: [
     { heading: "1. Data We Collect", body: "Account info, transaction data, and usage data." },
     { heading: "2. How We Use It", body: "To process transactions, send confirmations, and improve the platform." },
-    { heading: "3. Data Sharing", body: "Shared with Paystack, Supabase, SMTP provider, Termii. Never sold." },
-    { heading: "4. Security", body: "HTTPS encryption and Supabase Auth. No system is 100% secure." },
-    { heading: "5. Your Rights", body: "Access, correct, or delete your data. Contact REPLACE_WITH_CONTACT_EMAIL." },
-    { heading: "6. Cookies", body: "Essential auth cookies only. No advertising cookies." },
+    { heading: "3. Data Sharing", body: "Shared with Paystack, Supabase, Resend. Never sold." },
+    { heading: "4. Security", body: "HTTPS encryption and Supabase Auth." },
+    { heading: "5. Your Rights", body: "Access, correct, or delete your data. Contact gethome.realest@gmail.com." },
+    { heading: "6. Cookies", body: "Essential auth cookies only." },
     { heading: "7. Retention", body: "Account data held while active. Transactions kept 7 years." },
-    { heading: "8. Contact", body: "Privacy concerns: REPLACE_WITH_CONTACT_EMAIL" }
+    { heading: "8. Contact", body: "Privacy: gethome.realest@gmail.com" }
   ]},
   agent: { title: "Agent Agreement", version: "1.0", sections: [
     { heading: "1. Eligibility", body: "Must be licensed agent or authorized property owner in Nigeria." },
     { heading: "2. Accuracy", body: "All listing info must be accurate. Fraud = immediate termination." },
-    { heading: "3. Fee Transparency", body: "All fees must be disclosed. Hidden fees = account suspension." },
-    { heading: "4. Commission", body: "Platform fees apply per tier. Loan referrals: 1-2.5% of disbursed amount." },
-    { heading: "5. Inspections", body: "Must provide property access within 48 hours of paid inspection." },
-    { heading: "6. Escrow", body: "Funds released after verification. Processing fee deducted first." },
-    { heading: "7. Prohibited", body: "No unauthorized listings, pricing manipulation, or duplicate posts." },
-    { heading: "8. Termination", body: "Violations result in termination. Fees non-refundable for cause." }
+    { heading: "3. Fee Transparency", body: "All fees must be disclosed." },
+    { heading: "4. Commission", body: "Platform fees apply per tier." },
+    { heading: "5. Inspections", body: "Must allow access within 48 hours of paid inspection." },
+    { heading: "6. Escrow", body: "Funds released after verification." },
+    { heading: "7. Prohibited", body: "No unauthorized listings or duplicate posts." },
+    { heading: "8. Termination", body: "Violations result in termination." }
   ]}
 };
 function LegalModal({ type, onClose, onAccept, forceAccept }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var [scrolled, setScrolled] = useState(false);
   var doc = LEGAL_CONTENT[type];
   if (!doc) return null;
-  function handleScroll(e) {
-    var el = e.target;
-    if (el.scrollHeight - el.scrollTop <= el.clientHeight + 60) setScrolled(true);
-  }
+  function handleScroll(e) { var el = e.target; if (el.scrollHeight - el.scrollTop <= el.clientHeight + 60) setScrolled(true); }
   return (
-    <div onClick={forceAccept ? undefined : onClose}
-      style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 2000, padding: 0 }}>
-      <div onClick={function(e){ e.stopPropagation(); }}
-        style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', maxWidth: '680px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -20px 60px rgba(10,34,64,0.2)' }}>
-        <div style={{ backgroundColor: '#0a2240', borderRadius: '20px 20px 0 0', padding: '20px 28px', flexShrink: 0 }}>
-          <h2 style={{ color: '#fff', margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '800' }}>{doc.title}</h2>
-          <p style={{ color: 'rgba(255,255,255,0.5)', margin: 0, fontSize: '0.76rem' }}>v{doc.version} - Please read carefully</p>
+    <div onClick={forceAccept ? undefined : onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6,21,40,0.7)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 2000, padding: 0 }}>
+      <div onClick={function(e){ e.stopPropagation(); }} style={{ backgroundColor: '#fff', borderRadius: '22px 22px 0 0', maxWidth: '680px', width: '100%', maxHeight: isMobile ? '95vh' : '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(10,34,64,0.2)' }}>
+        <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d2d4e 100%)', borderRadius: '22px 22px 0 0', padding: isMobile ? '18px 22px' : '22px 30px', flexShrink: 0 }}>
+          <h2 style={{ color: '#fff', margin: '0 0 4px 0', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{doc.title}</h2>
+          <p style={{ color: 'rgba(255,255,255,0.42)', margin: 0, fontSize: '0.71rem', fontFamily: "'Inter', sans-serif" }}>v{doc.version} &middot; Please read carefully</p>
         </div>
-        <div onScroll={handleScroll} style={{ overflowY: 'auto', padding: '24px 28px', flex: 1 }}>
-          {doc.sections.map(function(s, i) {
-            return (
-              <div key={i} style={{ marginBottom: '20px' }}>
-                <h3 style={{ color: '#0a2240', fontSize: '0.92rem', fontWeight: '700', margin: '0 0 6px 0' }}>{s.heading}</h3>
-                <p style={{ color: '#475569', fontSize: '0.86rem', lineHeight: '1.65', margin: 0 }}>{s.body}</p>
-              </div>
-            );
-          })}
-          {forceAccept && !scrolled && (
-            <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.80rem', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-              Scroll to the bottom to enable the Accept button
-            </p>
-          )}
+        <div onScroll={handleScroll} style={{ overflowY: 'auto', padding: isMobile ? '20px 22px' : '26px 30px', flex: 1 }}>
+          {doc.sections.map(function(s, i) { return ( <div key={i} style={{ marginBottom: '18px' }}><h3 style={{ color: '#0a2240', fontSize: '0.86rem', fontWeight: '700', margin: '0 0 5px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.heading}</h3><p style={{ color: '#475569', fontSize: '0.83rem', lineHeight: '1.7', margin: 0, fontFamily: "'Inter', sans-serif" }}>{s.body}</p></div> ); })}
+          {forceAccept && !scrolled && <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem', padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '10px', marginTop: '10px', fontFamily: "'Inter', sans-serif" }}>Scroll to the bottom to enable the Accept button</p>}
         </div>
-        <div style={{ padding: '16px 28px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', flexShrink: 0 }}>
-          {!forceAccept && <button onClick={onClose} style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer' }}>Close</button>}
-          {onAccept && (
-            <button onClick={scrolled || !forceAccept ? onAccept : undefined}
-              style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: scrolled || !forceAccept ? '#27ae60' : '#94a3b8', color: '#fff', fontWeight: '700', fontSize: '0.9rem', cursor: scrolled || !forceAccept ? 'pointer' : 'not-allowed' }}>
-              {scrolled || !forceAccept ? 'I Accept and Agree' : 'Scroll down to accept'}
-            </button>
-          )}
+        <div style={{ padding: isMobile ? '14px 22px' : '18px 30px', borderTop: '1px solid #f0f4f8', display: 'flex', gap: '10px', flexShrink: 0 }}>
+          {!forceAccept && <button onClick={onClose} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Close</button>}
+          {onAccept && <button onClick={scrolled || !forceAccept ? onAccept : undefined} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: scrolled || !forceAccept ? '#22c55e' : '#cbd5e1', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: scrolled || !forceAccept ? 'pointer' : 'not-allowed', fontFamily: "'Inter', sans-serif", boxShadow: scrolled || !forceAccept ? '0 4px 14px rgba(34,197,94,0.25)' : 'none' }}>{scrolled || !forceAccept ? 'I Accept and Agree' : 'Scroll down to accept'}</button>}
         </div>
       </div>
     </div>
   );
 }
-// =========================================================
-// INLINE AUTH FORM
-// =========================================================
 function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]       = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [mode, setMode]                               = useState('login');
+  const [email, setEmail]                             = useState('');
+  const [password, setPassword]                       = useState('');
+  const [confirmPassword, setConfirmPassword]         = useState('');
+  const [showPassword, setShowPassword]               = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [fullName, setFullName]                       = useState('');
+  const [phone, setPhone]                             = useState('');
+  const [nin, setNin]                                 = useState('');
+  const [address, setAddress]                         = useState('');
+  const [experience, setExperience]                   = useState('');
+  const [specialty, setSpecialty]                     = useState('');
+  const [cac, setCac]                                 = useState('');
+  const [about, setAbout]                             = useState('');
+  const [country, setCountry]                         = useState('NG');
+  const [error, setError]                             = useState('');
+  const [loading, setLoading]                         = useState(false);
+  const [termsAccepted, setTermsAccepted]             = useState(false);
+  const [showTermsModal, setShowTermsModal]           = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal]       = useState(false);
+  const [emailSent, setEmailSent]                     = useState(false);
+  const [agentCity, setAgentCity]                     = useState('');
+  const [agentRequestedGha, setAgentRequestedGha]     = useState('');
+  const [showForgotPassword, setShowForgotPassword]   = useState(false);
+  const [resetEmail, setResetEmail]                   = useState('');
+  const [resetSent, setResetSent]                     = useState(false);
+  const [resetLoading, setResetLoading]               = useState(false);
+  const [resetError, setResetError]                   = useState('');
+  const isSignUp = mode === 'signup';
+  const countryConfigs = {
+    NG: {
+      identityLabel:      'NIN (National Identification Number)',
+      identityPlaceholder:'NIN – 11 digits *',
+      identityMaxLength:  11,
+      identityNumeric:    true,
+      identityValidate:   function(v) { return v.trim().length === 11; },
+      identityError:      'NIN must be exactly 11 digits.',
+      identityPayloadKey: 'nin_number',
+      businessLabel:      'CAC Registration Number',
+      businessPlaceholder:'CAC Registration Number (optional)',
+      businessPayloadKey: 'cac_number',
+      phonePrefix:        '+234',
+      phonePlaceholder:   '0801 234 5678',
+    },
+    GH: {
+      identityLabel:      'Ghana Card Number (GHA-XXXXXXXXX-X)',
+      identityPlaceholder:'GHA-XXXXXXXXX-X *',
+      identityMaxLength:  20,
+      identityNumeric:    false,
+      identityValidate:   function(v) { return v.trim().length >= 6; },
+      identityError:      'Please enter a valid Ghana Card number (e.g. GHA-000000000-0).',
+      identityPayloadKey: 'ghana_card_number',
+      businessLabel:      'ORC Registration Number (Office of the Registrar of Companies)',
+      businessPlaceholder:'ORC Registration Number (optional)',
+      businessPayloadKey: 'orc_number',
+      phonePrefix:        '+233',
+      phonePlaceholder:   'XX XXX XXXX',
+    },
+  };
+  const config = countryConfigs[country] || countryConfigs.NG;
+  const eyeBtn = function(show, toggle) {
+    return (
+      <button type="button" onClick={toggle}
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px', fontSize: '0.82rem', fontWeight: '600' }}>
+        {show ? 'Hide' : 'Show'}
+      </button>
+    );
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); setLoading(true);
-    const endpoint = isSignUp ? '/api/auth/signup' : '/api/auth/login';
-    try {
-      const res  = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Something went wrong.'); return; }
-      if (isSignUp && data.confirmationRequired) {
-        // Email confirmation required - show success screen
-      }
+    setError('');
+    if (mode === 'signup') {
+      if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+      if (!termsAccepted) { setError('Please accept the Terms and Privacy Policy.'); return; }
+      if (!config.identityValidate(nin)) { setError(config.identityError); return; }
+      setLoading(true);
+      try {
+        // Step 1 — create the auth account
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { role: 'agent', status: 'pending' },
+          },
+        });
+        if (authError) throw authError;
+        const newUserId = authData?.user?.id;
+        if (!newUserId) throw new Error('Auth system failed to yield a valid User ID identifier.');
+        if (authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+          throw new Error('This email is already registered. Please sign in instead, or use a different email address.');
+        }
+
+        // Step 2 — let the backend handle the agents table insert reliably with retry
+        const isGhana = country === 'GH';
+        const createRowRes = await fetch(API_URL + '/api/auth/create-agent-row', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newUserId,
+            email,
+            full_name: fullName,
+            name: fullName,
+            phone,
+            phone_number: phone,
+            office_address: address,
+            address,
+            nin: isGhana ? null : nin,
+            nin_number: isGhana ? null : nin,
+            ghana_card_number: isGhana ? (nin.trim() || null) : null,
+            experience,
+            specialty,
+            cac: isGhana ? null : (cac.trim() || null),
+            cac_number: isGhana ? null : (cac.trim() || null),
+            orc_number: isGhana ? (cac.trim() || null) : null,
+            about_self: about,
+            about,
+            country,
+            city: agentCity.trim() || null,
+            requested_gha_code: agentRequestedGha.trim() || null,
+            role: 'agent',
+            status: 'pending',
+          }),
+        });
+        const createRowData = await createRowRes.json();
+        if (!createRowRes.ok) {
+          throw new Error(createRowData.error || 'Failed to create agent profile');
+        }
+
+        // Step 5 — push fresh session into Supabase client when email confirmation is off
+        if (authData?.session) await supabase.auth.setSession(authData.session);
+
         setEmailSent(true);
+      } catch (err) {
+        setError(err.message || 'Registration failed. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    // Login mode — Supabase auth + agents table profile lookup
+    setLoading(true);
+    try {
+      // Step 1: authenticate with Supabase directly
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (signInError) {
+        if (signInError.message?.toLowerCase().includes('email not confirmed')) {
+          setError('Your email address has not been confirmed yet. Please check your inbox and click the verification link before signing in.');
+          return;
+        }
+        throw signInError;
+      }
+      const authUser = signInData?.user;
+      if (!authUser) throw new Error('Login failed: no user returned from auth.');
+
+      // Step 2: store fresh token immediately
+      if (signInData.session?.access_token) {
+        localStorage.setItem('gh_token', signInData.session.access_token);
+      }
+
+      // Step 3: master admin bypass — skip agents table so a missing/stale row never blocks the admin
+      const isMasterAdminEmail = authUser.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
+      if (isMasterAdminEmail) {
+        const adminUser = { id: authUser.id, email: authUser.email, role: 'admin', status: 'approved', is_unlimited: true, full_name: 'Admin', phone: '' };
+        localStorage.setItem('gh_user', JSON.stringify(adminUser));
+        onSuccess(adminUser);
         return;
-      // Login or signup without confirmation - proceed normally
-      localStorage.setItem('gh_user',  JSON.stringify(data.user));
-      localStorage.setItem('gh_token', data.token || '');
-      onSuccess(data.user);
-    } catch { setError('Network error --- check your connection.'); }
-    finally   { setLoading(false); }
+      }
+
+      // Step 4: fetch agent profile for status / role
+      // select('*') avoids 400s from explicitly naming columns that may not exist
+      // (e.g. is_unlimited is admin-granted and absent from some rows/schemas)
+      const { data: agentProfile, error: profileError } = await supabase
+        .from('agents')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profileError) {
+        // Row missing or schema mismatch — log it but do not lock the agent out.
+        // A valid Supabase session already proves identity; treat as pending so
+        // the approval wall still applies but the error isn't swallowed silently.
+        console.error('Agent profile fetch error (status/role unknown):', profileError.message);
+        supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('gh_token');
+        localStorage.removeItem('gh_user');
+        setError('Unable to load your agent profile. Please contact support or try again.');
+        return;
+      }
+
+      const role   = agentProfile?.role   || 'agent';
+      const status = agentProfile?.status || 'pending';
+
+      if (role !== 'admin' && status !== 'approved') {
+        // Sign out server-side non-blocking so it cannot race against setError
+        supabase.auth.signOut().catch(() => {});
+        localStorage.removeItem('gh_token');
+        localStorage.removeItem('gh_user');
+        if (status === 'rejected') {
+          setError('Your agent account application was not approved. Please contact us on WhatsApp.');
+        } else if (status === 'disapproved') {
+          setError('Your agent account has been suspended by admin. Please contact us on WhatsApp for assistance.');
+        } else {
+          setError('Your agent account is currently pending administrative approval. You will be able to log in once verified.');
+        }
+        return;
+      }
+
+      // Step 5: build user object and hand off to parent — status drives portal access
+      const freshUser = {
+        id:           authUser.id,
+        email:        authUser.email,
+        role,
+        status,
+        is_unlimited: agentProfile?.is_unlimited || false,
+        full_name:    agentProfile?.full_name || agentProfile?.name || '',
+        phone:        agentProfile?.phone || agentProfile?.phone_number || '',
+      };
+      localStorage.setItem('gh_user', JSON.stringify(freshUser));
+      onSuccess(freshUser);
+    } catch (err) {
+      console.error('Login error:', err.message);
+      setError(err.message || 'Network error. Please check your connection.');
+    } finally { setLoading(false); }
   };
-  return (
- <>
-    {/* Email confirmation success screen */}
-    {emailSent && (
-      <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '16px', padding: '32px 24px', textAlign: 'center' }}>
-        <div style={{ width: '56px', height: '56px', backgroundColor: '#27ae60', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', fontSize: '1.5rem', color: '#fff', fontWeight: '900' }}>v</div>
-        <h3 style={{ color: '#166534', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 10px 0' }}>Check Your Email!</h3>
-        <p style={{ color: '#15803d', fontSize: '0.88rem', lineHeight: '1.65', margin: '0 0 16px 0' }}>
-          Registration successful! We sent a verification link to <strong>{email}</strong>.
-          Please check your inbox and click the link to activate your GetHome account.
-        </p>
-        <p style={{ color: '#86efac', fontSize: '0.80rem', margin: 0 }}>
-          Did not receive it? Check your spam folder or contact us on WhatsApp.
+  if (showForgotPassword) {
+    return (
+      <div className="gh-auth-form-inner">
+        <h3 style={{ color: '#0a2240', fontSize: '1.05rem', fontWeight: '800', margin: '0 0 6px 0' }}>Reset Your Password</h3>
+        {!resetSent ? (
+          <>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Enter your email and we'll send you a link to reset your password.</p>
+            <input type="email" placeholder="Email address" value={resetEmail}
+              onChange={function(e){ setResetEmail(e.target.value); setResetError(''); }}
+              style={{ ...inputStyle, fontSize: '16px', marginBottom: '10px' }} />
+            {resetError && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{resetError}</p>}
+            <button onClick={async function(){
+              if (!resetEmail.trim()) { setResetError('Please enter your email'); return; }
+              setResetLoading(true);
+              setResetError('');
+              try {
+                const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
+                  redirectTo: window.location.origin + '/?reset=true',
+                });
+                if (error) throw error;
+                setResetSent(true);
+              } catch(err) {
+                setResetError(err.message || 'Failed to send reset email. Please try again.');
+              } finally {
+                setResetLoading(false);
+              }
+            }} disabled={resetLoading}
+              style={{ width: '100%', padding: '13px', border: 'none', borderRadius: '10px', backgroundColor: resetLoading ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.92rem', cursor: resetLoading ? 'not-allowed' : 'pointer' }}>
+              {resetLoading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+          </>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '10px 0' }}>
+            <p style={{ fontSize: '1.4rem', margin: '0 0 10px 0' }}>{'✅'}</p>
+            <p style={{ color: '#166534', fontWeight: '700', fontSize: '0.92rem', margin: '0 0 6px 0' }}>Check Your Email</p>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', margin: 0 }}>We sent a password reset link to {resetEmail}. Click the link to set a new password.</p>
+          </div>
+        )}
+        <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.78rem', color: '#94a3b8' }}>
+          <span onClick={function(){ setShowForgotPassword(false); setResetSent(false); setResetEmail(''); setResetError(''); }}
+            style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
+            Back to Sign In
+          </span>
         </p>
       </div>
-    )}
-    {!emailSent && <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '16px', padding: '28px 24px', marginTop: '10px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '18px' }}>
-        <span style={{ fontSize: '1.5rem', lineHeight: 1 }}></span>
-        <div>
-          <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1rem' }}>
-            {isSignUp ? 'Create a free account' : 'Sign in to continue'}
-          </p>
-          <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: '#7f8c8d' }}>
-            Required to {actionLabel} --- takes 30 seconds
-          </p>
-        </div>
-      </div>
-      {error && (
-        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
-          <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.85rem', fontWeight: '500' }}>[!] {error}</p>
-        </div>
-      )}
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <input type="email" placeholder="Email address" required style={inputStyle} value={email}
-          onChange={e => { setEmail(e.target.value); setError(''); }} />
-        <input type="password" placeholder={isSignUp ? 'Password (min 6 chars)' : 'Password'} required
-          minLength={isSignUp ? 6 : undefined} style={inputStyle} value={password}
-          onChange={e => { setPassword(e.target.value); setError(''); }} />
-        <button type="submit" disabled={loading || (isSignUp && !termsAccepted)} style={{
-          padding: '13px', border: 'none', borderRadius: '10px',
-          background: loading ? '#94a3b8' : 'linear-gradient(135deg, #0a2240 0%, #1a3a5c 100%)',
-          color: '#fff', fontWeight: '700', fontSize: '0.95rem',
-          cursor: loading ? 'not-allowed' : 'pointer',
-        }}>
-          {loading ? '[wait] Please wait...' : isSignUp ? 'Create Account & Continue' : 'Log In & Continue'}
-        </button>
-      </form>
-      <p style={{ textAlign: 'center', marginTop: '14px', fontSize: '0.84rem', color: '#94a3b8', marginBottom: 0 }}>
-        {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-        <span onClick={() => { setIsSignUp(s => !s); setError(''); setTermsAccepted(false); }}
+    );
+  }
+  if (emailSent) return (
+    <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '16px', padding: '28px 24px', textAlign: 'center' }}>
+      <div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>✅</div>
+      <h3 style={{ color: '#166534', fontSize: '1rem', fontWeight: '800', margin: '0 0 10px 0' }}>
+        {mode === 'signup' ? 'Registration Submitted!' : 'Check Your Email!'}
+      </h3>
+      <p style={{ color: '#15803d', fontSize: '0.84rem', lineHeight: '1.6', margin: '0 0 14px 0' }}>
+        {mode === 'signup'
+          ? <>We sent a verification link to <strong>{email}</strong>. Verify your email then wait for admin approval before you can list properties.</>
+          : <>We sent a verification link to <strong>{email}</strong>. Click it to activate your account.</>}
+      </p>
+      <p style={{ fontSize: '0.76rem', color: '#94a3b8', margin: 0 }}>
+        Already verified?{' '}
+        <span onClick={function(){ setEmailSent(false); setMode('login'); }}
           style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
-          {isSignUp ? 'Log in instead' : 'Sign up free'}
+          Sign in
         </span>
       </p>
-      {isSignUp && (
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 12px', backgroundColor: '#f1f5f9', borderRadius: '8px', marginTop: '8px' }}>
-        <input type="checkbox" id="gh-terms" checked={termsAccepted} onChange={function(e){ setTermsAccepted(e.target.checked); }}
-          style={{ width: '16px', height: '16px', accentColor: '#27ae60', cursor: 'pointer', marginTop: '2px', flexShrink: 0 }} />
-        <label htmlFor="gh-terms" style={{ fontSize: '0.80rem', color: '#475569', lineHeight: '1.5', cursor: 'pointer' }}>
-          I agree to the{' '}
-          <span onClick={function(){ setShowTermsModal(true); }} style={{ color: '#27ae60', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>
-          {' '}and{' '}
-          <span onClick={function(){ setShowPrivacyModal(true); }} style={{ color: '#27ae60', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }}>Privacy Policy</span>
-        </label>
-      </div>
-      )}
-    </div>}
-    {showTermsModal && <LegalModal type='terms' onClose={function(){ setShowTermsModal(false); }} />}
-    {showPrivacyModal && <LegalModal type='privacy' onClose={function(){ setShowPrivacyModal(false); }} />}
-  </>
-  );
-}
-// =========================================================
-// AGENT UPLOAD PORTAL
-// Role-gated --- visible only to user.role === 'agent' | 'admin'
-// Sections:
-//   A) Publish / Edit form  (create new OR update existing)
-//   B) Manage Listings grid (edit / delete every active listing)
-// =========================================================
-function AgentUploadPortal({ user, allProperties, onListingPublished, onListingUpdated, onListingDeleted }) {
-  var [agentAgreed, setAgentAgreed] = useState(false);
-  var [showAgentModal, setShowAgentModal] = useState(false);
-  // - Form state 
-  const EMPTY_FORM = { title: '', location: '', price: '', image_url: '', purpose: 'rent' };
-  const [form, setForm]             = useState(EMPTY_FORM);
-  const [editingProperty, setEditingProperty] = useState(null); // null = create mode
-  const [submitting, setSubmitting] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg]     = useState('');
-  // - Delete state 
-  const [deletingId, setDeletingId] = useState(null); // id currently being deleted
-  // - Helpers --
-  const clearMessages = () => { setSuccessMsg(''); setErrorMsg(''); };
-  // Populate form from a property row and enter edit mode
-  const enterEditMode = (property) => {
-    setEditingProperty(property);
-    // Strip the " (For RENT/SALE)" suffix if present so the field looks clean
-    const cleanTitle = property.title.replace(/\s*\(For (RENT|SALE)\)\s*$/i, '').trim();
-    const purpose    = /SALE/i.test(property.title) ? 'sale' : 'rent';
-    setForm({
-      title:     cleanTitle,
-      location:  property.location  || '',
-      price:     String(property.price || ''),
-      image_url: property.image_url || '',
-      purpose,
-    });
-    clearMessages();
-    // Scroll to the top of the form smoothly
-    document.getElementById('agent-form-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); clearMessages(); };
-  // - A) Form submit: create OR update 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true); clearMessages();
-    const payload = {
-      title:     `${form.title.trim()} (For ${form.purpose.toUpperCase()})`,
-      location:  form.location.trim(),
-      price:     parseFloat(form.price),
-      image_url: form.image_url.trim() || null,
-    };
-    try {
-      if (editingProperty) {
-        // - UPDATE existing listing 
-        const res = await fetch(`${API_URL}/api/properties/${editingProperty.id}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(`Update failed: ${res.status}`);
-        const updated = await res.json();
-        setSuccessMsg(`"${updated.title}" has been updated successfully!`);
-        onListingUpdated(updated);   // refresh grid in App
-        cancelEdit();
-      } else {
-        // - CREATE new listing 
-        const res = await fetch(`${API_URL}/api/properties`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(`Publish failed: ${res.status}`);
-        const saved = await res.json();
-        setSuccessMsg(`"${saved.title}" is now live on the platform!`);
-        setForm(EMPTY_FORM);
-        onListingPublished(saved);   // prepend to grid in App
-      }
-    } catch (err) {
-      setErrorMsg(editingProperty
-        ? '[x] Update failed. Check your connection and try again.'
-        : '[x] Publish failed. Check your connection and try again.');
-      console.error('Form submit error:', err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  // - B) Delete listing --
-  const handleDelete = async (property) => {
-    const confirmed = window.confirm(
-      `[!] Are you sure you want to permanently delete this listing?\n\n"${property.title}"\n\nThis action cannot be undone.`
-    );
-    if (!confirmed) return;
-    setDeletingId(property.id);
-    try {
-      const res = await fetch(`${API_URL}/api/properties/${property.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-      onListingDeleted(property.id);  // remove from grid in App
-      // If the deleted property happened to be in edit mode, clear the form
-      if (editingProperty?.id === property.id) cancelEdit();
-      setSuccessMsg(`[del] "${property.title}" has been removed from the platform.`);
-    } catch (err) {
-      setErrorMsg('[x] Delete failed. Check your connection and try again.');
-      console.error('Delete error:', err);
-    } finally {
-      setDeletingId(null);
-    }
-  };
-  // - Reusable field renderer --
-  const field = (key, label, type = 'text', placeholder = '') => (
-    <div>
-      <label style={labelStyle}>{label}</label>
-      <input
-        type={type} placeholder={placeholder} required={key !== 'image_url'}
-        style={inputStyle} value={form[key]}
-        onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); clearMessages(); }}
-      />
-    </div>
-  );
-  const isEditMode = !!editingProperty;
-  if (!agentAgreed) return (
-    <div style={{ maxWidth: '540px', margin: '0 auto', textAlign: 'center', padding: '60px 20px' }}>
-      {showAgentModal && <LegalModal type='agent' forceAccept={true} onClose={function(){ setShowAgentModal(false); }} onAccept={function(){ setAgentAgreed(true); setShowAgentModal(false); fetch(`${API_URL}/api/legal/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user.id, user_email: user.email, agreement_type: 'agent_agreement', version: '1.0' }) }).catch(console.error); }} />}
-      <div style={{ width: '56px', height: '56px', backgroundColor: '#f0fff4', border: '2px solid #86efac', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px auto', fontWeight: '800', fontSize: '1.4rem', color: '#27ae60' }}>A</div>
-      <h2 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '800', margin: '0 0 10px 0' }}>Agent Agreement Required</h2>
-      <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: '1.65', margin: '0 0 24px 0' }}>Before listing on GetHome you must read and accept our Agent Agreement.</p>
-      <button onClick={function(){ setShowAgentModal(true); }} style={{ padding: '13px 28px', border: 'none', borderRadius: '12px', backgroundColor: '#0a2240', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer' }}>Read and Accept Agreement</button>
     </div>
   );
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-      {/* - Page header - */}
-      <div style={{ marginBottom: '36px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '8px' }}>
-          <div style={{ backgroundColor: '#0a2240', borderRadius: '14px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}></span>
-          </div>
-          <div>
-            <h2 style={{ color: '#0a2240', fontSize: '1.75rem', fontWeight: '900', margin: 0 }}>Agent Upload Portal</h2>
-            <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: 0 }}>
-              Logged in as <strong style={{ color: '#27ae60' }}>{user?.email}</strong>
-            </p>
-          </div>
-        </div>
-        <p style={{ color: '#64748b', fontSize: '0.93rem', margin: 0 }}>
-          Publish new listings, edit existing ones, or delete outdated entries --- all changes reflect on the customer grid instantly.
-        </p>
+    <div className="gh-auth-form-inner">
+      {showTermsModal  && <LegalModal type="terms"   forceAccept onClose={function(){ setShowTermsModal(false);  }} onAccept={function(){ setTermsAccepted(true); setShowTermsModal(false);  }} />}
+      {showPrivacyModal && <LegalModal type="privacy" forceAccept onClose={function(){ setShowPrivacyModal(false); }} onAccept={function(){ setShowPrivacyModal(false); }} />}
+
+      {/* Mode toggle */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', backgroundColor: '#f0f4f8', borderRadius: '10px', padding: '3px' }}>
+        {[['login','Sign In'], ['signup','Agent Sign Up']].map(function([m, lbl]) {
+          return (
+            <button key={m} type="button"
+              onClick={function(){ setMode(m); setError(''); setTermsAccepted(false); setConfirmPassword(''); }}
+              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: mode === m ? '#fff' : 'transparent', color: mode === m ? '#0a2240' : '#94a3b8', fontWeight: mode === m ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', boxShadow: mode === m ? '0 1px 4px rgba(10,34,64,0.1)' : 'none', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>
+              {lbl}
+            </button>
+          );
+        })}
       </div>
-      {/* - Section A: Publish / Edit form - */}
-      <div id="agent-form-anchor" style={{ ...cardStyle, padding: '36px', marginBottom: '32px' }}>
-        {/* Edit mode banner */}
-        {isEditMode && (
-          <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '12px', padding: '14px 18px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-              <span style={{ fontSize: '1.1rem' }}>[edit]</span>
+
+      <h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '700', margin: '0 0 16px 0', textAlign: 'center', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>
+        {mode === 'login' ? 'Welcome back' : 'Create your agent account'}
+      </h3>
+
+      {error && (
+        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px' }}>
+          <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.82rem' }}>{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+        {/* ── SIGNUP-ONLY FIELDS ───────────────────────── */}
+        {mode === 'signup' && (
+          <>
+            <p style={{ margin: '0 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Personal Information</p>
+
+            <select style={{ ...inputStyle, fontSize: '16px' }} required
+              value={country} onChange={function(e){ setCountry(e.target.value); setError(''); }}>
+              <option value="">Select Country *</option>
+              {SUPPORTED_COUNTRIES.map(function(c){ return <option key={c.code} value={c.code}>{c.flag} {c.name}</option>; })}
+            </select>
+
+            <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Full Legal Name *" required
+              value={fullName} onChange={function(e){ setFullName(e.target.value); setError(''); }} />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
               <div>
-                <p style={{ margin: 0, fontWeight: '700', color: '#1e40af', fontSize: '0.92rem' }}>Editing existing listing</p>
-                <p style={{ margin: '2px 0 0 0', color: '#3b82f6', fontSize: '0.83rem' }}>{editingProperty.title}</p>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>Phone *</label>
+                <div style={{ display: 'flex', alignItems: 'stretch', border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#fff' }}>
+                  <span style={{ padding: '11px 10px', backgroundColor: '#f1f5f9', borderRight: '1.5px solid #e2e8f0', fontSize: '0.78rem', fontWeight: '700', color: '#374151', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>{config.phonePrefix}</span>
+                  <input style={{ flex: 1, padding: '11px 12px', border: 'none', outline: 'none', fontSize: '16px', color: '#0a2240', backgroundColor: '#fff' }} placeholder={config.phonePlaceholder} required
+                    value={phone} onChange={function(e){ setPhone(e.target.value); setError(''); }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.identityLabel} *</label>
+                <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.identityPlaceholder} required
+                  maxLength={config.identityMaxLength}
+                  inputMode={config.identityNumeric ? 'numeric' : 'text'}
+                  value={nin}
+                  onChange={function(e){
+                    setNin(config.identityNumeric ? e.target.value.replace(/\D/g, '') : e.target.value);
+                    setError('');
+                  }} />
               </div>
             </div>
-            <button onClick={cancelEdit} style={{ backgroundColor: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', padding: '7px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-              x Cancel Edit
-            </button>
-          </div>
-        )}
-        {/* Success / error banners */}
-        {successMsg && (
-          <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px 18px', marginBottom: '24px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '1.1rem' }}>[!]</span>
-            <p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.92rem' }}>{successMsg}</p>
-          </div>
-        )}
-        {errorMsg && (
-          <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '12px', padding: '14px 18px', marginBottom: '24px', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '1.1rem' }}>[!]</span>
-            <p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.92rem' }}>{errorMsg}</p>
-          </div>
-        )}
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {field('title', 'Property Listing Title', 'text', 'e.g., Luxury 4 Bedroom Duplex, Ikoyi')}
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
-            {field('location', 'Location / Area', 'text', 'e.g., Lekki Phase 1, Lagos')}
+
+            <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Office / Business Address *" required
+              value={address} onChange={function(e){ setAddress(e.target.value); setError(''); }} />
+
             <div>
-              <label style={labelStyle}>Listing Purpose</label>
-              <select style={inputStyle} value={form.purpose}
-                onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}>
-                <option value="rent">For Rent</option>
-                <option value="sale">For Sale</option>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>City *</label>
+              <input
+                style={{ ...inputStyle, fontSize: '16px' }}
+                placeholder='e.g. Lagos, Abuja, Port Harcourt'
+                value={agentCity}
+                onChange={function(e){ setAgentCity(e.target.value); }}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>Preferred GHA Code (Optional)</label>
+              <input
+                style={{ ...inputStyle, fontSize: '16px' }}
+                placeholder='e.g. GHA0001 - if you were referred by a specific GHA'
+                value={agentRequestedGha}
+                onChange={function(e){ setAgentRequestedGha(e.target.value.toUpperCase()); }}
+              />
+              <p style={{ margin: '3px 0 0 2px', fontSize: '0.72rem', color: '#94a3b8' }}>Leave blank if you were not referred by a specific GHA agent</p>
+            </div>
+
+            <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Professional Details</p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <select style={{ ...inputStyle, fontSize: '16px' }} required
+                value={experience} onChange={function(e){ setExperience(e.target.value); setError(''); }}>
+                <option value="">Years of Experience *</option>
+                {['Less than 1 year','1-2 years','3-5 years','5-10 years','10+ years'].map(function(y){ return <option key={y} value={y}>{y}</option>; })}
+              </select>
+              <select style={{ ...inputStyle, fontSize: '16px' }} required
+                value={specialty} onChange={function(e){ setSpecialty(e.target.value); setError(''); }}>
+                <option value="">Specialty *</option>
+                {['Residential Rentals','Property Sales','Commercial','Land','Short Lets','All Types'].map(function(s){ return <option key={s} value={s}>{s}</option>; })}
               </select>
             </div>
-          </div>
-          {field('price', 'Price in Naira (NGN)', 'number', 'e.g., 4500000')}
-          {field('image_url', 'Property Image URL (optional)', 'url', 'https://images.unsplash.com/...')}
-          {/* Live image preview */}
-          {form.image_url && (
-            <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', maxHeight: '180px' }}>
-              <img src={form.image_url} alt="Preview" style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
-                onError={e => { e.target.style.display = 'none'; }} />
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.businessLabel} <span style={{ fontWeight: '400', color: '#94a3b8' }}>(optional)</span></label>
+              <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.businessPlaceholder}
+                value={cac} onChange={function(e){ setCac(e.target.value); }} />
             </div>
-          )}
-          {/* Submit / update button */}
-          <button type="submit" disabled={submitting} style={{
-            padding: '15px', border: 'none', borderRadius: '12px',
-            background: submitting ? '#94a3b8' : isEditMode
-              ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
-              : 'linear-gradient(135deg, #27ae60, #00b894)',
-            color: '#fff', fontWeight: '700', fontSize: '1rem',
-            cursor: submitting ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-            boxShadow: submitting ? 'none' : isEditMode
-              ? '0 4px 14px rgba(59,130,246,0.35)'
-              : '0 4px 14px rgba(39,174,96,0.35)',
-            transition: 'all 0.2s',
-          }}>
-            {submitting
-              ? (isEditMode ? '[wait] Updating...' : '[wait] Publishing...')
-              : (isEditMode ? '[save] Update Listing' : '[*] Publish Listing Live')}
-          </button>
-        </form>
-      </div>
-      {/* - Section B: Manage Listings grid - */}
-      <div style={{ ...cardStyle, padding: '32px' }}>
-        {/* Section header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
-            <h3 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 3px 0' }}>
-              [list] Active Listings
-            </h3>
-            <p style={{ color: '#94a3b8', fontSize: '0.83rem', margin: 0 }}>
-              {allProperties.length} listing{allProperties.length !== 1 ? 's' : ''} currently on the platform
-            </p>
-          </div>
+
+            <textarea style={{ ...inputStyle, fontSize: '16px', minHeight: '72px', resize: 'vertical' }}
+              placeholder="Tell us about yourself — experience, areas covered, why you want to join GetHome *" required
+              value={about} onChange={function(e){ setAbout(e.target.value); setError(''); }} />
+
+            <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Account Credentials</p>
+          </>
+        )}
+
+        {/* ── COMMON FIELDS ────────────────────────────── */}
+        <input type="email" placeholder="Email address *" required autoComplete="email" autoCapitalize="none"
+          style={{ ...inputStyle, fontSize: '16px' }}
+          value={email} onChange={function(e){ setEmail(e.target.value); setError(''); }} />
+
+        <div style={{ position: 'relative' }}>
+          <input type={showPassword ? 'text' : 'password'}
+            placeholder={isSignUp ? 'Password (min 6 chars) *' : 'Password'}
+            required minLength={isSignUp ? 6 : undefined}
+            style={{ ...inputStyle, fontSize: '16px', paddingRight: '60px' }}
+            value={password} onChange={function(e){ setPassword(e.target.value); setError(''); }}
+            autoComplete={isSignUp ? 'new-password' : 'current-password'} />
+          {eyeBtn(showPassword, function(){ setShowPassword(function(v){ return !v; }); })}
         </div>
-        {/* Empty state */}
-        {allProperties.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '48px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px dashed #e2e8f0' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>[home]</div>
-            <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.93rem' }}>No listings yet. Publish your first property above.</p>
+        {mode === 'login' && <p style={{ textAlign: 'right', margin: '4px 0 0 0' }}><span onClick={function(){ setShowForgotPassword(true); }} style={{ color: '#27ae60', fontSize: '0.78rem', cursor: 'pointer', fontWeight: '600' }}>Forgot Password?</span></p>}
+
+        {isSignUp && (
+          <div style={{ position: 'relative' }}>
+            <input type={showConfirmPassword ? 'text' : 'password'} placeholder="Confirm Password *" required
+              style={{ ...inputStyle, fontSize: '16px', paddingRight: '60px', borderColor: confirmPassword && confirmPassword !== password ? '#ef4444' : '#e2e8f0' }}
+              value={confirmPassword} onChange={function(e){ setConfirmPassword(e.target.value); setError(''); }}
+              autoComplete="new-password" />
+            {eyeBtn(showConfirmPassword, function(){ setShowConfirmPassword(function(v){ return !v; }); })}
+            {confirmPassword && confirmPassword !== password && (
+              <p style={{ color: '#ef4444', fontSize: '0.72rem', margin: '3px 0 0 2px' }}>Passwords do not match</p>
+            )}
           </div>
         )}
-        {/* Listings table */}
-        {allProperties.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {/* Table header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px 100px', gap: '12px', padding: '10px 16px', backgroundColor: '#f8fafc', borderRadius: '10px', fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              <span>Title & Location</span>
-              <span>Price</span>
-              <span style={{ textAlign: 'center' }}>Status</span>
-              <span style={{ textAlign: 'right' }}>Actions</span>
+
+        {isSignUp && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', fontSize: '0.78rem', color: '#374151' }}>
+            <div onClick={function(e){ e.stopPropagation(); setTermsAccepted(function(v){ return !v; }); }}
+              style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid ' + (termsAccepted ? '#27ae60' : '#cbd5e1'), backgroundColor: termsAccepted ? '#27ae60' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px', cursor: 'pointer', transition: 'border-color 0.15s, background-color 0.15s' }}>
+              {termsAccepted && <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fff' }} />}
             </div>
-            {/* Listing rows */}
-            {allProperties.map(property => {
-              const isBeingEdited  = editingProperty?.id === property.id;
-              const isBeingDeleted = deletingId === property.id;
-              return (
-                <div
-                  key={property.id}
-                  style={{
-                    display: 'grid', gridTemplateColumns: '1fr 140px 120px 100px',
-                    gap: '12px', padding: '14px 16px', borderRadius: '12px',
-                    border: `1.5px solid ${isBeingEdited ? '#93c5fd' : '#f1f5f9'}`,
-                    backgroundColor: isBeingEdited ? '#eff6ff' : '#ffffff',
-                    alignItems: 'center', transition: 'all 0.15s ease',
-                  }}
-                >
-                  {/* Title + location */}
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {property.title}
-                    </p>
-                    <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {property.location}
-                    </p>
-                  </div>
-                  {/* Price */}
-                  <div>
-                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.88rem' }}>
-                      {fmtNGN(property.price)}
-                    </span>
-                  </div>
-                  {/* Status badge */}
-                  <div style={{ textAlign: 'center' }}>
-                    <span style={{
-                      display: 'inline-block', padding: '4px 10px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '700',
-                      backgroundColor: isBeingEdited ? '#dbeafe' : '#f0fff4',
-                      color: isBeingEdited ? '#1e40af' : '#16a34a',
-                      border: `1px solid ${isBeingEdited ? '#93c5fd' : '#86efac'}`,
-                    }}>
-                      {isBeingEdited ? '[edit] Editing' : 'Live'}
-                    </span>
-                  </div>
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={() => enterEditMode(property)}
-                      disabled={isBeingDeleted}
-                      title="Edit this listing"
-                      style={{
-                        padding: '7px 11px', border: 'none', borderRadius: '8px',
-                        backgroundColor: isBeingEdited ? '#dbeafe' : '#f1f5f9',
-                        color: isBeingEdited ? '#1e40af' : '#475569',
-                        cursor: isBeingDeleted ? 'not-allowed' : 'pointer',
-                        fontSize: '0.85rem', fontWeight: '700', transition: 'all 0.15s',
-                      }}
-                    >
-                      [edit]
-                    </button>
-                    <button
-                      onClick={() => handleDelete(property)}
-                      disabled={isBeingDeleted}
-                      title="Delete this listing"
-                      style={{
-                        padding: '7px 11px', border: 'none', borderRadius: '8px',
-                        backgroundColor: isBeingDeleted ? '#f1f5f9' : '#fef2f2',
-                        color: isBeingDeleted ? '#94a3b8' : '#ef4444',
-                        cursor: isBeingDeleted ? 'not-allowed' : 'pointer',
-                        fontSize: '0.85rem', fontWeight: '700', transition: 'all 0.15s',
-                        display: 'flex', alignItems: 'center', gap: '4px',
-                      }}
-                    >
-                      {isBeingDeleted
-                        ? <span style={{ display: 'inline-block', width: '14px', height: '14px', borderRadius: '50%', border: '2px solid #cbd5e1', borderTopColor: '#94a3b8', animation: 'gh-spin 0.7s linear infinite' }} />
-                        : '[del]'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+            <span>I agree to the{' '}
+              <span onClick={function(e){ e.stopPropagation(); setShowTermsModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Terms</span>
+              {' '}and{' '}
+              <span onClick={function(e){ e.stopPropagation(); setShowPrivacyModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
+            </span>
+          </label>
         )}
-      </div>
-      {/* Quick-tips footer */}
-      <div style={{ ...cardStyle, padding: '20px 24px', marginTop: '20px' }}>
-        <p style={{ margin: '0 0 10px 0', fontWeight: '700', fontSize: '0.85rem', color: '#0a2240' }}>[tip] Quick Tips</p>
-        <ul style={{ margin: 0, paddingLeft: '18px', color: '#64748b', fontSize: '0.83rem', lineHeight: '1.9' }}>
-          <li>Click <strong>[edit]</strong> to load a listing into the form above --- change any fields and hit <strong>Update Listing</strong>.</li>
-          <li>Click <strong>[del]</strong> to permanently remove a listing. You will be asked to confirm first.</li>
-          <li>All changes reflect on the customer grid <strong>instantly</strong> --- no page refresh needed.</li>
-          <li>Price should be the annual rent or total sale price in Naira (no commas or currency symbols).</li>
-        </ul>
-      </div>
+
+        <button type="submit" disabled={loading}
+          style={{ padding: '14px', backgroundColor: loading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: loading ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
+          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Agent Account'}
+        </button>
+      </form>
+
+      <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.76rem', color: '#94a3b8', marginBottom: 0 }}>
+        {mode === 'login' ? 'Not registered yet?' : 'Already have an account?'}{' '}
+        <span onClick={function(){ setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setTermsAccepted(false); setConfirmPassword(''); }}
+          style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
+          {mode === 'login' ? 'Register as Agent' : 'Sign in'}
+        </span>
+      </p>
     </div>
   );
 }
-// =========================================================
-// CLEANING QUOTE FORM
-// =========================================================
 function CleaningQuoteForm() {
   const [cleaningType, setCleaningType] = useState('Indoor');
   const [fumigation, setFumigation]     = useState(false);
   const [extraDetails, setExtraDetails] = useState('');
   const handleSend = () => {
-    const msg =
-      `Hello GetHome Agent , I'd like a *custom cleaning quote*.\n\n` +
-      `*Service Type:* ${cleaningType} Cleaning\n` +
-      `*Fumigation & Pest Control:* ${fumigation ? 'Yes, please include' : 'Not required'}\n` +
-      `*Extra Details:* ${extraDetails.trim() || 'None provided'}\n\n` +
-      `Please send me a custom quote at your earliest convenience. Thank you!`;
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
+    const msg = encodeURIComponent(`Hello GetHome, I would like a *custom cleaning quote*.\n\n*Service Type:* ${cleaningType} Cleaning\n*Fumigation:* ${fumigation ? 'Yes' : 'No'}\n*Details:* ${extraDetails.trim() || 'None'}\n\nPlease send me a quote.`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <p style={labelStyle}>Type of Cleaning</p>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          {['Indoor', 'Outdoor', 'Both'].map(opt => (
-            <button key={opt} onClick={() => setCleaningType(opt)} style={{
-              padding: '10px 22px', borderRadius: '30px', fontSize: '0.9rem', fontWeight: '600',
-              border: `2px solid ${cleaningType === opt ? '#27ae60' : '#e2e8f0'}`,
-              backgroundColor: cleaningType === opt ? '#f0fff4' : '#fff',
-              color: cleaningType === opt ? '#27ae60' : '#64748b',
-              cursor: 'pointer', transition: 'all 0.15s',
-            }}>
-              {opt === 'Indoor' ? '[home] Indoor' : opt === 'Outdoor' ? ' Outdoor' : '[*] Both'}
-            </button>
-          ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div><label style={labelStyle}>Service Type</label><select style={inputStyle} value={cleaningType} onChange={e => setCleaningType(e.target.value)}>{['Indoor','Outdoor','Both (Indoor + Outdoor)','Post-Construction'].map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.88rem', color: '#374151' }}><input type="checkbox" checked={fumigation} onChange={e => setFumigation(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#27ae60' }} />Include Fumigation and Pest Control</label>
+      <div><label style={labelStyle}>Extra Details (optional)</label><textarea style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} placeholder="Property size, number of rooms, special requests..." value={extraDetails} onChange={e => setExtraDetails(e.target.value)} /></div>
+      <button onClick={handleSend} style={{ padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.92rem', cursor: 'pointer' }}>Get Custom Quote on WhatsApp</button>
+    </div>
+  );
+}
+function MovingQuoteForm() {
+  const [from, setFrom] = useState('');
+  const [to, setTo]     = useState('');
+  const [hasAppliances, setHasAppliances] = useState(false);
+  const [hasLuggage, setHasLuggage]       = useState(false);
+  const [extraInfo, setExtraInfo]         = useState('');
+  const handleSend = () => {
+    if (!from.trim() || !to.trim()) { alert('Please fill in both locations.'); return; }
+    const inventory = [hasAppliances && 'Large Appliances', hasLuggage && 'Luggage and Packed Boxes'].filter(Boolean).join(', ') || 'Not specified';
+    const msg = encodeURIComponent(`Hello GetHome, I need a *moving/haulage quote*.\n\n*From:* ${from}\n*To:* ${to}\n*Items:* ${inventory}\n*Extra Info:* ${extraInfo.trim() || 'None'}\n\nPlease send me a quote.`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div><label style={labelStyle}>Moving From</label><input style={inputStyle} placeholder="Current address or area" value={from} onChange={e => setFrom(e.target.value)} /></div>
+      <div><label style={labelStyle}>Moving To</label><input style={inputStyle} placeholder="Destination address or area" value={to} onChange={e => setTo(e.target.value)} /></div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <label style={labelStyle}>What are you moving?</label>
+        {[['hasAppliances','Large Appliances (TV, Fridge, Washing Machine)'],['hasLuggage','Luggage and Packed Boxes']].map(function([key, lbl]) {
+          const val = key === 'hasAppliances' ? hasAppliances : hasLuggage;
+          const setter = key === 'hasAppliances' ? setHasAppliances : setHasLuggage;
+          return <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.88rem', color: '#374151' }}><input type="checkbox" checked={val} onChange={e => setter(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#27ae60' }} />{lbl}</label>;
+        })}
+      </div>
+      <div><label style={labelStyle}>Extra Info (optional)</label><textarea style={{ ...inputStyle, minHeight: '70px', resize: 'vertical' }} placeholder="Floor number, elevator available, fragile items..." value={extraInfo} onChange={e => setExtraInfo(e.target.value)} /></div>
+      <button onClick={handleSend} style={{ padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.92rem', cursor: 'pointer' }}>Get Custom Quote on WhatsApp</button>
+    </div>
+  );
+}
+function PropertyCard({ house, onSelect }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var { activeCountry } = useCountry();
+  return (
+    <div onClick={onSelect} className='gh-prop-card gh-card' style={{ ...cardStyle, position: 'relative', overflow: 'hidden', cursor: 'pointer', borderRadius: '14px' }}>
+      <div style={{ position: 'relative' }}>
+        <img src={house.image_url} alt={house.title} loading="lazy" style={{ width: '100%', height: isMobile ? '112px' : '160px', objectFit: 'cover', display: 'block' }}
+          onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+        <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', padding: '2px 8px', borderRadius: '20px', fontSize: isMobile ? '0.52rem' : '0.60rem', fontWeight: '700', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>VERIFIED</div>
+        {(house.agent_tier || house.verification_level) && (
+          <div style={{ position: 'absolute', top: '7px', right: '7px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: (house.agent_tier || house.verification_level) === 'premium' ? '#f59e0b' : (house.agent_tier || house.verification_level) === 'verified' ? '#94a3b8' : '#cd7f32', border: '2px solid rgba(255,255,255,0.85)', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+        )}
+        {house.is_sold && (
+          <div style={{ position: 'absolute', bottom: '7px', left: '7px', backgroundColor: '#ef4444', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontSize: '0.60rem', fontWeight: 800, letterSpacing: '0.5px' }}>SOLD</div>
+        )}
+      </div>
+      <div style={{ padding: isMobile ? '9px 10px 10px' : '12px 14px 14px' }}>
+        <h3 style={{ margin: '0 0 2px 0', color: '#0a2240', fontSize: isMobile ? '0.69rem' : '0.88rem', fontWeight: '700', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{house.title}</h3>
+        <p style={{ color: '#94a3b8', margin: '0 0 8px 0', fontSize: isMobile ? '0.62rem' : '0.74rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{house.location}</p>
+        <div style={{ borderTop: '1px solid #f0f4f8', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: '700', color: '#16a34a', fontSize: isMobile ? '0.76rem' : '0.95rem', fontFamily: "'Inter', sans-serif" }}>{formatLocalPrice(house.price, activeCountry.name)}</span>
+          <span style={{ fontSize: isMobile ? '0.56rem' : '0.66rem', color: '#475569', backgroundColor: '#f0f4f8', padding: isMobile ? '2px 6px' : '3px 9px', borderRadius: '20px', fontWeight: '600', border: '1px solid #e2e8f0' }}>View</span>
         </div>
       </div>
-      <div onClick={() => setFumigation(f => !f)} style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '16px 20px', borderRadius: '12px', cursor: 'pointer',
-        border: `2px solid ${fumigation ? '#27ae60' : '#e2e8f0'}`,
-        backgroundColor: fumigation ? '#f0fff4' : '#f8fafc', transition: 'all 0.15s',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '1.4rem' }}></span>
-          <div>
-            <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.93rem' }}>Fumigation & Pest Control</p>
-            <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: '#7f8c8d' }}>Full compound spraying & rodent treatment</p>
+    </div>
+  );
+}
+function PricingModal({ property, onClose, user, onUserChange }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var { fmtCurrency, fmtListingPrice, activeCountry } = useCountry();
+  const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
+  const [addOns, setAddOns]                       = useState({ cleaning: false, relocation: false });
+  const [hoveredService, setHoveredService]         = useState(null);
+  const [inspectionMode, setInspectionMode]         = useState('whatsapp');
+  const [paymentStatus, setPaymentStatus]           = useState('idle');
+  const [authWall, setAuthWall]                     = useState(null);
+  const [mediaIndex, setMediaIndex]     = useState(0);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [stayDays, setStayDays]                 = useState(1);
+  const [descExpanded, setDescExpanded]         = useState(false);
+  const [depositSubmitting, setDepositSubmitting] = useState(false);
+  const [depositDone, setDepositDone]             = useState(false);
+  const [depositRef, setDepositRef]               = useState('');
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); }, [property?.id]);
+  if (!property) return null;
+  const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
+  // Shortlet calculations
+  const nightlyCost          = isShortlet ? (Number(property.cost_per_night) || Number(property.price) || 0) : 0;
+  const totalAccommodation   = nightlyCost * stayDays;
+  const shortletAgencyFee    = isShortlet ? (Number(property.agency_fee) || 0) : 0;
+  const shortletEscrowFee    = isShortlet ? Math.min(Math.round(totalAccommodation * ESCROW_FEE_RATE), ESCROW_FEE_CAP) : 0;
+  const shortletGrandTotal   = totalAccommodation + shortletAgencyFee + shortletEscrowFee;
+  // Regular rental calculations
+  const rent       = Number(property.rent || (!isShortlet ? property.price : 0) || 0);
+  const agencyFee  = Number(property.agency_fee  || 0);
+  const agreeFee   = Number(property.agreement_fee || 0);
+  const cautionFee = Number(property.caution_fee || 0);
+  const svcChg     = Number(property.service_charge || 0);
+  const regularBase = rent + agencyFee + agreeFee + cautionFee + svcChg;
+  const escrowFee   = Math.min(Math.round(regularBase * ESCROW_FEE_RATE), ESCROW_FEE_CAP);
+  const grandTotal  = regularBase + escrowFee;
+  const feeRows = isShortlet
+    ? [
+        { label: 'Cost Per Night',                                                  amount: fmtNGN(nightlyCost),         color: '#0a2240' },
+        { label: 'Stay Duration (' + stayDays + ' night' + (stayDays === 1 ? '' : 's') + ')', amount: fmtNGN(totalAccommodation), color: '#0a2240' },
+        { label: 'Agency Fee',                                                      amount: fmtNGN(shortletAgencyFee),   color: '#e67e22' },
+        { label: 'GetHome Escrow Fee (0.75%)',                                      amount: fmtNGN(shortletEscrowFee),   color: '#27ae60' },
+      ]
+    : [
+        { label: 'Annual Rent',                amount: fmtListingPrice(rent),       color: '#0a2240' },
+        { label: 'Agency / Legal Fee',         amount: fmtListingPrice(agencyFee),  color: '#e67e22' },
+        { label: 'Agreement / Documentation',  amount: fmtListingPrice(agreeFee),   color: '#e67e22' },
+        { label: 'Caution / Security Deposit', amount: fmtListingPrice(cautionFee), color: '#2980b9' },
+        { label: 'Service / Maintenance',      amount: fmtListingPrice(svcChg),     color: '#e67e22' },
+        { label: 'GetHome Escrow Fee (0.75%)', amount: fmtListingPrice(escrowFee),  color: '#27ae60' },
+      ];
+  const loanUrl = `${LOAN_PARTNER_URL}?utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
+  const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
+  const handleAuthSuccess = (newUser) => { onUserChange(newUser); setAuthWall(null); };
+  const handleWhatsAppInspection = async function() {
+    var targetNumber = WHATSAPP_NUMBER;
+    var saName = 'GetHome';
+
+    try {
+      var res = await fetch(API_URL + '/api/property-sa/' + property.id);
+      if (res.ok) {
+        var data = await res.json();
+        if (data.sa_whatsapp && data.sa_whatsapp.trim() !== '') {
+          targetNumber = data.sa_whatsapp.replace(/[^0-9]/g, '');
+          if (targetNumber.startsWith('0')) targetNumber = '234' + targetNumber.substring(1);
+          saName = data.sa_name || 'GetHome Agent';
+        }
+      }
+    } catch(e) {
+      console.log('Could not fetch SA details, using default number');
+    }
+
+    var msg = encodeURIComponent(
+      'Hello ' + saName + ', I would like to book a FREE inspection for:\n\n' +
+      'Property: ' + property.title + '\n' +
+      'Location: ' + property.location + '\n' +
+      'My Name: ' + (user ? user.email : 'Customer') + '\n\n' +
+      'Please confirm a suitable inspection date and time.'
+    );
+    window.open('https://wa.me/' + targetNumber + '?text=' + msg, '_blank');
+  };
+  const triggerProxyInspection = async (u) => {
+    const usr = u || user;
+    try {
+      const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: currentConfig.proxy,
+          customer_email: usr?.email || 'customer@gethome.ng',
+          customer_name: usr?.email || 'customer@gethome.ng',
+          purpose: 'Proxy Inspection - ' + property.title,
+          property_id: property.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+  const handleEscrowPayment = async function() {
+    if (!user) { setAuthWall('escrow'); return; }
+    setDepositSubmitting(true);
+    try {
+      const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: grandTotal,
+          customer_email: user.email,
+          customer_name: user.email,
+          purpose: 'Property Deposit - ' + property.title,
+          property_id: property.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setDepositSubmitting(false);
+    }
+  };
+  const handleProxyInspection = () => { if (!requireAuth('proxy')) return; triggerProxyInspection(user); };
+  const isPaid = paymentStatus === 'success';
+  const imageList = (property.image_urls && Array.isArray(property.image_urls) && property.image_urls.filter(function(u){ return u && u.trim(); }).length > 0)
+    ? property.image_urls.filter(function(u){ return u && u.trim(); })
+    : (property.image_url ? [property.image_url] : []);
+  const hasVideo = !!(property.video_url && property.video_url.trim());
+  const allMedia = imageList.concat(hasVideo ? ['__VIDEO__'] : []);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6,21,40,0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000, padding: isMobile ? '0' : '20px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: isMobile ? '22px 22px 0 0' : '22px', maxWidth: '680px', width: '100%', maxHeight: isMobile ? '95vh' : '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 80px rgba(10,34,64,0.28)' }}>
+        <div style={{ padding: isMobile ? '15px 18px' : '22px 32px', borderBottom: '1px solid #f0f4f8', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+            <h2 style={{ fontSize: isMobile ? '1rem' : '1.3rem', fontWeight: '700', color: '#0a2240', margin: '0 0 3px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>{property.title}</h2>
+            <p style={{ color: '#94a3b8', margin: 0, fontSize: isMobile ? '0.76rem' : '0.84rem', fontFamily: "'Inter', sans-serif" }}>{property.location}</p>
+          </div>
+          <button onClick={onClose} className="gh-close-btn" title="Close" style={{ background: '#f0f4f8', border: 'none', borderRadius: '50%', width: '34px', height: '34px', cursor: 'pointer', fontSize: '1.1rem', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>×</button>
+        </div>
+        <div style={{ padding: isMobile ? '0 16px 16px' : '0 32px 24px', overflowY: 'auto', flex: 1 }}>
+          {isPaid && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px 18px', margin: '16px 0', textAlign: 'center' }}><p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.92rem' }}>Payment Confirmed! Our team will contact you within 24 hours.</p></div>}
+          {allMedia.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ position: 'relative', borderRadius: '14px', overflow: 'hidden', backgroundColor: '#000', height: isMobile ? '220px' : '280px' }}>
+                {allMedia[mediaIndex] === '__VIDEO__'
+                  ? <video src={property.video_url} controls playsInline preload="none"
+                      poster={imageList[0] || undefined}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  : <img src={allMedia[mediaIndex]} alt={'Property ' + (mediaIndex + 1)} loading="lazy"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                      onClick={function() { setLightboxOpen(true); }}
+                      onError={function(e) { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+                }
+                {allMedia.length > 1 && (
+                  <>
+                    <button onClick={function() { setMediaIndex((mediaIndex - 1 + allMedia.length) % allMedia.length); }}
+                      style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>&#8249;</button>
+                    <button onClick={function() { setMediaIndex((mediaIndex + 1) % allMedia.length); }}
+                      style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>&#8250;</button>
+                  </>
+                )}
+                <span style={{ position: 'absolute', bottom: '10px', right: '10px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '0.70rem', padding: '3px 10px', borderRadius: '20px' }}>{mediaIndex + 1} / {allMedia.length}</span>
+                {allMedia[mediaIndex] === '__VIDEO__' && (
+                  <span style={{ position: 'absolute', top: '10px', left: '10px', backgroundColor: '#0a2240', color: '#fff', fontSize: '0.64rem', fontWeight: '700', padding: '3px 8px', borderRadius: '8px' }}>VIDEO</span>
+                )}
+              </div>
+              {allMedia.length > 1 && (
+                <div style={{ display: 'flex', gap: '6px', marginTop: '8px', overflowX: 'auto', paddingBottom: '6px' }}>
+                  {allMedia.map(function(item, i) {
+                    return item === '__VIDEO__'
+                      ? <div key={i} onClick={function() { setMediaIndex(i); }}
+                          style={{ width: '58px', height: '58px', flexShrink: 0, borderRadius: '8px', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2.5px solid ' + (i === mediaIndex ? '#27ae60' : 'transparent'), color: '#fff', fontSize: '0.60rem', fontWeight: '700' }}>VIDEO</div>
+                      : <img key={i} src={item} alt={'Thumb ' + i} loading="lazy"
+                          onClick={function() { setMediaIndex(i); }}
+                          style={{ width: '58px', height: '58px', flexShrink: 0, objectFit: 'cover', borderRadius: '8px', cursor: 'pointer', border: '2.5px solid ' + (i === mediaIndex ? '#27ae60' : 'transparent') }}
+                          onError={function(e) { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />;
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          {isShortlet && (
+            <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
+              <p style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', margin: '0 0 10px 0' }}>How many nights are you staying?</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button onClick={function(){ setStayDays(Math.max(1, stayDays - 1)); }}
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#0a2240', color: '#fff', border: 'none', fontSize: '1.2rem', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>-</button>
+                <input type="number" value={stayDays} min={1} max={365}
+                  onChange={function(e){ setStayDays(Math.max(1, parseInt(e.target.value) || 1)); }}
+                  style={{ width: '70px', textAlign: 'center', padding: '8px', borderRadius: '8px', border: '1.5px solid #27ae60', fontSize: '1rem', fontWeight: '700', color: '#0a2240' }} />
+                <button onClick={function(){ setStayDays(Math.min(365, stayDays + 1)); }}
+                  style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#0a2240', color: '#fff', border: 'none', fontSize: '1.2rem', cursor: 'pointer', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                <span style={{ color: '#27ae60', fontWeight: '700', fontSize: '0.88rem' }}>{stayDays} {stayDays === 1 ? 'night' : 'nights'}</span>
+              </div>
+            </div>
+          )}
+          {property.description && property.description.trim() !== '' && (
+            <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', margin: '0 0 8px 0' }}>About This Property</p>
+              <p style={{ fontSize: '0.82rem', color: '#475569', lineHeight: '1.7', margin: 0 }}>{property.description}</p>
+            </div>
+          )}
+          <div style={{ border: '1px solid #e8edf3', borderRadius: '14px', overflow: 'hidden', marginTop: '16px', marginBottom: '16px' }}>
+            <div style={{ backgroundColor: '#0a2240', padding: '10px 18px' }}><h3 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: 0 }}>Verified Fee Breakdown</h3></div>
+            {feeRows.map(function(row, i) { return (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '9px 14px' : '11px 18px', borderBottom: i < feeRows.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }}><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', color: '#374151' }}>{row.label}</span><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', fontWeight: '700', color: row.color }}>{row.amount}</span></div>); })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '11px 14px' : '13px 18px', backgroundColor: '#f0fff4', borderTop: '2px solid #86efac' }}><span style={{ fontSize: isMobile ? '0.82rem' : '0.9rem', fontWeight: '800', color: '#0a2240' }}>{isShortlet ? 'Total Stay Amount' : 'Total Move-In Amount'}</span><span style={{ fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: '900', color: '#27ae60' }}>{fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal)}</span></div>
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '700', fontSize: '0.86rem', color: '#0a2240' }}>Optional Move-In Services <span style={{ color: '#94a3b8', fontWeight: '400' }}>(WhatsApp quote)</span></p>
+            {[
+              { key: 'cleaning',   label: 'Professional Deep Cleaning', sub: 'Full post-construction or pre-move-in scrub' },
+              { key: 'relocation', label: 'Relocation and Haulage',     sub: 'Packing crew, moving truck and safe transport' }
+            ].map(function(a) {
+              var isChecked = addOns[a.key];
+              var isHovered = hoveredService === a.key;
+              var borderColor = isChecked ? '#27ae60' : (isHovered ? 'rgba(39,174,96,0.4)' : '#e2e8f0');
+              return (
+                <div key={a.key}
+                  onClick={function(){ setAddOns(function(prev){ return Object.assign({}, prev, { [a.key]: !prev[a.key] }); }); }}
+                  onMouseEnter={function(){ if (!isChecked) setHoveredService(a.key); }}
+                  onMouseLeave={function(){ setHoveredService(null); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '14px 16px', borderRadius: '12px', marginBottom: '10px', cursor: 'pointer', border: '2px solid ' + borderColor, backgroundColor: isChecked ? '#f0fff4' : '#fff', transition: 'all 0.2s ease', boxShadow: isChecked ? '0 2px 8px rgba(39,174,96,0.15)' : 'none' }}>
+                  <div style={{ width: '22px', height: '22px', borderRadius: '50%', flexShrink: 0, border: '2px solid ' + (isChecked ? '#27ae60' : '#cbd5e1'), backgroundColor: isChecked ? '#27ae60' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px', transition: 'all 0.2s' }}>
+                    {isChecked && <div style={{ width: '6px', height: '10px', borderBottom: '2px solid #fff', borderRight: '2px solid #fff', transform: 'rotate(45deg)', marginTop: '-2px' }} />}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', margin: '0 0 3px 0' }}>{a.label}</p>
+                    <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: 0 }}>{a.sub}</p>
+                  </div>
+                  {isChecked && (
+                    <button onClick={function(e) {
+                      e.stopPropagation();
+                      var msg = encodeURIComponent('Hello GetHome, I need a quote for *' + a.label + '* at: ' + property.title + ', ' + property.location);
+                      window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + msg, '_blank');
+                    }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', marginLeft: '8px', flexShrink: 0 }}>
+                      Get Quote
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: isMobile ? '14px' : '18px', marginBottom: '16px' }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '700', fontSize: '0.86rem', color: '#0a2240' }}>Inspection Option</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+              {[{ key: 'whatsapp', label: 'Free WhatsApp', sub: 'Coordinate with our agent' }, { key: 'proxy', label: 'Proxy Inspection', sub: `${currentConfig.symbol}${currentConfig.proxy.toLocaleString()} - Video walkthrough` }].map(function(opt) {
+                return (<div key={opt.key} onClick={function(){ setInspectionMode(opt.key); }} style={{ border: `2px solid ${inspectionMode === opt.key ? '#27ae60' : '#e2e8f0'}`, borderRadius: '10px', padding: '10px', cursor: 'pointer', backgroundColor: inspectionMode === opt.key ? '#f0fff4' : '#fff' }}>
+                  <p style={{ margin: 0, fontWeight: '700', fontSize: '0.78rem', color: '#0a2240' }}>{opt.label}</p>
+                  <p style={{ margin: '3px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>{opt.sub}</p>
+                </div>);
+              })}
+            </div>
+            {inspectionMode === 'whatsapp' ? <button onClick={handleWhatsAppInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Book Free WhatsApp Inspection</button>
+              : <button onClick={handleProxyInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay and Book Proxy Inspection</button>}
+          </div>
+          <div style={{ backgroundColor: '#f0fff4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px', pointerEvents: 'none' }}>
+            <div style={{ width: '28px', height: '28px', backgroundColor: '#dcfce7', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#27ae60', fontWeight: '900', fontSize: '0.8rem', flexShrink: 0 }}>S</div>
+            <div><p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#166534', fontSize: '0.80rem' }}>Your money is 100% protected</p><p style={{ margin: 0, color: '#15803d', fontSize: '0.74rem', lineHeight: '1.5' }}>Funds held in escrow -- never paid to agent until you verify and approve.</p></div>
+          </div>
+          {depositDone ? (
+            <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px 16px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '1rem', flexShrink: 0 }}>&#10003;</div>
+                <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.88rem' }}>Payment Successful!</p>
+              </div>
+              <p style={{ margin: '0 0 10px 0', color: '#15803d', fontSize: '0.78rem', lineHeight: '1.6' }}>
+                {'Your payment was received. WhatsApp has been opened so you can notify GetHome — share the message to confirm your transaction.'}
+                {depositRef ? '\nRef: ' + depositRef : ''}
+              </p>
+              <button onClick={function() {
+                var waMsg = encodeURIComponent(
+                  'Hello GetHome, I have just completed a payment for a property.\n\n' +
+                  'Property: ' + property.title + '\n' +
+                  'Location: ' + property.location + '\n' +
+                  'Amount Paid: NGN ' + grandTotal.toLocaleString('en-NG') + '\n' +
+                  'My Email: ' + (user?.email || '') + '\n' +
+                  'Paystack Reference: ' + depositRef + '\n\n' +
+                  'Please confirm and process my transaction. Thank you!'
+                );
+                window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + waMsg, '_blank');
+              }} style={{ width: '100%', padding: '10px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
+                Resend WhatsApp Notification
+              </button>
+            </div>
+          ) : (
+            <button onClick={handleEscrowPayment} disabled={depositSubmitting} style={{ width: '100%', padding: '14px', marginBottom: '10px', border: 'none', borderRadius: '12px', backgroundColor: depositSubmitting ? '#94a3b8' : '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: depositSubmitting ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+              {depositSubmitting ? 'Preparing payment…' : 'Pay via Monnify — ' + fmtNGN(grandTotal)}
+            </button>
+          )}
+          <a href={loanUrl} onClick={e => { if (!requireAuth('loan')) e.preventDefault(); }} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', fontSize: '0.82rem', color: '#3b82f6', textDecoration: 'none', marginBottom: '16px' }}>Cannot afford upfront? <strong>Apply for a Property Loan</strong></a>
+        </div>
+      </div>
+      {lightboxOpen && allMedia[mediaIndex] !== '__VIDEO__' && (
+        <div onClick={function() { setLightboxOpen(false); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.96)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button onClick={function() { setLightboxOpen(false); }}
+            style={{ position: 'absolute', top: '16px', right: '20px', backgroundColor: 'transparent', border: 'none', color: '#fff', fontSize: '2rem', cursor: 'pointer', lineHeight: 1 }}>&#x2715;</button>
+          <img src={allMedia[mediaIndex]} alt="Full view" loading="lazy"
+            onClick={function(e) { e.stopPropagation(); }}
+            style={{ maxWidth: '95vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: '8px' }} />
+          {allMedia.length > 1 && (
+            <>
+              <button onClick={function(e) { e.stopPropagation(); setMediaIndex((mediaIndex - 1 + allMedia.length) % allMedia.length); }}
+                style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8249;</button>
+              <button onClick={function(e) { e.stopPropagation(); setMediaIndex((mediaIndex + 1) % allMedia.length); }}
+                style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
+            </>
+          )}
+        </div>
+      )}
+      {authWall && !user && (
+        <div onClick={function() { setAuthWall(null); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1001, backgroundColor: 'rgba(10,34,64,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 24px 60px rgba(10,34,64,0.3)', position: 'relative' }}>
+            <button onClick={function() { setAuthWall(null); }}
+              style={{ position: 'absolute', top: '14px', right: '14px', background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
+            <p style={{ margin: '0 0 16px 0', fontWeight: '800', fontSize: '1rem', color: '#0a2240', textAlign: 'center' }}>
+              Sign in to {{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]}
+            </p>
+            <InlineAuthForm actionLabel={{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]} onSuccess={handleAuthSuccess} />
           </div>
         </div>
-        <div style={{ width: '46px', height: '26px', borderRadius: '13px', position: 'relative', backgroundColor: fumigation ? '#27ae60' : '#cbd5e1', transition: 'background-color 0.2s', flexShrink: 0 }}>
-          <div style={{ position: 'absolute', top: '3px', left: fumigation ? '22px' : '3px', width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }} />
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>Any other specific services or areas to clean?</label>
-        <textarea rows={3} placeholder="e.g., focus on kitchen ceiling, scrub bathroom tiles, clean all window frames..."
-          value={extraDetails} onChange={e => setExtraDetails(e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.6' }} />
-      </div>
-      <button onClick={handleSend} style={{ width: '100%', padding: '15px', border: 'none', borderRadius: '12px', backgroundColor: '#25D366', color: '#fff', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(37,211,102,0.3)' }}>
-        <span style={{ fontSize: '1.2rem' }}>[chat]</span> Send to GetHome Agent to Get Your Quote
-      </button>
+      )}
     </div>
   );
 }
-// =========================================================
-// MOVING QUOTE FORM
-// =========================================================
-function MovingQuoteForm() {
-  const [from, setFrom]               = useState('');
-  const [to, setTo]                   = useState('');
-  const [hasAppliances, setHasAppliances] = useState(false);
-  const [hasLuggage, setHasLuggage]   = useState(false);
-  const [extraInfo, setExtraInfo]     = useState('');
-  const handleSend = () => {
-    if (!from.trim() || !to.trim()) { alert('Please fill in both your current location and destination.'); return; }
-    const inventory = [hasAppliances && 'Large / Heavy Appliances & Equipment', hasLuggage && 'Luggage & Packed Boxes'].filter(Boolean).join(', ') || 'Not specified';
-    const msg =
-      `Hello GetHome Agent , I'd like a *custom moving & haulage quote*.\n\n` +
-      `*Moving From:* ${from.trim()}\n*Moving To:* ${to.trim()}\n` +
-      `*Items Inventory:* ${inventory}\n*Additional Info:* ${extraInfo.trim() || 'None provided'}\n\n` +
-      `Please send me a custom quote at your earliest convenience. Thank you!`;
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank');
-  };
-  const checkRow = (icon, label, sub, checked, toggle) => (
-    <div onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 18px', borderRadius: '12px', cursor: 'pointer', border: `2px solid ${checked ? '#27ae60' : '#e2e8f0'}`, backgroundColor: checked ? '#f0fff4' : '#f8fafc', transition: 'all 0.15s' }}>
-      <div style={{ width: '22px', height: '22px', borderRadius: '6px', border: `2px solid ${checked ? '#27ae60' : '#cbd5e1'}`, backgroundColor: checked ? '#27ae60' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
-        {checked && <span style={{ color: '#fff', fontSize: '13px', fontWeight: '900', lineHeight: 1 }}>v</span>}
-      </div>
-      <span style={{ fontSize: '1.2rem' }}>{icon}</span>
+function AgentVerificationForm({ user, onComplete }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var { activeCountry } = useCountry();
+  var isGhana = activeCountry && activeCountry.code === 'GH';
+  var premiumFee    = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
+  var enterpriseFee = isGhana ? 'GH₵ 108.59' : '₦ 12,500';
+  var [step, setStep]                   = useState(1);
+  var [submitting, setSubmitting]       = useState(false);
+  var [successMsg, setSuccessMsg]       = useState('');
+  var [errorMsg, setErrorMsg]           = useState('');
+  var [showPassword, setShowPass]       = useState(false);
+  var [showConfirm, setShowConfirm]     = useState(false);
+  // Tier 1 fields
+  var [phone, setPhone]                 = useState('');
+  var [nin, setNin]                     = useState('');
+  var [selfieFile, setSelfieFile]       = useState(null);
+  var [selfiePreview, setSelfiePreview] = useState(null);
+  // Tier 2 fields
+  var [cacFile, setCacFile]             = useState(null);
+  var [govIdFile, setGovIdFile]         = useState(null);
+  var [propAuthFile, setPropAuthFile]   = useState(null);
+  var [references, setReferences]       = useState([{ name: '', phone: '', relationship: '' }]);
+  // Tier 3 fields
+  var [officeAddress, setOfficeAddress] = useState('');
+  var [emergencyName, setEmergencyName] = useState('');
+  var [emergencyPhone, setEmergencyPhone] = useState('');
+  var [emergencyRel, setEmergencyRel]   = useState('');
+  var [guarantorName, setGuarantorName] = useState('');
+  var [guarantorPhone, setGuarantorPhone] = useState('');
+  var [guarantorWork, setGuarantorWork] = useState('');
+  var [targetTier, setTargetTier]       = useState('basic');
+  var inputS = { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', outline: 'none', color: '#0a2240', boxSizing: 'border-box' };
+  var labelS = { display: 'block', marginBottom: '5px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' };
+  function handleFileChange(setter, previewSetter, maxMB, e) {
+    var file = e.target.files[0]; if (!file) return;
+    if (file.size > maxMB * 1024 * 1024) { alert(`File must be under ${maxMB}MB`); return; }
+    setter(file);
+    if (previewSetter && file.type.startsWith('image/')) {
+      var reader = new FileReader();
+      reader.onload = function(ev) { previewSetter(ev.target.result); };
+      reader.readAsDataURL(file);
+    }
+  }
+  async function uploadKYCFile(file, fileName) {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('fileName', fileName);
+    fd.append('userId', user.id);
+    var token = localStorage.getItem('gh_token');
+    var res = await fetch(`${API_URL}/api/upload-kyc`, {
+      method: 'POST', body: fd,
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Upload failed');
+    return data.url;
+  }
+  async function handleSubmit() {
+    setSubmitting(true); setErrorMsg('');
+    try {
+      // ── Verify active session — fixes 'Unauthorized' on stale localStorage token ──
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Your session has expired. Please log in again.');
+      var token = session.access_token;
+      if (token) localStorage.setItem('gh_token', token);
+      var userId = session.user.id;
+
+      // ── Selfie: upload directly to Supabase Storage ──────────────────
+      var selfieUrl = null;
+      if (selfieFile) {
+        try {
+          const ext = selfieFile.name.split('.').pop().toLowerCase();
+          const selfiePath = `selfies/${userId}-${Date.now()}.${ext}`;
+          const { data: selfieData, error: selfieError } = await supabase.storage
+            .from('verification')
+            .upload(selfiePath, selfieFile, { cacheControl: '3600', upsert: true });
+          if (selfieError) throw new Error(selfieError.message);
+          selfieUrl = supabase.storage.from('verification').getPublicUrl(selfieData.path).data.publicUrl;
+        } catch (se) {
+          throw new Error('Selfie upload failed: ' + se.message);
+        }
+      }
+
+      // ── Other KYC documents: backend API ─────────────────────────────
+      var cacUrl      = cacFile      ? await uploadKYCFile(cacFile,      'cac')       : null;
+      var govIdUrl    = govIdFile    ? await uploadKYCFile(govIdFile,    'gov_id')    : null;
+      var propAuthUrl = propAuthFile ? await uploadKYCFile(propAuthFile, 'prop_auth') : null;
+
+      // ── Write NIN / Ghana Card / CAC / status to agents row immediately ──
+      const { error: updateError } = await supabase.from('agents').update({
+        nin:                 isGhana ? null : nin,
+        nin_number:          isGhana ? null : nin,
+        ghana_card_number:   isGhana ? nin.trim() || null : null,
+        cac:                 cacUrl || null,
+        cac_number:          cacUrl || null,
+        verification_status: 'pending',
+      }).eq('id', userId);
+      if (updateError) throw new Error('Agent record update failed: ' + updateError.message);
+
+      // ── Full verification submission to backend ───────────────────────
+      var payload = {
+        userId,
+        targetTier,
+        phone,
+        nin:               isGhana ? null : nin,
+        nin_number:        isGhana ? null : nin,
+        ghana_card_number: isGhana ? nin.trim() || null : null,
+        selfieUrl,
+        cacUrl,        cac_number:          cacUrl || null,
+        govIdUrl,      propAuthUrl,
+        references,
+        officeAddress,
+        emergencyContact:    { name: emergencyName, phone: emergencyPhone, relationship: emergencyRel },
+        guarantorInfo:       { name: guarantorName, phone: guarantorPhone, workplace: guarantorWork },
+        verification_status: 'pending',
+      };
+      var res = await fetch(`${API_URL}/api/agent/submit-verification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Submission failed');
+      setSuccessMsg('Verification documents submitted! Admin will review within 24-48 hours.');
+      onComplete && onComplete();
+    } catch(e) { setErrorMsg(e.message); }
+    finally { setSubmitting(false); }
+  }
+  var fileBtn = function(label, file, setter, accept) {
+    var btnId = 'kyc-' + label.replace(/[^a-zA-Z0-9]/g, '-');
+    return (
       <div>
-        <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.92rem' }}>{label}</p>
-        <p style={{ margin: '2px 0 0 0', fontSize: '0.79rem', color: '#7f8c8d' }}>{sub}</p>
+        <label style={labelS}>{label}</label>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input type="file" accept={accept || 'image/*,.pdf'} id={btnId} style={{ display: 'none' }}
+            onChange={function(e){ handleFileChange(setter, null, 10, e); }} />
+          <button type="button"
+            onClick={function(){ var el = document.getElementById(btnId); if (el) el.click(); }}
+            style={{ padding: '8px 14px', backgroundColor: file ? '#f0fff4' : '#f1f5f9', color: file ? '#166534' : '#374151', border: '1.5px solid ' + (file ? '#86efac' : '#e2e8f0'), borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+            {file ? ('OK - ' + file.name.substring(0, 18)) : ('+ Upload ' + label)}
+          </button>
+        </div>
       </div>
+    );
+  };
+  if (successMsg) return (
+    <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '16px', padding: '24px', textAlign: 'center' }}>
+      <p style={{ color: '#166534', fontWeight: '700', fontSize: '0.92rem', margin: 0 }}>{successMsg}</p>
     </div>
   );
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-        <div><label style={labelStyle}>Moving From</label><input type="text" placeholder="e.g., Lekki Phase 1, Lagos" style={inputStyle} value={from} onChange={e => setFrom(e.target.value)} /></div>
-        <div><label style={labelStyle}>Moving To</label><input type="text" placeholder="e.g., Abuja, Wuse 2" style={inputStyle} value={to} onChange={e => setTo(e.target.value)} /></div>
-      </div>
-      <div>
-        <p style={labelStyle}>Items Inventory</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {checkRow('', 'Large / Heavy Appliances & Equipment', 'Fridges, washing machines, generators, sofas, beds...', hasAppliances, () => setHasAppliances(v => !v))}
-          {checkRow('', 'Luggage & Packed Boxes', 'Bags, cartons, clothing, kitchenware, small items...', hasLuggage, () => setHasLuggage(v => !v))}
+    <div style={{ ...cardStyle, padding: isMobile ? '18px' : '28px' }}>
+      <h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 4px 0' }}>Agent Verification</h3>
+      <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 20px 0' }}>Submit documents to unlock higher tier status and build trust with customers.</p>
+      {errorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px', marginBottom: '12px' }}><p style={{ margin: 0, color: '#b91c1c', fontSize: '0.82rem' }}>{errorMsg}</p></div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div>
+          <label style={labelS}>Verification Tier</label>
+          <select style={{ ...inputS, fontSize: '16px' }} value={targetTier} onChange={function(e){ setTargetTier(e.target.value); }}>
+            <option value="basic">{isGhana ? 'Bronze (Phone + Ghana Card) — Free' : 'Bronze (Phone + NIN) — Free'}</option>
+            <option value="verified">{isGhana ? 'Silver (+ ORC + Gov ID + References)' : 'Silver (+ CAC + Gov ID + References)'} — {premiumFee}</option>
+            <option value="premium">Gold (Full verification) — {enterpriseFee}</option>
+          </select>
         </div>
+        <div>
+          <label style={labelS}>Phone Number *</label>
+          <input style={{ ...inputS, fontSize: '16px' }} placeholder={isGhana ? '+233...' : '+234...'} value={phone} onChange={function(e){ setPhone(e.target.value); }} />
+        </div>
+        <div>
+          <label style={labelS}>{isGhana ? 'Ghana Card Number *' : 'NIN Number *'}</label>
+          <input style={{ ...inputS, fontSize: '16px' }} placeholder={isGhana ? 'GHA-XXXXXXXXX-X' : '11-digit NIN'} maxLength={isGhana ? 15 : 11} value={nin} onChange={function(e){ setNin(e.target.value); }} />
+        </div>
+        <div>
+          <label style={labelS}>Selfie Photo *</label>
+          <input type="file" accept="image/*" style={{ fontSize: '0.82rem' }}
+            onChange={function(e){ handleFileChange(setSelfieFile, setSelfiePreview, 5, e); }} />
+          {selfiePreview && <img src={selfiePreview} alt="Selfie" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', marginTop: '8px' }} />}
+        </div>
+        {(targetTier === 'verified' || targetTier === 'premium') && (
+          <>
+            {fileBtn(isGhana ? 'ORC Business Registration Document' : 'CAC Certificate', cacFile, setCacFile, 'image/*,.pdf')}
+            {fileBtn('Government ID', govIdFile, setGovIdFile, 'image/*,.pdf')}
+            {fileBtn('Property Authorization', propAuthFile, setPropAuthFile, 'image/*,.pdf')}
+            <div>
+              <label style={labelS}>Reference (Name, Phone, Relationship)</label>
+              {references.map(function(ref, i) {
+                return (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
+                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Name" value={ref.name}
+                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],name:e.target.value}; return n; }); }} />
+                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Phone" value={ref.phone}
+                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],phone:e.target.value}; return n; }); }} />
+                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Relationship" value={ref.relationship}
+                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],relationship:e.target.value}; return n; }); }} />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {targetTier === 'premium' && (
+          <>
+            <div>
+              <label style={labelS}>Office Address</label>
+              <input style={{ ...inputS, fontSize: '16px' }} value={officeAddress} onChange={function(e){ setOfficeAddress(e.target.value); }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+              <div><label style={labelS}>Emergency Name</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyName} onChange={function(e){ setEmergencyName(e.target.value); }} /></div>
+              <div><label style={labelS}>Emergency Phone</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyPhone} onChange={function(e){ setEmergencyPhone(e.target.value); }} /></div>
+              <div><label style={labelS}>Relationship</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyRel} onChange={function(e){ setEmergencyRel(e.target.value); }} /></div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+              <div><label style={labelS}>Guarantor Name</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorName} onChange={function(e){ setGuarantorName(e.target.value); }} /></div>
+              <div><label style={labelS}>Guarantor Phone</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorPhone} onChange={function(e){ setGuarantorPhone(e.target.value); }} /></div>
+              <div><label style={labelS}>Guarantor Workplace</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorWork} onChange={function(e){ setGuarantorWork(e.target.value); }} /></div>
+            </div>
+          </>
+        )}
       </div>
-      <div>
-        <label style={labelStyle}>Additional information about your move</label>
-        <textarea rows={3} placeholder="e.g., 3rd floor no elevator, fragile antique furniture, needs crane..."
-          value={extraInfo} onChange={e => setExtraInfo(e.target.value)}
-          style={{ ...inputStyle, resize: 'vertical', lineHeight: '1.6' }} />
-      </div>
-      <button onClick={handleSend} style={{ width: '100%', padding: '15px', border: 'none', borderRadius: '12px', backgroundColor: '#25D366', color: '#fff', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(37,211,102,0.3)' }}>
-        <span style={{ fontSize: '1.2rem' }}>[chat]</span> Send to GetHome Agent to Get Your Quote
+      <button onClick={handleSubmit} disabled={submitting}
+        style={{ width: '100%', marginTop: '20px', padding: '13px', backgroundColor: submitting ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.92rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+        {submitting ? 'Submitting...' : 'Submit Verification Documents'}
       </button>
     </div>
   );
 }
-// =========================================================
-// AGENT UPGRADE PANEL
-// =========================================================
 function AgentUpgradePanel({ currentTier, agentEmail, onUpgradeSuccess }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var { activeCountry } = useCountry();
+  var isGhana = activeCountry && activeCountry.code === 'GH';
+  var premiumPriceText = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
+  var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ 35,000';
+  var tierPriceDisplay = { premium: premiumPriceText, agency: agencyPriceText };
   const [upgrading, setUpgrading] = useState(null);
   const handleUpgrade = (tierKey) => {
-    const tier = AGENT_TIERS[tierKey];
-    setUpgrading(tierKey);
-    openPaystack({
-      email: agentEmail, amountNaira: tier.price,
-      ref: `GH-AGENT-${tierKey.toUpperCase()}-${Date.now()}`,
-      metadata: { agent_email: agentEmail, upgrade_tier: tierKey },
+    const tier = AGENT_TIERS[tierKey]; setUpgrading(tierKey);
+    openPaystack({ email: agentEmail, amountNaira: tier.price, ref: `GH-AGENT-${tierKey.toUpperCase()}-${Date.now()}`, metadata: { agent_email: agentEmail, upgrade_tier: tierKey },
       onSuccess: (response) => {
-        fetch(`${API_URL}/api/agent/upgrade`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: response.reference, tier: tierKey, agent_email: agentEmail }) })
-          .then(r => r.json()).then(() => { alert(`[!] Upgraded to ${tier.label}!`); onUpgradeSuccess(tierKey); }).catch(() => alert('[!] Payment captured but sync failed. Contact support.'));
+        fetch(`${API_URL}/api/agent/upgrade`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: agentEmail, tier: tierKey, reference: response.reference }) }).catch(console.error);
+        localStorage.setItem('gh_tier_renewed_' + agentEmail, new Date().toISOString());
+        onUpgradeSuccess && onUpgradeSuccess(tierKey);
         setUpgrading(null);
       },
-      onClose: () => setUpgrading(null),
-    });
+      onClose: () => setUpgrading(null) });
   };
-  const tiers = [
-    { key: 'free',    icon: '[home]', name: 'Free',         price: 'NGN0 / month',      limit: '3 listings',   perks: ['Basic exposure', 'Standard card'], cta: null },
-    { key: 'premium', icon: '[star]', name: 'Premium Agent', price: 'NGN8,500 / month',  limit: '15 listings',  perks: ['[star] Verified badge', 'Priority placement', 'Pay-per-extra NGN1k'], cta: 'Upgrade to Premium' },
-    { key: 'agency',  icon: '', name: 'Agency Plan',  price: 'NGN35,000 / month', limit: '100 listings', perks: ['Agency Profile page', '5 Featured/month', 'All Premium perks'], cta: 'Upgrade to Agency' },
-  ];
   return (
-    <div style={{ marginTop: '40px' }}>
-      <h3 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', marginBottom: '4px' }}>[chart] Listing Tier Plans</h3>
-      <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '18px' }}>Current: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[currentTier]?.label}</strong></p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
-        {tiers.map(t => {
-          const isActive = currentTier === t.key, isLoad = upgrading === t.key;
-          return (
-            <div key={t.key} style={{ border: `2px solid ${isActive ? '#27ae60' : '#e2e8f0'}`, borderRadius: '16px', padding: '20px 16px', backgroundColor: isActive ? '#f0fff4' : '#fafafa', position: 'relative' }}>
-              {isActive && <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#27ae60', color: '#fff', fontSize: '0.68rem', fontWeight: '700', padding: '3px 12px', borderRadius: '20px', whiteSpace: 'nowrap' }}>CURRENT</div>}
-              <div style={{ fontSize: '1.6rem', marginBottom: '8px' }}>{t.icon}</div>
-              <h4 style={{ color: '#0a2240', margin: '0 0 3px 0', fontSize: '0.9rem', fontWeight: '800' }}>{t.name}</h4>
-              <p style={{ color: '#27ae60', fontWeight: '700', fontSize: '0.82rem', margin: '0 0 5px 0' }}>{t.price}</p>
-              <p style={{ color: '#64748b', fontSize: '0.77rem', margin: '0 0 10px 0' }}>{t.limit}</p>
-              <ul style={{ paddingLeft: '14px', margin: '0 0 14px 0', color: '#94a3b8', fontSize: '0.76rem', lineHeight: '1.8' }}>
-                {t.perks.map((p, i) => <li key={i}>{p}</li>)}
-              </ul>
-              {t.cta && !isActive && <button onClick={() => handleUpgrade(t.key)} disabled={isLoad} style={{ width: '100%', padding: '10px', border: 'none', borderRadius: '8px', backgroundColor: isLoad ? '#94a3b8' : '#0a2240', color: '#fff', fontWeight: '700', fontSize: '0.8rem', cursor: isLoad ? 'not-allowed' : 'pointer' }}>{isLoad ? '[wait] Opening...' : t.cta}</button>}
-            </div>
-          );
+    <div style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
+      <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: isMobile ? '0.9rem' : '1rem' }}>{currentTier === 'free' ? 'Upgrade Your Agent Tier' : 'Renew Your Subscription'}</p>
+      <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Current plan: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[currentTier]?.label}</strong></p>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free').map(function([tierKey, tier]) {
+          return (<div key={tierKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+            <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
+            <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
+            <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
+            <button onClick={() => handleUpgrade(tierKey)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+              {upgrading === tierKey ? 'Processing...' : (currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`)}
+            </button>
+          </div>);
         })}
       </div>
     </div>
   );
 }
 // =========================================================
-// PROPERTY CARD
+// RENEWAL NOTIFICATION BANNER
 // =========================================================
-function PropertyCard({ house, onSelect, agentTier }) {
-  return (
-    <div onClick={onSelect} style={{ ...cardStyle, overflow: 'hidden', cursor: 'pointer', transition: 'transform 0.22s ease, box-shadow 0.22s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-6px)'; e.currentTarget.style.boxShadow = '0 20px 40px rgba(10,34,64,0.12)'; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)';    e.currentTarget.style.boxShadow = cardStyle.boxShadow; }}>
-      <div style={{ position: 'relative' }}>
-        <img src={house.image_url} alt={house.title} style={{ width: '100%', height: '220px', objectFit: 'cover', display: 'block' }}
-          onError={e => { e.target.onerror = null; e.target.src = "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80"; }} />
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '60px', background: 'linear-gradient(transparent, rgba(10,34,64,0.35))' }} />
-        <div style={{ position: 'absolute', top: '14px', left: '14px', backgroundColor: 'rgba(10,34,64,0.85)', backdropFilter: 'blur(4px)', color: '#fff', padding: '4px 11px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '700' }}>VERIFIED</div>
-        {agentTier && agentTier !== 'free' && <div style={{ position: 'absolute', top: '14px', right: '14px', backgroundColor: '#27ae60', color: '#fff', padding: '4px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '700' }}>[star] Verified Agent</div>}
-      </div>
-      <div style={{ padding: '22px 24px 24px' }}>
-        <h3 style={{ margin: '0 0 6px 0', color: '#0a2240', fontSize: '1.02rem', fontWeight: '700', lineHeight: '1.4' }}>{house.title}</h3>
-        <p style={{ color: '#94a3b8', margin: '0 0 18px 0', fontSize: '0.87rem' }}>{house.location}</p>
-        <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '1.12rem' }}>{fmtNGN(house.price)}</span>
-          <span style={{ fontSize: '0.76rem', color: '#0a2240', backgroundColor: '#eef2f7', padding: '5px 11px', borderRadius: '20px', fontWeight: '600' }}>View Breakdown -{'>'}  </span>
+function RenewalBanner({ user, agentTier, isMobile, onRenewed }) {
+  const [renewing, setRenewing] = useState(false);
+  if (!user || agentTier === 'free') return null;
+  var renewedAt = localStorage.getItem('gh_tier_renewed_' + user.email)
+    || localStorage.getItem('gh_tier_renewed_' + user.id);
+  if (!renewedAt) return null;
+  var daysElapsed = Math.floor((Date.now() - new Date(renewedAt).getTime()) / (1000 * 60 * 60 * 24));
+  var daysLeft = 30 - daysElapsed;
+  var isExpired  = daysLeft <= 0;
+  var isExpiring = daysLeft > 0 && daysLeft <= 7;
+  if (!isExpired && !isExpiring) return null;
+  var tier = AGENT_TIERS[agentTier];
+  var { activeCountry } = useCountry();
+  var isGhana = activeCountry && activeCountry.code === 'GH';
+  var priceDisplay = agentTier === 'premium'
+    ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500')
+    : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
+  function handleRenew() {
+    setRenewing(true);
+    openPaystack({
+      email: user.email,
+      amountNaira: tier.price,
+      ref: 'GH-RENEW-' + agentTier.toUpperCase() + '-' + Date.now(),
+      metadata: { agent_email: user.email, renewal_tier: agentTier },
+      onSuccess: function(response) {
+        var now = new Date().toISOString();
+        localStorage.setItem('gh_tier_renewed_' + user.email, now);
+        if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now);
+        fetch(API_URL + '/api/agent/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, tier: agentTier, reference: response.reference }) }).catch(console.error);
+        setRenewing(false);
+        onRenewed && onRenewed(now);
+      },
+      onClose: function() { setRenewing(false); },
+    });
+  }
+  if (isExpired) {
+    return (
+      <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: '14px', padding: isMobile ? '14px 16px' : '16px 20px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>⚠️</div>
+        <div style={{ flex: 1, minWidth: '180px' }}>
+          <p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#991b1b', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your {tier.label} subscription has expired</p>
+          <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif", lineHeight: '1.5' }}>Renew now to continue listing properties and accessing premium features.</p>
         </div>
-      </div>
-    </div>
-  );
-}
-// =========================================================
-// PRICING MODAL
-// =========================================================
-function PricingModal({ property, onClose, user, onUserChange }) {
-  const [addOns, setAddOns]               = useState({ cleaning: false, relocation: false });
-  const [paymentStatus, setPaymentStatus] = useState('idle');
-  const [inspectionMode, setInspectionMode] = useState('whatsapp');
-  const [authWall, setAuthWall]           = useState(null);
-  useEffect(() => {
-    setAddOns({ cleaning: false, relocation: false });
-    setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null);
-  }, [property?.id]);
-  if (!property) return null;
-  const rent       = Number(property.rent       || property.price || 0);
-  const agencyFee  = Number(property.agency_fee    || 0);
-  const agreeFee   = Number(property.agreement_fee || 0);
-  const cautionFee = Number(property.caution_fee   || 0);
-  const serviceChg = Number(property.service_charge|| 0);
-  const baseTotal  = property.total_payment ? Number(property.total_payment) : rent + agencyFee + agreeFee + cautionFee + serviceChg;
-  const addOnTotal = (addOns.cleaning ? ADDON_PRICES.cleaning : 0) + (addOns.relocation ? ADDON_PRICES.relocation : 0);
-  const escrowFee  = Math.min(Math.round((baseTotal + addOnTotal) * ESCROW_FEE_RATE), ESCROW_FEE_CAP);
-  const grandTotal = baseTotal + addOnTotal + escrowFee;
-  const loanUrl    = `${LOAN_PARTNER_URL}?utm_source=gethome&utm_medium=referral&utm_campaign=property-loan&utm_content=${property.id}`;
-  const feeRows    = [
-    { label: 'Annual Baseline Rent',          amount: fmtNGN(rent),              color: '#0a2240' },
-    { label: 'Agency Commission Fee',          amount: `+ ${fmtNGN(agencyFee)}`,  color: '#e67e22' },
-    { label: 'Legal / Agreement Document Fee', amount: `+ ${fmtNGN(agreeFee)}`,   color: '#e67e22' },
-    { label: 'Refundable Caution Deposit',     amount: `+ ${fmtNGN(cautionFee)}`, color: '#2980b9' },
-    { label: 'Service / Maintenance Charge',   amount: `+ ${fmtNGN(serviceChg)}`, color: '#e67e22' },
-  ];
-  const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
-  const handleAuthSuccess = (newUser) => {
-    onUserChange(newUser); setAuthWall(null);
-    if (authWall === 'escrow') setTimeout(() => triggerEscrow(newUser), 300);
-    if (authWall === 'proxy')  setTimeout(() => triggerProxyInspection(newUser), 300);
-    if (authWall === 'loan')   setTimeout(() => window.open(loanUrl, '_blank', 'noopener,noreferrer'), 300);
-  };
-  const handleWhatsAppInspection = () => {
-    const msg = encodeURIComponent(`Hello GetHome Agent, I'd like to book a physical inspection for:\n\n*${property.title}*\n${property.location}\nID: ID: ${property.id || 'N/A'}${user ? `\n${user.email}` : ''}\n\nPlease confirm available slots. Thank you!`);
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
-  };
-  const triggerProxyInspection = (u) => {
-    const usr = u || user;
-    openPaystack({ email: usr?.email || 'customer@gethome.ng', amountNaira: PROXY_INSPECTION_FEE, ref: `GH-INSP-${property.id}-${Date.now()}`,
-      metadata: { type: 'proxy_inspection', property_id: property.id, user_email: usr?.email },
-      onSuccess: (res) => { fetch(`${API_URL}/api/inspection-notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: res.reference, amount_naira: PROXY_INSPECTION_FEE, user_email: usr?.email, property_id: property.id, property_title: property.title, property_location: property.location }) }).catch(console.error); alert(`Proxy Inspection booked for ${property.title}! Video report within 48 hours.`); },
-      onClose: () => {} });
-  };
-  const handleProxyInspection = () => { if (!requireAuth('proxy')) return; triggerProxyInspection(user); };
-  const triggerEscrow = (u) => {
-    const usr = u || user; setPaymentStatus('loading');
-    openPaystack({ email: usr?.email || 'customer@gethome.ng', amountNaira: grandTotal, ref: `GH-ESC-${property.id}-${Date.now()}`,
-      metadata: { user_id: usr?.id, property_id: property.id, add_ons: addOns, escrow_fee: escrowFee },
-      onSuccess: (res) => { setPaymentStatus('success'); fetch(`${API_URL}/api/escrow-notify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference: res.reference, amount_naira: grandTotal, escrow_fee_naira: escrowFee, user_id: usr?.id, user_email: usr?.email, property_id: property.id, property_title: property.title, property_location: property.location, add_ons: addOns }) }).catch(console.error); },
-      onClose: () => { if (paymentStatus !== 'success') setPaymentStatus('idle'); } });
-  };
-  const handleEscrowPayment = () => { if (!requireAuth('escrow')) return; triggerEscrow(user); };
-  const handleLoanClick = (e) => { e.preventDefault(); if (!requireAuth('loan')) return; window.open(loanUrl, '_blank', 'noopener,noreferrer'); };
-  const isPaid = paymentStatus === 'success';
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: '24px', maxWidth: '620px', width: '100%', maxHeight: '93vh', overflowY: 'auto', padding: '40px', position: 'relative', boxShadow: '0 40px 80px rgba(10,34,64,0.2)' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '38px', height: '38px', fontSize: '16px', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700' }}>x</button>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: '900', marginBottom: '4px', paddingRight: '40px', color: '#0a2240' }}>{property.title}</h2>
-        <p style={{ color: '#94a3b8', marginBottom: '28px', fontSize: '0.9rem' }}>{property.location}</p>
-        {isPaid && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '12px' }}><span style={{ fontSize: '1.3rem' }}></span><div><p style={{ margin: 0, fontWeight: '700', color: '#166534' }}>Escrow Payment Confirmed!</p><p style={{ margin: '3px 0 0 0', fontSize: '0.84rem', color: '#15803d' }}>Our ops team will begin your verification checklist shortly.</p></div></div>}
-        <h3 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '14px', color: '#0a2240' }}>[shield] Verified Fee Breakdown</h3>
-        <div style={{ border: '1px solid #e8edf3', borderRadius: '14px', overflow: 'hidden', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 18px', background: '#f8fafc', fontWeight: '700', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px' }}><span>Charge Category</span><span>Amount</span></div>
-          {feeRows.map((row, i) => (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 18px', borderBottom: '1px solid #f1f5f9', fontSize: '0.91rem' }}><span style={{ color: '#475569' }}>{row.label}</span><span style={{ fontWeight: '600', color: row.color }}>{row.amount}</span></div>))}
-          {addOns.cleaning    && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 18px', borderBottom: '1px solid #f1f5f9', fontSize: '0.91rem', backgroundColor: '#f0fff4' }}><span style={{ color: '#16a34a' }}> Deep Cleaning</span><span style={{ fontWeight: '600', color: '#16a34a' }}>+ {fmtNGN(ADDON_PRICES.cleaning)}</span></div>}
-          {addOns.relocation  && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 18px', borderBottom: '1px solid #f1f5f9', fontSize: '0.91rem', backgroundColor: '#f0fff4' }}><span style={{ color: '#16a34a' }}> Relocation & Haulage</span><span style={{ fontWeight: '600', color: '#16a34a' }}>+ {fmtNGN(ADDON_PRICES.relocation)}</span></div>}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid #f1f5f9', fontSize: '0.85rem', backgroundColor: '#fafafa' }}><span style={{ color: '#94a3b8' }}>Escrow Processing Fee <span style={{ fontSize: '0.75rem' }}>(0.75%, max NGN5k)</span></span><span style={{ fontWeight: '600', color: '#94a3b8' }}>+ {fmtNGN(escrowFee)}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 18px', background: '#f0fff4', color: '#15803d', fontWeight: '900', fontSize: '1.1rem' }}><span>Total Upfront Payment</span><span>{fmtNGN(grandTotal)}</span></div>
-        </div>
-        <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: '20px 22px', marginBottom: '22px', border: '1px solid #e8edf3' }}>
-          <p style={{ margin: '0 0 16px 0', fontWeight: '700', fontSize: '0.88rem', color: '#0a2240' }}>[box] Optional Move-In Services <span style={{ fontWeight: '400', color: '#94a3b8' }}>(added to total)</span></p>
-          {[{ key: 'cleaning', icon: '[clean]', label: 'Professional Deep Cleaning', price: fmtNGN(ADDON_PRICES.cleaning), sub: 'Full post-construction scrub & sanitisation' }, { key: 'relocation', icon: '[box]', label: 'Relocation & Haulage', price: fmtNGN(ADDON_PRICES.relocation), sub: 'Full packing, truck & interstate transport' }].map(a => (
-            <label key={a.key} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', cursor: 'pointer', marginBottom: '12px' }}>
-              <input type="checkbox" checked={addOns[a.key]} onChange={e => setAddOns(p => ({ ...p, [a.key]: e.target.checked }))} style={{ width: '18px', height: '18px', accentColor: '#27ae60', cursor: 'pointer', marginTop: '3px', flexShrink: 0 }} />
-              <span style={{ fontSize: '0.9rem', color: '#334155' }}>{a.icon} <strong>{a.label}</strong> --- {a.price}<span style={{ color: '#94a3b8', fontSize: '0.79rem', display: 'block', marginTop: '2px' }}>{a.sub}</span></span>
-            </label>
-          ))}
-        </div>
-        <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: '20px 22px',arginBottom: '22px' }}>
-          <p style={{ margin: '0 0 14px 0', fontWeight: '700', fontSize: '0.88rem', color: '#0a2240' }}>[home] Inspection Option</p>
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
-            {[{ key: 'whatsapp', label: 'Free WhatsApp', sub: 'Coordinate with our agent' }, { key: 'proxy', label: ' Proxy --- NGN12,500', sub: 'We inspect & send video report' }].map(opt => (
-              <div key={opt.key} onClick={() => setInspectionMode(opt.key)} style={{ flex: 1, border: `2px solid ${inspectionMode === opt.key ? '#27ae60' : '#e2e8f0'}`, borderRadius: '10px', padding: '12px', cursor: 'pointer', backgroundColor: inspectionMode === opt.key ? '#f0fff4' : '#fff', transition: 'all 0.15s' }}>
-                <p style={{ margin: 0, fontWeight: '700', fontSize: '0.82rem', color: '#0a2240' }}>{opt.label}</p>
-                <p style={{ margin: '3px 0 0 0', fontSize: '0.74rem', color: '#94a3b8' }}>{opt.sub}</p>
-              </div>
-            ))}
-          </div>
-          {inspectionMode === 'whatsapp'
-            ? <button onClick={handleWhatsAppInspection} style={{ width: '100%', padding: '12px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.91rem', cursor: 'pointer' }}> Open WhatsApp & Book Inspection</button>
-            : <button onClick={handleProxyInspection}   style={{ width: '100%', padding: '12px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.91rem', cursor: 'pointer' }}>[video] Pay & Book Proxy Inspection (NGN12,500)</button>}
-        </div>
-        <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px 18px', marginBottom: '12px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}><div style={{ width: '30px', height: '30px', backgroundColor: '#27ae60', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '0.85rem', flexShrink: 0 }}>S</div><div><p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#166534', fontSize: '0.84rem' }}>Why pay through GetHome?</p><p style={{ margin: 0, color: '#15803d', fontSize: '0.78rem', lineHeight: '1.5' }}>Your funds are held in escrow -- never released to the agent until you physically verify and approve the property. Zero risk of fraud.</p></div></div>
-        <button onClick={handleEscrowPayment} disabled={isPaid || paymentStatus === 'loading'}
-          style={{ width: '100%', padding: '15px', marginBottom: '12px', border: 'none', borderRadius: '12px', backgroundColor: isPaid ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', fontSize: '1rem', cursor: (isPaid || paymentStatus === 'loading') ? 'not-allowed' : 'pointer', opacity: (isPaid || paymentStatus === 'loading') ? 0.75 : 1, boxShadow: isPaid ? 'none' : '0 4px 12px rgba(39,174,96,0.3)' }}>
-          {isPaid ? 'Escrow Payment Complete' : paymentStatus === 'loading' ? '[wait] Opening payment...' : `Secure with Escrow Deposit --- ${fmtNGN(grandTotal)}`}
+        <button onClick={handleRenew} disabled={renewing} style={{ padding: '10px 20px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.84rem', cursor: renewing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", opacity: renewing ? 0.7 : 1 }}>
+          {renewing ? 'Opening...' : 'Renew Now — ' + priceDisplay}
         </button>
-        <a href={loanUrl} onClick={handleLoanClick} target="_blank" rel="noopener noreferrer"
-          style={{ display: 'block', width: '100%', padding: '13px', backgroundColor: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '12px', textAlign: 'center', color: '#0a2240', fontWeight: '600', fontSize: '0.91rem', textDecoration: 'none', boxSizing: 'border-box', transition: 'all 0.2s' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#27ae60'; e.currentTarget.style.backgroundColor = '#f0fff4'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.backgroundColor = '#f8fafc'; }}>
-           Cannot afford upfront? <strong style={{ color: '#27ae60' }}>Apply for a Property Loan -{'>'}  </strong>
-        </a>
-        {authWall && <InlineAuthForm actionLabel={{ escrow: 'secure your escrow deposit', proxy: 'book a proxy inspection', loan: 'apply for a property loan' }[authWall]} onSuccess={handleAuthSuccess} />}
       </div>
+    );
+  }
+  return (
+    <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '14px', padding: isMobile ? '14px 16px' : '16px 20px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+      <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>🔔</div>
+      <div style={{ flex: 1, minWidth: '180px' }}>
+        <p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Subscription renews in {daysLeft} day{daysLeft === 1 ? '' : 's'}</p>
+        <p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif", lineHeight: '1.5' }}>Renew your {tier.label} plan early to avoid any interruption to your listings.</p>
+      </div>
+      <button onClick={handleRenew} disabled={renewing} style={{ padding: '10px 20px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.84rem', cursor: renewing ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", opacity: renewing ? 0.7 : 1 }}>
+        {renewing ? 'Opening...' : 'Renew — ' + priceDisplay}
+      </button>
     </div>
   );
 }
 // =========================================================
-// MAIN APP
+// VERIFICATION TIER CONSTANTS
 // =========================================================
-function App() {
-  var windowWidth = useWindowWidth();
-  var isMobile = windowWidth < 768;
-  usePaystackSDK();
-  // AdMob setup - dormant until ENABLE_ADS = true
+var VERIFICATION_TIERS = {
+  basic:    { label: 'Basic Agent',            badge: 'BRONZE',  color: '#cd7f32', bg: '#fdf6ec', priceNGN: 0,     requirements: ['Phone Verification', 'NIN Verification'] },
+  verified: { label: 'Verified Agent',         badge: 'SILVER',  color: '#94a3b8', bg: '#f8fafc', priceNGN: 8500,  requirements: ['CAC Certificate', 'Government ID', 'Reference Checks'] },
+  premium:  { label: 'Premium Verified Agent', badge: 'GOLD',    color: '#f59e0b', bg: '#fffbeb', priceNGN: 12500, requirements: ['Physical Office Verification', 'Track Record', 'Transaction History'] },
+};
+// =========================================================
+// AGENT KYC VERIFICATION FORM
+
+
+// =========================================================
+function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished, onListingUpdated, onListingDeleted }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var { activeCountry, fmtCurrency, fmtListingPrice, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
+  const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [pendingSubmit, setPendingSubmit]           = useState(false);
+  const [wantsFeatured, setWantsFeatured]           = useState(false);
+  const [featuredPaid, setFeaturedPaid]             = useState(false);
+  const [portalTab, setPortalTab]                   = useState('listings');
+  const [localIsApproved, setLocalIsApproved]       = useState(isApproved);
+  const [agentBankName, setAgentBankName]           = useState(user?.bank_name || '');
+  const [agentAccountNumber, setAgentAccountNumber] = useState(user?.account_number || '');
+  const [agentAccountName, setAgentAccountName]     = useState(user?.account_name || '');
+  const [bankSaveMsg, setBankSaveMsg]               = useState('');
+  const [bankErrorMsg, setBankErrorMsg]             = useState('');
+  const [bankSaving, setBankSaving]                 = useState(false);
+  const [soldListings, setSoldListings]             = useState([]);
+  const [soldListingsLoading, setSoldListingsLoading] = useState(false);
   useEffect(function() {
-    if (!ENABLE_ADS) return;
-    async function initAdMob() {
-      try {
-        // await AdMob.initialize({ requestTrackingAuthorization: true });
-        // showBannerAd();
-        console.log('AdMob initialized');
-      } catch (e) {
-        console.log('AdMob init failed or running in browser:', e);
+    if (!user?.id) return;
+    if (user?.role === 'admin' || user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase()) {
+      setLocalIsApproved(true); return;
+    }
+    supabase.from('agents').select('status').eq('id', user.id).single()
+      .then(function({ data }) { setLocalIsApproved(data?.status === 'approved'); })
+      .catch(function() {});
+  }, [user?.id]);
+  const DRAFT_KEY = 'gh_upload_draft_' + (user?.id || 'guest');
+  const EMPTY_FORM = { title: '', description: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
+  const [form, setForm]                           = useState(function() {
+    try {
+      var saved = sessionStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        var parsed = JSON.parse(saved);
+        return Object.assign({}, EMPTY_FORM, parsed, { imageFiles: [], imagePreviews: [], imageUrls: [], videoFile: null });
       }
-    }
-    initAdMob();
-  }, []);
-  async function showBannerAd() {
-    if (!ENABLE_ADS) return;
+    } catch(e) {}
+    return EMPTY_FORM;
+  });
+  const [editingProperty, setEditingProperty]     = useState(null);
+  const [submitting, setSubmitting]               = useState(false);
+  const [successMsg, setSuccessMsg]               = useState('');
+  const [errorMsg, setErrorMsg]                   = useState('');
+  const [deletingId, setDeletingId]               = useState(null);
+  const [agentTier, setAgentTier]                     = useState('free');
+  const [agentListingCount, setAgentListingCount]     = useState(0);
+  const [limitError, setLimitError]                   = useState('');
+  const [subscriptionStatus, setSubscriptionStatus]   = useState(null);
+  const [subscriptionExpiresAt, setSubscriptionExpiresAt] = useState(null);
+  const [subRenewing, setSubRenewing]                 = useState(false);
+  const clearMessages = () => { setSuccessMsg(''); setErrorMsg(''); setLimitError(''); };
+  const isVIPAgent = user?.email === 'nafya47@gmail.com';
+  const isEditMode = !!editingProperty;
+  const ls2 = { display: 'block', marginBottom: '5px', fontSize: '0.80rem', fontWeight: '600', color: '#374151' };
+  const is2 = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', outline: 'none', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box' };
+  useEffect(function() {
+    if (!user?.id) return;
+    fetch(`${API_URL}/api/agent/listing-count/${user.id}`).then(r => r.json()).then(d => setAgentListingCount(d.count || 0)).catch(console.error);
+    const savedTier = localStorage.getItem(`gh_tier_${user.id}`);
+    if (savedTier) setAgentTier(savedTier);
+  }, [user?.id]);
+  // Listen for subscription status changes in real time
+  useEffect(function() {
+    if (!user?.id) return;
+    // Initial fetch
+    supabase
+      .from('agents')
+      .select('subscription_status, subscription_expires_at')
+      .eq('id', user.id)
+      .single()
+      .then(function({ data }) {
+        if (data) {
+          setSubscriptionStatus(data.subscription_status || null);
+          setSubscriptionExpiresAt(data.subscription_expires_at || null);
+        }
+      })
+      .catch(function() {});
+    // Real-time listener — fires whenever admin or cron updates the agent row
+    var channel = supabase
+      .channel('agent-sub-' + user.id)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'agents',
+        filter: 'id=eq.' + user.id,
+      }, function(payload) {
+        if (!payload.new) return;
+        setSubscriptionStatus(payload.new.subscription_status || null);
+        setSubscriptionExpiresAt(payload.new.subscription_expires_at || null);
+        if (payload.new.tier) {
+          setAgentTier(payload.new.tier);
+          localStorage.setItem('gh_tier_' + user.id, payload.new.tier);
+        }
+      })
+      .subscribe();
+    return function() { supabase.removeChannel(channel); };
+  }, [user?.id]);
+  useEffect(function() {
+    if (editingProperty) return;
     try {
-      // await AdMob.showBanner({ adId: AD_CONFIG.BANNER_ANDROID, adSize: 'BANNER', position: 'BOTTOM_CENTER', isTesting: true });
-      console.log('Banner shown');
-    } catch (e) { console.log('Banner failed:', e); }
-  }
-  async function hideBannerAd() {
-    if (!ENABLE_ADS) return;
+      var toSave = Object.assign({}, form);
+      delete toSave.imageFiles;
+      delete toSave.imagePreviews;
+      delete toSave.imageUrls;
+      delete toSave.videoFile;
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify(toSave));
+    } catch(e) {}
+  }, [form, editingProperty]);
+  const enterEditMode = (property) => {
+    setEditingProperty(property);
+    setForm({ title: property.title || '', location: property.location || '', country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
+    setWantsFeatured(property.is_featured || false); setFeaturedPaid(property.is_featured || false);
+    window.scrollTo({ top: 0, behavior: 'smooth' }); clearMessages();
+  };
+  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); setWantsFeatured(false); setFeaturedPaid(false); setForm(function(f){ return Object.assign({}, f, { video_url: null, videoFile: null }); }); clearMessages(); };
+  const handleFeaturedPayment = async () => {
     try {
-      // await AdMob.hideBanner();
-      console.log('Banner hidden');
-    } catch (e) { console.log('Banner hide failed:', e); }
-  }
-  async function removeBannerAd() {
-    if (!ENABLE_ADS) return;
-    try {
-      // await AdMob.removeBanner();
-      console.log('Banner removed');
-    } catch (e) { console.log('Banner remove failed:', e); }
-  }
-  // End AdMob setup
-  // - Auth ---
-  const [user, setUser]               = useState(null);
-  const [authChecked, setAuthChecked] = useState(false);
-  const [showNavAuth, setShowNavAuth] = useState(false);
-  // - Data fetch states --
-  const [properties, setProperties]   = useState([]);
-  const [isLoading, setIsLoading]     = useState(true);   // true on first mount
-  const [isError, setIsError]         = useState(false);
-  const [message, setMessage]         = useState("Connecting...");
-  // - Navigation 
-  const [currentTab, setCurrentTab]             = useState('rent');
-  const [selectedProperty, setSelectedProperty] = useState(null);
-  const [activeQuote, setActiveQuote]           = useState(null);
-  // - Agent portal 
-  const [isRegistering, setIsRegistering]       = useState(false);
-  const [isLoggedIn, setIsLoggedIn]             = useState(false);
-  const [agentTier, setAgentTier]               = useState('free');
-  const [agentListingCount, setAgentListingCount] = useState(0);
-  const [agentForm, setAgentForm]               = useState({ name: '', email: '', agencyName: '', password: '' });
-  const [newProperty, setNewProperty]           = useState({ title: '', location: '', price: '', image_url: '', purpose: 'rent' });
-  // - Session restore -
-  useEffect(() => {
-    try {
-      const s = localStorage.getItem('gh_user');
-      if (s) setUser(JSON.parse(s));
-    } catch { localStorage.removeItem('gh_user'); localStorage.removeItem('gh_token'); }
-    setAuthChecked(true);
-  }, []);
-  // - Core data fetch --- wrapped in try/catch for error handling 
-  // useCallback so the ErrorScreen's Retry button can call it directly
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    setIsError(false);
-    try {
-      // Health check + properties in parallel
-      const [healthRes, propsRes] = await Promise.all([
-        fetch(`${API_URL}/`, { signal: AbortSignal.timeout(10000) }),
-        fetch(`${API_URL}/api/properties`, { signal: AbortSignal.timeout(10000) }),
-      ]);
-      const healthText  = await healthRes.text();
-      const propsData   = await propsRes.json();
-      setMessage(healthText);
-      setProperties(Array.isArray(propsData) ? propsData : []);
-      setIsError(false);
+      const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: currentConfig.featured,
+          customer_email: user.email,
+          customer_name: user.email,
+          purpose: 'Featured Listing - ' + (form.title || 'New Listing'),
+          property_id: null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
     } catch (err) {
-      console.error('Data fetch error:', err);
-      // Any network failure, timeout, or parse error -> show the error screen
-      setIsError(true);
-      setProperties([]);
-    } finally {
-      setIsLoading(false);
+      alert('Error: ' + err.message);
     }
-  }, []);
-  // Run fetch after session check completes
-  useEffect(() => {
-    if (!authChecked) return;
-    fetchData();
-  }, [authChecked, fetchData]);
-  // - Auth helpers 
-  const handleUserChange = (u) => { setUser(u); setShowNavAuth(false); };
-  const handleLogout = async () => {
-    try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }); } catch {}
-    localStorage.removeItem('gh_user'); localStorage.removeItem('gh_token'); setUser(null);
   };
-  // - Role check: is this user an agent or admin? 
-  // Backend /api/auth/me returns { role } from the Supabase users table.
-  // Roles that get the Agent Upload Portal: 'agent', 'admin'
-  const isAgent = user?.role === 'agent' || user?.role === 'admin';
-  // - Filtered listings --
-  const rentProperties = (properties || []).filter(p => !String(p.title || '').toLowerCase().includes('sale'));
-  const saleProperties = (properties || []).filter(p =>  String(p.title || '').toLowerCase().includes('sale'));
-  // - Agent portal handlers ---
-  const handleAgentAuth = (e) => {
+  const field = (key, lbl, type = 'text', placeholder = '') => (
+    <div><label style={ls2}>{lbl}</label>
+      <input type={type} placeholder={placeholder} required={key !== 'image_url'} style={is2} value={form[key] || ''}
+        onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); clearMessages(); }} /></div>
+  );
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isRegistering) { alert(`Registration submitted for "${agentForm.agencyName}".`); setIsRegistering(false); }
-    else setIsLoggedIn(true);
-  };
-  const submitProperty = () => {
-    fetch(`${API_URL}/api/properties`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: `${newProperty.title} (For ${newProperty.purpose.toUpperCase()})`, location: newProperty.location, price: newProperty.price, image_url: newProperty.image_url }),
-    }).then(r => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(saved => { setProperties(prev => [saved, ...prev]); setAgentListingCount(c => c + 1); setNewProperty({ title: '', location: '', price: '', image_url: '', purpose: 'rent' }); alert("[!] Property published!"); setCurrentTab(newProperty.purpose === 'sale' ? 'sale' : 'rent'); })
-      .catch(() => alert("[x] Error publishing property."));
-  };
-  const handleAddProperty = (e) => {
-    e.preventDefault();
+    if (!pendingSubmit) { setShowAgreementModal(true); return; }
+    setPendingSubmit(false);
     const limit = AGENT_TIERS[agentTier]?.listingLimit || 3;
-    if (agentListingCount >= limit && agentTier === 'free') {
-      if (!window.confirm(`Free tier limit (${limit}) reached.\nPay NGN1,000 to publish one extra listing?`)) return;
-      openPaystack({ email: agentForm.email || user?.email || 'agent@gethome.ng', amountNaira: 1000, ref: `GH-PPL-${Date.now()}`, metadata: { type: 'pay_per_listing' }, onSuccess: () => submitProperty(), onClose: () => {} });
+    // Admins and unlimited agents skip the cap check
+    const _isMasterAdmin = user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
+    if (!isEditMode && user?.role !== 'admin' && !user?.is_unlimited && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
+      setErrorMsg(`You have reached your ${AGENT_TIERS[agentTier]?.label} plan limit of ${limit} listings. Please upgrade.`);
       return;
     }
-    submitProperty();
+    setSubmitting(true); clearMessages();
+    let responseData = null;
+    try {
+      // Safe JSON helper — prevents "Unexpected token '<'" when server returns HTML
+      const safeJson = async function(r) {
+        const text = await r.text();
+        try { return JSON.parse(text); }
+        catch { throw new Error(`Server returned a non-JSON response (HTTP ${r.status}). Check that API_URL is correct: "${API_URL}"`); }
+      };
+
+      // Verify auth session before any storage upload — RLS requires a valid JWT
+      const { data: { session: uploadSession } } = await supabase.auth.getSession();
+      if (!uploadSession) throw new Error('Your session has expired. Please sign out and sign back in, then try again.');
+
+      // Upload images via API endpoint
+      let imageUrl = (form.image_url && !form.image_url.startsWith('blob:') && !form.image_url.startsWith('data:')) ? form.image_url : '';
+      let imageUrls = imageUrl ? [imageUrl] : [];
+      if (form.imageFiles && form.imageFiles.length > 0) {
+        var imgFd = new FormData();
+        form.imageFiles.forEach(function(f) { imgFd.append('images', f); });
+        var imgRes = await fetch(API_URL + '/api/upload-images', { method: 'POST', body: imgFd });
+        var imgJson = await safeJson(imgRes);
+        if (!imgRes.ok) throw new Error(imgJson.error || 'Image upload failed. Please check your connection and try again.');
+        imageUrls = imgJson.urls || [];
+        imageUrl = imageUrls[0] || '';
+      }
+
+      // Upload video via API endpoint (non-blocking — failure does not abort the listing)
+      var videoUrl = (form.video_url && !form.video_url.startsWith('blob:')) ? form.video_url : null;
+      if (form.videoFile) {
+        try {
+          var vidFd = new FormData();
+          vidFd.append('video', form.videoFile);
+          var vidRes = await fetch(API_URL + '/api/upload-video', { method: 'POST', body: vidFd });
+          var vidJson = await safeJson(vidRes);
+          if (vidRes.ok && vidJson.url) { videoUrl = vidJson.url; }
+          else { console.error('Video upload failed (non-blocking):', vidJson.error || 'Unknown'); }
+        } catch (ve) { console.error('Video upload error (non-blocking):', ve.message); }
+      }
+
+      const selectedCountry = COUNTRIES.find(function(c){ return c.code === (form.country || activeCountry.code); }) || activeCountry;
+      const selectedCountryName = selectedCountry.name || 'Nigeria';
+      // Resolve the authoritative user ID from the live Supabase session so it
+      // always matches auth.uid() server-side, even if the React state user
+      // object is slightly stale (e.g. after a token refresh).
+      const sessionUserId = uploadSession?.user?.id || user?.id;
+      if (!sessionUserId) throw new Error('Could not resolve your user ID. Please sign out and sign back in.');
+
+      var purposeLabel = '';
+      if (form.purpose === 'sale') purposeLabel = ' (For SALE)';
+      else if (form.purpose === 'shortlet') purposeLabel = ' (Shortlet)';
+      else purposeLabel = ' (For RENT)';
+      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: form.location.trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
+      if (isEditMode) {
+        const { data: updData, error: updateError } = await supabase
+          .from('properties')
+          .update(payload)
+          .eq('id', editingProperty.id)
+          .select();
+        if (updateError) throw updateError;
+        if (!updData || updData.length === 0) throw new Error('Update failed: listing not found or you do not have permission.');
+        setSuccessMsg('Listing updated!'); onListingUpdated && onListingUpdated(updData[0]); cancelEdit();
+      } else {
+        const token = localStorage.getItem('gh_token');
+        const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
+        console.log('[AgentUploadPortal] handleSubmit:', { payload, token, API_URL });
+        const res = await fetch(`${API_URL}/api/properties`, { method: 'POST', headers, body: JSON.stringify(payload) });
+        const data = await safeJson(res);
+        responseData = data;
+        if (res.status === 403 && (data.error || '').includes('Listing limit reached')) {
+          setLimitError(data.error);
+          return;
+        }
+        if (!res.ok) throw new Error(data.error || 'Publish failed');
+        setSuccessMsg('Listing published!'); setAgentListingCount(c => c + 1); onListingPublished && onListingPublished(Object.assign({}, payload, data));
+        setForm(EMPTY_FORM); setWantsFeatured(false); setFeaturedPaid(false);
+        try { sessionStorage.removeItem(DRAFT_KEY); } catch(e) {}
+      }
+    } catch (err) { setErrorMsg((err.message || 'Something went wrong. Please try again.') + (responseData ? ' | Server: ' + JSON.stringify(responseData) : '')); }
+    finally { setSubmitting(false); }
   };
-  // - Phase gates -
-  // 1. Session not yet checked
-  if (!authChecked) return <LoadingScreen />;
-  // 2. Fetching data for first time
-  if (isLoading) return <LoadingScreen />;
-  // 3. Network error --- show retry screen
-  if (isError) return <ErrorScreen onRetry={fetchData} />;
-  // Services tab data
-  const services = [
-    { key: 'cleaning', icon: '', title: 'Professional Deep Cleaning', desc: "Full post-construction scrub, pre-move-in sanitisation, bathroom & kitchen deep cleans. Tailored to your property's exact needs.", tags: ['Indoor', 'Outdoor', 'Post-construction', 'Pre-move-in'], form: <CleaningQuoteForm /> },
-    { key: 'moving',   icon: '', title: 'Relocation & Haulage',       desc: 'Full packing crew, moving truck & safe transport across town or state lines. We handle fragile items, heavy appliances, and everything in between.', tags: ['Local moves', 'Interstate', 'Packing service', 'Appliance handling'], form: <MovingQuoteForm /> },
-  ];
-  // - MAIN RENDER -
+  const handleDelete = async (property) => {
+    if (!window.confirm(`Delete "${property.title}"? This cannot be undone.`)) return;
+    setDeletingId(property.id);
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .delete()
+        .eq('id', property.id);
+      if (error) throw error;
+      setSuccessMsg(`"${property.title}" removed.`);
+      onListingDeleted && onListingDeleted(property.id);
+    } catch (err) { setErrorMsg(err.message); }
+    finally { setDeletingId(null); }
+  };
+  const handleToggleFeatured = async (propertyId, currentStatus) => {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({ is_featured: !currentStatus })
+        .eq('id', propertyId);
+      if (error) throw error;
+      // Optimistic update — Realtime will sync the change to all other connected users
+      const existing = (allProperties || []).find(function(p) { return p.id === propertyId; });
+      if (existing) {
+        onListingUpdated && onListingUpdated({ ...existing, is_featured: !currentStatus });
+      }
+    } catch (err) {
+      setErrorMsg('Featured toggle failed: ' + err.message);
+    }
+  };
+  const isAdmin = user?.role === 'admin' || user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
+  const myListings = (allProperties || []).filter(p =>
+    isAdmin ? true : p.created_by === user?.id || p.agent_id === user?.id
+  );
   return (
-    <div style={{ fontFamily: '"Segoe UI", Roboto, Arial, sans-serif', color: '#0a2240', backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
-      <style>{`@keyframes gh-spin { to { transform: rotate(360deg); } }`}</style>
-      <PricingModal property={selectedProperty} onClose={() => setSelectedProperty(null)} user={user} onUserChange={handleUserChange} />
-      {/* - NAV - */}
-      <nav style={{ backgroundColor: '#0a2240', padding: isMobile ? '0 4%' : '0 5%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(10,34,64,0.2)', position: 'sticky', top: 0, zIndex: 999, height: isMobile ? '60px' : '68px' }}>
-        <div style={{ fontSize: '1.75rem', fontWeight: '900', color: '#fff', letterSpacing: '-0.5px', cursor: 'pointer' }} onClick={() => setCurrentTab('rent')}>
-          Get<span style={{ color: '#27ae60' }}>Home</span>
-        </div>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setCurrentTab('rent')}     style={navButtonStyle(currentTab === 'rent')}>For Rent</button>
-          <button onClick={() => setCurrentTab('sale')}     style={navButtonStyle(currentTab === 'sale')}>For Sale</button>
-          <button onClick={() => setCurrentTab('services')} style={navButtonStyle(currentTab === 'services')}>Services</button>
-          {/* Agent Upload Portal tab --- only visible to agents/admins */}
-          {isAgent && (
-            <button onClick={() => setCurrentTab('upload')}
-              style={{ ...navButtonStyle(currentTab === 'upload'), color: currentTab === 'upload' ? '#27ae60' : '#fbbf24', borderBottom: currentTab === 'upload' ? '3px solid #27ae60' : '3px solid transparent' }}>
-              Upload Portal
-            </button>
-          )}
-          <button onClick={() => setCurrentTab('agent')}
-            style={{ marginLeft: '10px', background: 'linear-gradient(135deg, #27ae60, #00b894)', border: 'none', padding: '9px 18px', borderRadius: '8px', color: '#fff', fontSize: '0.88rem', cursor: 'pointer', fontWeight: '700' }}>
-            {isLoggedIn ? 'Dashboard' : 'Agent Portal'}
-          </button>
-          {user ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '14px', marginLeft: '6px' }}>
-              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.8rem', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</span>
-              <button onClick={handleLogout} style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600' }}>Logout</button>
+    <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      {showAgreementModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 2000, padding: 0 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', maxWidth: '680px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ backgroundColor: '#0a2240', borderRadius: '20px 20px 0 0', padding: '18px 24px', flexShrink: 0 }}>
+              <h2 style={{ color: '#fff', margin: '0 0 3px 0', fontSize: '1.1rem', fontWeight: '800' }}>Agent Agreement</h2>
+              <p style={{ color: 'rgba(255,255,255,0.5)', margin: 0, fontSize: '0.74rem' }}>Review before publishing</p>
             </div>
+            <div style={{ overflowY: 'auto', padding: '20px 24px', flex: 1 }}>
+              <p style={{ fontWeight: '700', color: '#0a2240', marginBottom: '12px', fontSize: '0.88rem' }}>By publishing you confirm that:</p>
+              {['All property details, pricing, and fees are accurate and truthful','You have the legal authority to list this property','You will provide property access within 48 hours of a paid inspection','Fraudulent or duplicate listings will result in immediate account termination','GetHome escrow funds will only be released after successful property verification','2.5% platform commission on the agreed agency fee will be deducted by GetHome upon successful property transaction through the platform.'].map(function(item, i) {
+                return (<div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'flex-start' }}><span style={{ color: '#27ae60', fontWeight: '700', flexShrink: 0 }}>v</span><span style={{ color: '#475569', fontSize: '0.84rem', lineHeight: '1.5' }}>{item}</span></div>);
+              })}
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', flexShrink: 0 }}>
+              <button onClick={function(){ setShowAgreementModal(false); }} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer' }}>Go Back and Edit</button>
+              <button onClick={function(){ setShowAgreementModal(false); setPendingSubmit(true); fetch(`${API_URL}/api/legal/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user?.id, user_email: user?.email, agreement_type: 'agent_agreement', version: '1.0' }) }).catch(console.error); setTimeout(function(){ var f = document.getElementById('agent-upload-form'); if (f) f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }, 150); }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+                I Accept - Publish Listing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.1rem' : '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Agent Portal</h2>
+          <p style={{ color: '#64748b', fontSize: '0.80rem', margin: 0 }}>Logged in as <strong style={{ color: '#27ae60' }}>{user?.email}</strong></p>
+        </div>
+        {user?.verification_level && (
+          <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '800', backgroundColor: VERIFICATION_TIERS[user.verification_level]?.bg || '#f1f5f9', color: VERIFICATION_TIERS[user.verification_level]?.color || '#64748b', border: '1.5px solid ' + (VERIFICATION_TIERS[user.verification_level]?.color || '#e2e8f0') }}>
+            {VERIFICATION_TIERS[user.verification_level]?.badge || 'BASIC'}
+          </span>
+        )}
+      </div>
+      {/* Portal sub-tabs */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
+        {[['listings', 'My Listings'], ['verify', 'Get Verified'], ['account', 'Account Details']].map(function([t, label]) {
+          var active = (portalTab || 'listings') === t;
+          return (
+            <button key={t} onClick={function(){
+              setPortalTab(t);
+              if (t === 'account' && soldListings.length === 0) {
+                setSoldListingsLoading(true);
+                const token = localStorage.getItem('gh_token');
+                fetch(API_URL + '/api/agent/sold-listings', { headers: { Authorization: 'Bearer ' + token } })
+                  .then(function(r){ return r.json(); })
+                  .then(function(d){ setSoldListings(Array.isArray(d) ? d : (d.listings || [])); })
+                  .catch(function(){})
+                  .finally(function(){ setSoldListingsLoading(false); });
+              }
+            }}
+              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.80rem', cursor: 'pointer' }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {portalTab === 'verify' ? (
+        <AgentVerificationForm user={user} onComplete={function(){ setPortalTab('listings'); }} />
+      ) : null}
+      {portalTab === 'account' && (
+        <>
+        <div style={{ ...cardStyle, padding: isMobile ? '18px 16px' : '32px' }}>
+          <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px' }}>
+            <p style={{ margin: 0, color: '#1e40af', fontSize: '0.83rem', lineHeight: '1.55' }}>Add your bank details so GetHome can process your payments when a property transaction is completed. GetHome deducts 2.5% platform commission from the agency fee.</p>
+          </div>
+          {bankSaveMsg && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.86rem' }}>{bankSaveMsg}</p></div>}
+          {bankErrorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.86rem' }}>{bankErrorMsg}</p></div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={ls2}>Bank Name</label>
+              <input style={is2} placeholder="e.g. First Bank, GTBank, Access Bank, UBA" value={agentBankName}
+                onChange={function(e){ setAgentBankName(e.target.value); setBankSaveMsg(''); setBankErrorMsg(''); }} />
+            </div>
+            <div>
+              <label style={ls2}>Account Number</label>
+              <input style={is2} placeholder="10-digit NUBAN account number" maxLength={10} inputMode="numeric"
+                value={agentAccountNumber}
+                onChange={function(e){ setAgentAccountNumber(e.target.value.replace(/\D/g, '')); setBankSaveMsg(''); setBankErrorMsg(''); }} />
+            </div>
+            <div>
+              <label style={ls2}>Account Name</label>
+              <input style={is2} placeholder="Name as it appears on your bank account" value={agentAccountName}
+                onChange={function(e){ setAgentAccountName(e.target.value); setBankSaveMsg(''); setBankErrorMsg(''); }} />
+            </div>
+            <button
+              disabled={bankSaving}
+              onClick={async function() {
+                setBankSaving(true); setBankSaveMsg(''); setBankErrorMsg('');
+                try {
+                  const token = localStorage.getItem('gh_token');
+                  const res = await fetch(API_URL + '/api/agent/bank-details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+                    body: JSON.stringify({ bank_name: agentBankName, account_number: agentAccountNumber, account_name: agentAccountName }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed to save bank details');
+                  setBankSaveMsg('Bank details saved. Admin will use these details to process your payments.');
+                } catch(e) { setBankErrorMsg(e.message); }
+                finally { setBankSaving(false); }
+              }}
+              style={{ padding: '13px', border: 'none', borderRadius: '12px', backgroundColor: bankSaving ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.92rem', cursor: bankSaving ? 'not-allowed' : 'pointer' }}>
+              {bankSaving ? 'Saving...' : 'Save Bank Details'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ ...cardStyle, padding: isMobile ? '18px 16px' : '28px', marginTop: '20px' }}>
+          <h3 style={{ color: '#0a2240', fontSize: '0.96rem', fontWeight: '800', margin: '0 0 16px 0' }}>My Sold Properties</h3>
+          {soldListingsLoading ? (
+            <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>Loading...</p>
+          ) : soldListings.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No sold properties yet.</p>
           ) : (
-            <div style={{ position: 'relative', borderLeft: '1px solid rgba(255,255,255,0.12)', paddingLeft: '14px', marginLeft: '6px' }}>
-              <button onClick={() => setShowNavAuth(s => !s)} style={{ backgroundColor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>Sign In</button>
-              {showNavAuth && (
-                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 14px)', right: 0, width: '340px', backgroundColor: '#fff', borderRadius: '18px', boxShadow: '0 24px 60px rgba(10,34,64,0.18)', border: '1px solid #e2e8f0', zIndex: 1001, padding: '24px' }}>
-                  <InlineAuthForm actionLabel="access your account" onSuccess={handleUserChange} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {soldListings.map(function(p) {
+                var commission = Math.round((parseFloat(p.agency_fee) || 0) * COMMISSION_RATE);
+                return (
+                  <div key={p.id} style={{ border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                      <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>{p.title}</p>
+                      {p.commission_paid
+                        ? <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', padding: '2px 10px', borderRadius: '20px', fontWeight: '800' }}>PAID</span>
+                        : <span style={{ fontSize: '0.68rem', backgroundColor: '#fff7ed', color: '#c2410c', border: '1.5px solid #fed7aa', padding: '2px 10px', borderRadius: '20px', fontWeight: '800' }}>PENDING</span>
+                      }
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '4px 16px' }}>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Sold date: <strong style={{ color: '#0a2240' }}>{p.sold_at ? new Date(p.sold_at).toLocaleDateString() : '—'}</strong></p>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Sold price: <strong style={{ color: '#166534' }}>{fmtNGN(p.sold_price || p.sale_price)}</strong></p>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b' }}>Commission (2.5%): <strong style={{ color: '#92400e' }}>{fmtNGN(commission)}</strong></p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        </>
+      )}
+      {(portalTab === 'listings' || !portalTab) && (
+      subscriptionStatus === 'expired' ? (
+        /* ── Expired subscription gate ── */
+        <div style={{ ...cardStyle, padding: isMobile ? '32px 20px' : '56px 48px', textAlign: 'center', maxWidth: '560px', margin: '0 auto' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', margin: '0 auto 24px' }}>🔒</div>
+          <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: '800', margin: '0 0 14px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px', lineHeight: '1.25' }}>
+            Your subscription has expired
+          </h2>
+          <p style={{ color: '#64748b', fontSize: isMobile ? '0.84rem' : '0.90rem', lineHeight: '1.75', margin: '0 0 10px 0', fontFamily: "'Inter', sans-serif" }}>
+            Please renew your monthly package to resume posting and managing your property listings.
+          </p>
+          {subscriptionExpiresAt && (
+            <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 28px 0', fontFamily: "'Inter', sans-serif" }}>
+              Expired on {new Date(subscriptionExpiresAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </p>
+          )}
+          {(function() {
+            var isGhana = activeCountry && activeCountry.code === 'GH';
+            var tier = AGENT_TIERS[agentTier] || AGENT_TIERS.premium;
+            var priceDisplay = agentTier === 'agency'
+              ? (isGhana ? 'GH₵ 304.05' : '₦ 35,000')
+              : (isGhana ? 'GH₵ 73.84'  : '₦ 8,500');
+            return (
+              <button
+                disabled={subRenewing}
+                onClick={function() {
+                  setSubRenewing(true);
+                  openPaystack({
+                    email: user.email,
+                    amountNaira: tier.price,
+                    ref: 'GH-RENEW-' + agentTier.toUpperCase() + '-' + Date.now(),
+                    metadata: { agent_email: user.email, renewal_tier: agentTier },
+                    onSuccess: function(response) {
+                      var now = new Date().toISOString();
+                      localStorage.setItem('gh_tier_renewed_' + user.email, now);
+                      if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now);
+                      fetch(API_URL + '/api/agent/upgrade', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: user.email, tier: agentTier, reference: response.reference }),
+                      }).catch(console.error);
+                      setSubscriptionStatus('active');
+                      setSubRenewing(false);
+                    },
+                    onClose: function() { setSubRenewing(false); },
+                  });
+                }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 32px', backgroundColor: subRenewing ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: subRenewing ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: subRenewing ? 'none' : '0 6px 20px rgba(34,197,94,0.30)', transition: 'all 0.18s', marginBottom: '16px' }}>
+                {subRenewing ? 'Opening Paystack…' : ('Renew ' + tier.label + ' — ' + priceDisplay + '/mo')}
+              </button>
+            );
+          })()}
+          <p style={{ color: '#94a3b8', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif", margin: 0 }}>
+            Payments are processed securely via Paystack
+          </p>
+        </div>
+      ) : (
+      <div>
+        <div style={{ ...cardStyle, padding: isMobile ? '18px 16px' : '32px', marginBottom: '24px' }}>
+        {isEditMode && (<div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><p style={{ margin: 0, fontWeight: '700', color: '#1e40af', fontSize: '0.88rem' }}>Editing: {editingProperty.title}</p><button onClick={cancelEdit} style={{ backgroundColor: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer' }}>Cancel Edit</button></div>)}
+        {successMsg && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.86rem' }}>{successMsg}</p></div>}
+        {errorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.86rem' }}>{errorMsg}</p></div>}
+        <form id="agent-upload-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {field('title', 'Property Listing Title', 'text', 'e.g., Luxury 4 Bedroom Duplex, Ikoyi')}
+          <div>
+            <label style={ls2}>Property Description</label>
+            <textarea placeholder="Describe the property - number of rooms, features, nearby landmarks, condition..."
+              style={{ ...is2, minHeight: '90px', resize: 'vertical', lineHeight: '1.5' }}
+              value={form.description || ''}
+              onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { description: e.target.value }); }); clearMessages(); }}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '14px' }}>
+            {field('location', 'Location / Area', 'text', 'e.g., Lekki Phase 1, Lagos')}
+            <div>
+              <label style={ls2}>Country</label>
+              <select style={is2} value={form.country || activeCountry.code} onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { country: e.target.value }); }); }}>
+                {COUNTRIES.map(function(c){ return <option key={c.code} value={c.code}>{c.flag} {c.name}</option>; })}
+              </select>
+            </div>
+            <div><label style={ls2}>Listing Purpose</label><select style={is2} value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}><option value="rent">For Rent</option><option value="sale">For Sale</option><option value="shortlet">Shortlet</option></select></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+            <div>
+              <label style={ls2}>Bedrooms</label>
+              <select style={is2} value={form.bedrooms || ''} onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { bedrooms: e.target.value }); }); }}>
+                <option value="">Select</option>
+                {['Self Contain','1','2','3','4','5','6+'].map(function(n){ return <option key={n} value={n}>{n}</option>; })}
+              </select>
+            </div>
+            <div>
+              <label style={ls2}>Bathrooms</label>
+              <select style={is2} value={form.bathrooms || ''} onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { bathrooms: e.target.value }); }); }}>
+                <option value="">Select</option>
+                {['1','2','3','4','5+'].map(function(n){ return <option key={n} value={n}>{n}</option>; })}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={ls2}>Display Price ({activeCountry.currency})</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input type="number" placeholder="e.g., 4.5"
+                style={{ ...is2, flex: 2 }}
+                value={form.priceRaw || ''}
+                onChange={function(e) {
+                  var raw = e.target.value;
+                  var mult = form.priceMult || 1000000;
+                  var computed = raw ? Math.round(parseFloat(raw) * mult) : '';
+                  setForm(function(f) { return Object.assign({}, f, { priceRaw: raw, price: computed }); });
+                  clearMessages();
+                }}
+              />
+              <select style={{ ...is2, flex: 1, minWidth: '110px' }}
+                value={form.priceMult || 1000000}
+                onChange={function(e) {
+                  var mult = Number(e.target.value);
+                  var computed = form.priceRaw ? Math.round(parseFloat(form.priceRaw) * mult) : '';
+                  setForm(function(f) { return Object.assign({}, f, { priceMult: mult, price: computed }); });
+                }}>
+                <option value={1000}>Thousand</option>
+                <option value={1000000}>Million</option>
+                <option value={1000000000}>Billion</option>
+              </select>
+            </div>
+            {form.price ? (
+              <p style={{ margin: '5px 0 0 0', fontSize: '0.76rem', color: '#27ae60', fontWeight: '600' }}>
+                = {fmtCurrency(form.price)}
+              </p>
+            ) : null}
+          </div>
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>Fee Breakdown <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.76rem' }}>(shown to customers)</span></p>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+              {[
+                { key: 'rent', label: `Annual Rent (${activeCountry.currencySymbol})` },
+                { key: 'agency_fee', label: `Agency / Legal Fee (${activeCountry.currencySymbol})` },
+                { key: 'caution_fee', label: `Caution / Security Deposit (${activeCountry.currencySymbol})` },
+                { key: 'agreement_fee', label: `Agreement / Documentation Fee (${activeCountry.currencySymbol})` },
+                { key: 'service_charge', label: `Service Charge (${activeCountry.currencySymbol})` },
+              ].map(function(f) {
+                var rawKey = f.key + 'Raw';
+                var multKey = f.key + 'Mult';
+                return (
+                  <div key={f.key}>
+                    <label style={ls2}>{f.label}</label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input type="number" placeholder="e.g., 1.2"
+                        style={{ ...is2, flex: 2 }}
+                        value={form[rawKey] || ''}
+                        onChange={function(e) {
+                          var raw = e.target.value;
+                          var mult = form[multKey] || 1000000;
+                          var computed = raw ? Math.round(parseFloat(raw) * mult) : '';
+                          setForm(function(prev) {
+                            var update = {};
+                            update[rawKey] = raw;
+                            update[f.key] = computed;
+                            return Object.assign({}, prev, update);
+                          });
+                          clearMessages();
+                        }}
+                      />
+                      <select style={{ ...is2, flex: 1, minWidth: '90px', fontSize: '0.76rem' }}
+                        value={form[multKey] || 1000000}
+                        onChange={function(e) {
+                          var mult = Number(e.target.value);
+                          var raw = form[rawKey];
+                          var computed = raw ? Math.round(parseFloat(raw) * mult) : '';
+                          setForm(function(prev) {
+                            var update = {};
+                            update[multKey] = mult;
+                            update[f.key] = computed;
+                            return Object.assign({}, prev, update);
+                          });
+                        }}>
+                        <option value={1000}>K</option>
+                        <option value={1000000}>M</option>
+                        <option value={1000000000}>B</option>
+                      </select>
+                    </div>
+                    {form[f.key] ? (
+                      <p style={{ margin: '3px 0 0 0', fontSize: '0.70rem', color: '#27ae60', fontWeight: '600' }}>
+                        = NGN {Number(form[f.key]).toLocaleString('en-NG')}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            {form.purpose === 'shortlet' && (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                {[
+                  { key: 'costPerNight', label: `Cost Per Night (${activeCountry.currencySymbol})` },
+                ].map(function(f) {
+                  var rawKey  = f.key + 'Raw';
+                  var multKey = f.key + 'Mult';
+                  return (
+                    <div key={f.key}>
+                      <label style={ls2}>{f.label}</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <input type="number" placeholder="e.g., 25"
+                          style={{ ...is2, flex: 2 }}
+                          value={form[rawKey] || ''}
+                          onChange={function(e) {
+                            var raw = e.target.value;
+                            var mult = form[multKey] || 1000000;
+                            var computed = raw ? Math.round(parseFloat(raw) * mult) : '';
+                            setForm(function(prev) {
+                              var update = {};
+                              update[rawKey] = raw;
+                              update[f.key] = computed;
+                              return Object.assign({}, prev, update);
+                            });
+                            clearMessages();
+                          }} />
+                        <select style={{ ...is2, flex: 1, minWidth: '90px', fontSize: '0.76rem' }}
+                          value={form[multKey] || 1000000}
+                          onChange={function(e) {
+                            var mult = Number(e.target.value);
+                            var raw = form[rawKey];
+                            var computed = raw ? Math.round(parseFloat(raw) * mult) : '';
+                            setForm(function(prev) {
+                              var update = {};
+                              update[multKey] = mult;
+                              update[f.key] = computed;
+                              return Object.assign({}, prev, update);
+                            });
+                          }}>
+                          <option value={1000}>K</option>
+                          <option value={1000000}>M</option>
+                          <option value={1000000000}>B</option>
+                        </select>
+                      </div>
+                      {form[f.key] ? (
+                        <p style={{ margin: '3px 0 0 0', fontSize: '0.70rem', color: '#27ae60', fontWeight: '600' }}>
+                          = NGN {Number(form[f.key]).toLocaleString('en-NG')}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {form.agency_fee ? (
+              <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginTop: '8px' }}>
+                <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#166534', fontSize: '0.82rem' }}>GetHome Commission (2.5% of agency fee)</p>
+                <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#166534', fontSize: '0.9rem' }}>{fmtNGN(Math.round(parseFloat(form.agency_fee) * COMMISSION_RATE))}</p>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.74rem' }}>This amount is payable to GetHome upon successful transaction</p>
+              </div>
+            ) : null}
+          </div>
+          <div>
+            <label style={ls2}>Property Photo and Video</label>
+            {/* Hidden inputs */}
+            <input id="property-image-input" type="file" accept="image/*" multiple style={{ display: 'none' }}
+              onChange={function(e) {
+                var newFiles = Array.from(e.target.files);
+                e.target.value = '';
+                if (!newFiles.length) return;
+                var oversized = newFiles.find(function(f) { return f.size > 5 * 1024 * 1024; });
+                if (oversized) { alert('Each image must be under 5MB'); return; }
+                setForm(function(f) {
+                  var existing = f.imageFiles || [];
+                  var slots = isVIPAgent ? Infinity : (10 - existing.length);
+                  if (!isVIPAgent && slots <= 0) { alert('Maximum 10 photos allowed'); return f; }
+                  var toAdd = isVIPAgent ? newFiles : newFiles.slice(0, slots);
+                  var newPreviews = new Array(toAdd.length);
+                  var loaded = 0;
+                  toAdd.forEach(function(file, idx) {
+                    var reader = new FileReader();
+                    reader.onload = function(ev) {
+                      newPreviews[idx] = ev.target.result;
+                      loaded++;
+                      if (loaded === toAdd.length) {
+                        setForm(function(prev) {
+                          var allFiles    = (prev.imageFiles    || []).concat(toAdd);
+                          var allPreviews = (prev.imagePreviews || []).concat(newPreviews);
+                          var allUrls     = (prev.imageUrls     || []).concat(newPreviews);
+                          return Object.assign({}, prev, { imageFiles: allFiles, imagePreviews: allPreviews, imageUrls: allUrls, image_url: allPreviews[0] || prev.image_url });
+                        });
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  });
+                  return f;
+                });
+              }} />
+            <input
+              id="property-video-input"
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={function(e) {
+                var file = e.target.files[0]; if (!file) return;
+                if (file.size > 50 * 1024 * 1024) { alert('Video must be under 50MB'); return; }
+                var url = URL.createObjectURL(file);
+                setForm(function(f) { return Object.assign({}, f, { video_url: url, videoFile: file }); });
+              }}
+            />
+            {/* Photo upload */}
+            <div style={{ border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '16px', backgroundColor: '#f8fafc', marginBottom: '10px' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '0.78rem', fontWeight: '700', color: '#374151' }}>Photo <span style={{ color: '#94a3b8', fontWeight: '400' }}>(required)</span></p>
+              {form.imagePreviews && form.imagePreviews.length > 0 ? (
+                <div>
+                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '6px', msOverflowStyle: 'none', scrollbarWidth: 'none' }}>
+                    {form.imagePreviews.map(function(src, i) {
+                      return (
+                        <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                          <img src={src} alt={'Photo ' + (i + 1)} style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', border: '2px solid #e2e8f0', display: 'block' }} />
+                          <button type="button" onClick={function() {
+                            setForm(function(f) {
+                              var newFiles    = (f.imageFiles    || []).filter(function(_, fi){ return fi !== i; });
+                              var newPreviews = (f.imagePreviews || []).filter(function(_, fi){ return fi !== i; });
+                              var newUrls     = (f.imageUrls     || []).filter(function(_, fi){ return fi !== i; });
+                              return Object.assign({}, f, { imageFiles: newFiles, imagePreviews: newPreviews, imageUrls: newUrls, image_url: newPreviews[0] || '' });
+                            });
+                          }} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', border: 'none', fontSize: '0.65rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '900', lineHeight: 1, padding: 0 }}>&#x2715;</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.74rem', color: '#27ae60', fontWeight: '600', textAlign: 'center' }}>{form.imagePreviews.length} of 10 photos added — tap below to add more</p>
+                </div>
+              ) : form.image_url ? (
+                <div>
+                  <img src={form.image_url} alt="Current photo" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '8px' }} />
+                  <p style={{ margin: '6px 0 0 0', fontSize: '0.74rem', color: '#94a3b8', fontWeight: '600', textAlign: 'center' }}>Existing photo — tap below to replace</p>
+                </div>
+              ) : (
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: '#94a3b8', textAlign: 'center' }}>No photo added yet</p>
+              )}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '10px' }}>
+                <button type="button" onClick={function(e){
+                  e.stopPropagation();
+                  var inp = document.getElementById('property-image-input');
+                  if (inp) { inp.removeAttribute('capture'); inp.click(); }
+                }} style={{ padding: '8px 14px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1.5px solid #bfdbfe', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                  Gallery / Files
+                </button>
+                <button type="button" onClick={function(e){
+                  e.stopPropagation();
+                  var inp = document.getElementById('property-image-input');
+                  if (inp) { inp.setAttribute('capture', 'environment'); inp.click(); }
+                }} style={{ padding: '8px 14px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                  Camera
+                </button>
+              </div>
+              <p style={{ margin: '6px 0 0 0', fontSize: '0.68rem', color: '#94a3b8', textAlign: 'center' }}>Max 5MB - JPG, PNG, WEBP</p>
+            </div>
+            {/* Video upload */}
+            <div style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: '16px', backgroundColor: '#f8fafc' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '0.78rem', fontWeight: '700', color: '#374151' }}>Short Video <span style={{ color: '#94a3b8', fontWeight: '400' }}>(optional - max 50MB)</span></p>
+              {form.video_url ? (
+                <div>
+                  <video src={form.video_url} controls preload="none" style={{ width: '100%', borderRadius: '8px', maxHeight: '180px', backgroundColor: '#000' }} />
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '8px' }}>
+                    <button type="button" onClick={function(){
+                      var inp = document.getElementById('property-video-input');
+                      if (inp) { inp.removeAttribute('capture'); inp.click(); }
+                    }} style={{ padding: '6px 12px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1.5px solid #bfdbfe', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                      Change Video
+                    </button>
+                    <button type="button" onClick={function(){
+                      setForm(function(f) { return Object.assign({}, f, { video_url: null, videoFile: null }); });
+                    }} style={{ padding: '6px 12px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '0.76rem', color: '#94a3b8', textAlign: 'center' }}>Add a short video tour of the property</p>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button type="button" onClick={function(e){
+                      e.stopPropagation();
+                      var inp = document.getElementById('property-video-input');
+                      if (inp) { inp.removeAttribute('capture'); inp.click(); }
+                    }} style={{ padding: '8px 14px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1.5px solid #bfdbfe', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                      Gallery / Files
+                    </button>
+                    <button type="button" onClick={function(e){
+                      e.stopPropagation();
+                      var inp = document.getElementById('property-video-input');
+                      if (inp) { inp.setAttribute('capture', 'environment'); inp.click(); }
+                    }} style={{ padding: '8px 14px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                      Record Video
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
+          {!isEditMode && (
+            <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: '12px', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div><p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem' }}>Feature This Listing</p><p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem' }}>Get FEATURED badge for {currentConfig.symbol}{currentConfig.featured.toLocaleString()}</p></div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="checkbox" checked={wantsFeatured} onChange={e => setWantsFeatured(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }} /><span style={{ fontSize: '0.80rem', fontWeight: '600', color: '#92400e' }}>Yes</span></label>
+              </div>
+              {wantsFeatured && !featuredPaid && <button type="button" onClick={handleFeaturedPayment} style={{ width: '100%', padding: '11px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay {currentConfig.symbol}{currentConfig.featured.toLocaleString()} to Feature</button>}
+              {featuredPaid && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '8px', padding: '8px 12px' }}><span style={{ color: '#27ae60', fontWeight: '700' }}>v</span><span style={{ color: '#166534', fontSize: '0.82rem', fontWeight: '600' }}>Featured payment confirmed!</span></div>}
+            </div>
+          )}
+          {!isEditMode && (
+            <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '10px', padding: '14px 16px' }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#166534', fontSize: '0.82rem' }}>By clicking "Agree and Publish" you confirm:</p>
+              {['All property details and fees are accurate','You have legal authority to list this property','You allow paid inspections within 48 hours','Fraudulent listings result in account termination'].map(function(item, i) {
+                return <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '5px' }}><span style={{ color: '#27ae60', fontWeight: '700', fontSize: '0.78rem' }}>v</span><span style={{ color: '#15803d', fontSize: '0.78rem' }}>{item}</span></div>;
+              })}
+            </div>
+          )}
+          {/* Lock submit if agent not approved */}
+          {localIsApproved === false ? (
+            <div style={{ padding: '16px', backgroundColor: '#f1f5f9', borderRadius: '12px', textAlign: 'center', border: '2px dashed #cbd5e1' }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#64748b', fontSize: '0.88rem' }}>Listing uploads locked pending approval</p>
+              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.78rem' }}>Your form is ready. As soon as admin approves your account you can publish immediately.</p>
+            </div>
+          ) : (
+            <>
+              {!isEditMode && (
+                (user?.verification_level || 'basic') === 'premium'
+                  ? <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #f59e0b', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px' }}><p style={{ margin: 0, color: '#92400e', fontWeight: '600', fontSize: '0.84rem' }}>Gold tier: Unlimited listings.</p></div>
+                  : (user?.verification_level || 'basic') === 'verified'
+                  ? <div style={{ backgroundColor: '#f1f5f9', border: '1.5px solid #94a3b8', borderRadius: '10px', padding: '12px 16px', marginBottom: '12px' }}><p style={{ margin: 0, color: '#475569', fontWeight: '600', fontSize: '0.84rem' }}>Silver tier: You can post up to 15 listings.</p></div>
+                  : null
+              )}
+              {limitError && (
+                <div style={{ backgroundColor: '#fef2f2', border: '2px solid #ef4444', borderRadius: '10px', padding: '14px 16px', marginBottom: '12px' }}>
+                  <p style={{ margin: 0, color: '#b91c1c', fontWeight: '700', fontSize: '0.88rem' }}>{limitError}</p>
+                </div>
+              )}
+              <button type="submit" disabled={submitting || (wantsFeatured && !featuredPaid && !isEditMode)} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting || (wantsFeatured && !featuredPaid && !isEditMode) ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting || (wantsFeatured && !featuredPaid && !isEditMode) ? 'not-allowed' : 'pointer' }}>
+                {submitting ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Agree and Publish Listing')}
+              </button>
+            </>
           )}
         </div>
-      </nav>
-      {showNavAuth && <div onClick={() => setShowNavAuth(false)} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />}
-      {/* Info bar */}
-      {/* - PRIMARY CONTAINER - */}
-      <div style={{ padding: '48px 5% 64px', maxWidth: '1400px', margin: '0 auto' }}>
-        {/* TAB: RENT */}
-        {currentTab === 'rent' && (
-          <section>
-            <div style={{ marginBottom: '36px' }}>
-              <h2 style={{ color: '#0a2240', fontSize: '1.9rem', fontWeight: '800', margin: '0 0 8px 0' }}>Properties For Rent</h2>
-              <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>{rentProperties.length} verified listing{rentProperties.length !== 1 ? 's' : ''} available . Click any card to view full fee breakdown</p>
-            </div>
-            {rentProperties.length === 0
-              ? <div style={{ ...cardStyle, textAlign: 'center', padding: '80px 40px' }}><div style={{ fontSize: '3rem', marginBottom: '16px' }}>[home]</div><p style={{ color: '#94a3b8', fontSize: '1.05rem', margin: 0 }}>No rental listings found. Check back shortly!</p></div>
-              : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                  {rentProperties.map(h => <PropertyCard key={h.id} house={h} onSelect={() => setSelectedProperty(h)} />)}
-                </div>}
-          </section>
+        {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
+        </form>
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} onUpgradeSuccess={function(t){ setAgentTier(t); localStorage.setItem('gh_tier_' + user.id, t); var now = new Date().toISOString(); localStorage.setItem('gh_tier_renewed_' + user.email, now); if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now); }} />
+      </div>
+      {myListings.length > 0 ? (
+        <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
+          <h3 style={{ color: '#0a2240', fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: '800', margin: '0 0 16px 0' }}>Active Listings <span style={{ color: '#27ae60' }}>({myListings.length})</span></h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {myListings.map(function(p) {
+              const isBeingDeleted = deletingId === p.id;
+              const isBeingEdited = editingProperty?.id === p.id;
+              return (<div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: isBeingEdited ? '#eff6ff' : '#f8fafc', borderRadius: '10px', border: `1.5px solid ${isBeingEdited ? '#93c5fd' : '#e2e8f0'}`, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                {p.image_url && <img src={p.image_url} alt={p.title} loading="lazy" style={{ width: '52px', height: '52px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display = 'none'; }} />}
+                {p.video_url && !p.image_url && <div style={{ width: '52px', height: '52px', borderRadius: '8px', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#fff', fontSize: '0.70rem', fontWeight: '700' }}>VIDEO</div>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</p>
+                  <p style={{ margin: '2px 0 4px 0', color: '#94a3b8', fontSize: '0.74rem' }}>{p.location} &bull; {fmtListingPrice(p.price)}</p>
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {p.is_featured && <span style={{ fontSize: '0.62rem', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 7px', borderRadius: '10px', fontWeight: '700' }}>FEATURED</span>}
+                    {p.video_url && <span style={{ fontSize: '0.62rem', backgroundColor: '#eff6ff', color: '#1e40af', padding: '2px 7px', borderRadius: '6px', fontWeight: '700' }}>VIDEO</span>}
+                    {isBeingEdited && <span style={{ fontSize: '0.62rem', backgroundColor: '#dbeafe', color: '#1e40af', padding: '2px 7px', borderRadius: '6px', fontWeight: '700' }}>EDITING NOW</span>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={function(){ enterEditMode(p); }}
+                    disabled={isBeingDeleted}
+                    style={{ padding: '7px 14px', backgroundColor: isBeingEdited ? '#dbeafe' : '#eff6ff', color: '#1e40af', border: `1px solid ${isBeingEdited ? '#93c5fd' : '#bfdbfe'}`, borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isBeingDeleted ? 'not-allowed' : 'pointer' }}
+                  >
+                    {isBeingEdited ? 'Editing...' : 'Edit'}
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={function(){ handleToggleFeatured(p.id, p.is_featured); }}
+                      disabled={isBeingDeleted}
+                      style={{ padding: '7px 14px', backgroundColor: p.is_featured ? '#f59e0b' : '#f8fafc', color: p.is_featured ? '#fff' : '#64748b', border: `1px solid ${p.is_featured ? '#f59e0b' : '#e2e8f0'}`, borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isBeingDeleted ? 'not-allowed' : 'pointer' }}
+                    >
+                      {p.is_featured ? 'Unfeature' : 'Feature'}
+                    </button>
+                  )}
+                  <button
+                    onClick={function(){ handleDelete(p); }}
+                    disabled={isBeingDeleted}
+                    style={{ padding: '7px 14px', backgroundColor: isBeingDeleted ? '#f1f5f9' : '#fef2f2', color: isBeingDeleted ? '#94a3b8' : '#ef4444', border: `1px solid ${isBeingDeleted ? '#e2e8f0' : '#fecaca'}`, borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isBeingDeleted ? 'not-allowed' : 'pointer' }}
+                  >
+                    {isBeingDeleted ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>);
+            })}
+          </div>
+        </div>
+      ) : (
+          <div style={{ ...cardStyle, padding: '28px 20px', textAlign: 'center' }}>
+            <p style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.90rem', margin: '0 0 6px 0' }}>No listings found for your account</p>
+            <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0 }}>Use the form above to publish your first property listing. It will appear here once published.</p>
+          </div>
         )}
-        {/* TAB: SALE */}
-        {currentTab === 'sale' && (
-          <section>
-            <div style={{ marginBottom: '36px' }}>
-              <h2 style={{ color: '#0a2240', fontSize: '1.9rem', fontWeight: '800', margin: '0 0 8px 0' }}>Properties For Sale</h2>
-              <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>{saleProperties.length} verified listing{saleProperties.length !== 1 ? 's' : ''} available . Click any card to view full fee breakdown</p>
-            </div>
-            {saleProperties.length === 0
-              ? <div style={{ ...cardStyle, textAlign: 'center', padding: '80px 40px' }}><div style={{ fontSize: '3rem', marginBottom: '16px' }}>[house]</div><p style={{ color: '#94a3b8', fontSize: '1.05rem', margin: 0 }}>No sale listings registered. Check back shortly!</p></div>
-              : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '28px' }}>
-                  {saleProperties.map(h => <PropertyCard key={h.id} house={h} onSelect={() => setSelectedProperty(h)} />)}
-                </div>}
-          </section>
-        )}
-        {/* TAB: SERVICES */}
-        {currentTab === 'services' && (
-          <section>
-            <div style={{ marginBottom: '40px' }}>
-              <h2 style={{ color: '#0a2240', fontSize: '1.9rem', fontWeight: '800', margin: '0 0 8px 0' }}>Premium Facility Services</h2>
-              <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>Every job is custom-scoped. Tell us what you need and we will send you an accurate quote via WhatsApp instantly.</p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              {services.map(svc => {
-                const isOpen = activeQuote === svc.key;
+      </div>
+      )
+      )}
+    </div>
+    );
+}
+// =========================================================
+// ADMIN DASHBOARD
+// =========================================================
+const TARGET_ADMIN_EMAIL = 'medibrhm07@gmail.com';
+function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const [verifiedPendingAgents, setVerifiedPendingAgents] = useState([]);
+  const [pendingAgents, setPendingAgents]         = useState([]);
+  const [approvedAgents, setApprovedAgents]       = useState([]);
+  const [disapprovedAgents, setDisapprovedAgents] = useState([]);
+  const [loading, setLoading]                     = useState(false);
+  const [checkingAuth, setCheckingAuth]           = useState(true);
+  const [sessionUser, setSessionUser]             = useState(null);
+  const [actionMsg, setActionMsg]                 = useState('');
+  const [adminTab, setAdminTab]                   = useState('agents');
+  const [transactions, setTransactions]           = useState([]);
+  const [txLoading, setTxLoading]                 = useState(false);
+  const [allListings, setAllListings]             = useState([]);
+  const [allListingsLoading, setAllListingsLoading] = useState(false);
+  const [soldForms, setSoldForms]                 = useState({});
+  const [markingPaid, setMarkingPaid]             = useState({});
+  const [adminListings, setAdminListings]               = useState([]);
+  const [adminListingsLoading, setAdminListingsLoading] = useState(false);
+  const [listingSoldForms, setListingSoldForms]         = useState({});
+  const [listingSoldMsg, setListingSoldMsg]             = useState('');
+  const [listings, setListings]                         = useState([]);
+  const [listingsLoading, setListingsLoading]           = useState(false);
+  const [listingSearch, setListingSearch]               = useState('');
+  const [soldPrice, setSoldPrice]                       = useState({});
+  const [markingSoldId, setMarkingSoldId]               = useState(null);
+  const [listingMsg, setListingMsg]                     = useState('');
+  const [listingFilter, setListingFilter]               = useState('all');
+  const [deposits, setDeposits]                         = useState([]);
+  const [depositsLoading, setDepositsLoading]           = useState(false);
+  const [depositMsg, setDepositMsg]                     = useState('');
+  const [confirmingDepositId, setConfirmingDepositId]   = useState(null);
+  const [depositViewingProperty, setDepositViewingProperty] = useState(null);
+  const [expandedListing, setExpandedListing]           = useState(null);
+  const [expandedAgent, setExpandedAgent]               = useState(null);
+  // SA/GHA Management state
+  const [allSAs, setAllSAs]                             = useState([]);
+  const [sasLoading, setSasLoading]                     = useState(false);
+  const [showCreateSAForm, setShowCreateSAForm]         = useState(false);
+  const [saForm, setSaForm]                             = useState({ fullName: '', email: '', phone: '', location: '', password: '', confirmPassword: '' });
+  const [saFormLoading, setSaFormLoading]               = useState(false);
+  const [saMsg, setSaMsg]                               = useState('');
+  const [expandedSAGhas, setExpandedSAGhas]             = useState(null);
+  const [saSalaryMonths, setSaSalaryMonths]             = useState({});
+  const [markingSASalary, setMarkingSASalary]           = useState({});
+  const [allGHAsAdmin, setAllGHAsAdmin]                 = useState([]);
+  const [ghasAdminLoading, setGhasAdminLoading]         = useState(false);
+  const [showCreateGHAForm, setShowCreateGHAForm]       = useState(false);
+  const [ghaAdminForm, setGhaAdminForm]                 = useState({ fullName: '', email: '', phone: '', location: '', saCode: '', password: '', confirmPassword: '' });
+  const [ghaAdminFormLoading, setGhaAdminFormLoading]   = useState(false);
+  const [ghaAdminMsg, setGhaAdminMsg]                   = useState('');
+  const [markingGHAPaid, setMarkingGHAPaid]             = useState({});
+  const [ghaSalaryMonths, setGhaSalaryMonths]           = useState({});
+  const [expandedGHAAgents, setExpandedGHAAgents]       = useState(null);
+  // Staff Earnings state
+  const [earningsMonth, setEarningsMonth]               = useState(new Date().toISOString().slice(0, 7));
+  const [staffEarnings, setStaffEarnings]               = useState(null);
+  const [earningsLoading, setEarningsLoading]           = useState(false);
+  const [markingStaffPaid, setMarkingStaffPaid]         = useState({});
+  const [agentFilter, setAgentFilter]                   = useState('all');
+  const [agentSearch, setAgentSearch]                   = useState('');
+  const [earningsSubTab, setEarningsSubTab]             = useState('gha');
+  const [inspectionSearch, setInspectionSearch]         = useState('');
+  const [inspectionFilter, setInspectionFilter]         = useState('all');
+  const [reassigningInspId, setReassigningInspId]       = useState(null);
+  const [reassignGhaId, setReassignGhaId]               = useState('');
+  const [reassignMsg, setReassignMsg]                   = useState('');
+  const [confirmingInspId, setConfirmingInspId]         = useState(null);
+  const [adminInspections, setAdminInspections]         = useState([]);
+  const [adminInspLoading, setAdminInspLoading]         = useState(false);
+  const [deactivateSaTarget, setDeactivateSaTarget]     = useState(null);
+  const [deactivateGhaTarget, setDeactivateGhaTarget]   = useState(null);
+  const [deactivatingSa, setDeactivatingSa]             = useState(false);
+  const [deactivatingGha, setDeactivatingGha]           = useState(false);
+  const [closeSaTarget, setCloseSaTarget]               = useState(null);
+  const [closeSaTargetId, setCloseSaTargetId]           = useState('');
+  const [closingSa, setClosingSa]                       = useState(false);
+  const [closeGhaTarget, setCloseGhaTarget]             = useState(null);
+  const [closeGhaTargetId, setCloseGhaTargetId]         = useState('');
+  const [closingGha, setClosingGha]                     = useState(false);
+  const [saSearch, setSaSearch]                         = useState('');
+  const [ghaSearch, setGhaSearch]                       = useState('');
+  const [reassignGhaSaTarget, setReassignGhaSaTarget]   = useState(null);
+  const [reassignGhaSaNewCode, setReassignGhaSaNewCode] = useState('');
+  const [reassigningGhaSa, setReassigningGhaSa]         = useState(false);
+  const [adminAssignGha, setAdminAssignGha]             = useState({});
+  const [adminAssignGhaMsg, setAdminAssignGhaMsg]       = useState({});
+  const [adminAssigningGha, setAdminAssigningGha]       = useState({});
+  // Inspection Performance panel state
+  const [ghaInspPerfStats, setGhaInspPerfStats]         = useState([]);
+  const [ghaInspPerfMonth, setGhaInspPerfMonth]         = useState(new Date().toISOString().slice(0, 7));
+  const [ghaInspPerfLoading, setGhaInspPerfLoading]     = useState(false);
+
+  const fetchListings = async function() {
+    setListingsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/all-listings', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      setListings(Array.isArray(data) ? data : []);
+    } catch(e) {
+      console.error('Fetch listings error:', e.message);
+    } finally { setListingsLoading(false); }
+  };
+
+  const fetchDeposits = async function() {
+    setDepositsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/deposits', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      setDeposits(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Deposits fetch error:', e.message); }
+    finally { setDepositsLoading(false); }
+  };
+
+  const fetchGhaInspPerfStats = async function(month) {
+    var m = month || ghaInspPerfMonth;
+    setGhaInspPerfLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/gha-inspection-stats?month=' + m, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (res.ok) {
+        var data = await res.json();
+        setGhaInspPerfStats(Array.isArray(data) ? data : []);
+      }
+    } catch(e) { console.error('GHA inspection stats error:', e.message); }
+    finally { setGhaInspPerfLoading(false); }
+  };
+
+  const handleConfirmDeposit = async function(deposit) {
+    setConfirmingDepositId(deposit.id);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var response = await fetch(API_URL + '/api/admin/confirm-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ property_id: deposit.id }),
+      });
+      var data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to confirm deposit');
+      setDeposits(function(prev) {
+        return prev.map(function(d) { return d.id === deposit.id ? Object.assign({}, d, { deposit_confirmed: true }) : d; });
+      });
+      setDepositMsg('Deposit confirmed successfully');
+      setTimeout(function() { setDepositMsg(''); }, 5000);
+    } catch(err) {
+      console.error('Confirm deposit error:', err);
+      setDepositMsg('Error: ' + err.message);
+      setTimeout(function() { setDepositMsg(''); }, 5000);
+    } finally {
+      setConfirmingDepositId(null);
+    }
+  };
+
+  const fetchVerifiedPendingAgents = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/verified-pending-agents', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      setVerifiedPendingAgents(Array.isArray(data) ? data : []);
+      var all = Array.isArray(data) ? data : [];
+      setPendingAgents(all.filter(function(a) { return a.status === 'pending'; }));
+      setApprovedAgents(all.filter(function(a) { return a.status === 'approved'; }));
+      setDisapprovedAgents(all.filter(function(a) { return a.status === 'disapproved'; }));
+    } catch(e) { console.error('Fetch verified pending agents error:', e.message); }
+  };
+
+  const fetchAgents = fetchVerifiedPendingAgents;
+
+  const fetchTransactions = async function() {
+    setTxLoading(true);
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(API_URL + '/api/admin/transactions', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load transactions');
+      setTransactions(Array.isArray(data) ? data : (data.transactions || []));
+    } catch(e) { setActionMsg('Error: ' + e.message); }
+    finally { setTxLoading(false); }
+  };
+
+  const fetchAllListings = async function() {
+    setAllListingsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setAllListings(data || []);
+    } catch(e) { setActionMsg('Error loading listings: ' + e.message); }
+    finally { setAllListingsLoading(false); }
+  };
+
+  const fetchAdminListings = async function() {
+    setAdminListingsLoading(true);
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(API_URL + '/api/admin/all-listings', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load listings');
+      setAdminListings(Array.isArray(data) ? data : (data.listings || []));
+    } catch(e) { setActionMsg('Error loading listings: ' + e.message); }
+    finally { setAdminListingsLoading(false); }
+  };
+
+  const fetchAllSAs = async function() {
+    setSasLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/all-sas', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setAllSAs(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setSasLoading(false); }
+  };
+
+  const fetchAllGHAsAdmin = async function() {
+    setGhasAdminLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/all-ghas', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setAllGHAsAdmin(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setGhasAdminLoading(false); }
+  };
+
+  const fetchAdminInspections = async function() {
+    setAdminInspLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/inspections', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setAdminInspections(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setAdminInspLoading(false); }
+  };
+
+  const fetchStaffEarnings = async function(month) {
+    setEarningsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var m = month || earningsMonth;
+      var response = await fetch(API_URL + '/api/admin/earnings?month=' + m, {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      if (!response.ok) throw new Error('Failed to fetch earnings');
+      var data = await response.json();
+      setStaffEarnings(data);
+    } catch(err) {
+      console.error('Earnings fetch error:', err.message);
+      setStaffEarnings(null);
+    } finally { setEarningsLoading(false); }
+  };
+
+  const handleListingMarkSold = async function(propertyId) {
+    const sf = listingSoldForms[propertyId] || {};
+    const soldPrice = parseFloat(sf.soldPrice);
+    if (!sf.soldPrice || isNaN(soldPrice) || soldPrice <= 0) { alert('Please enter a valid sale price.'); return; }
+    setListingSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: true }) }); });
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(API_URL + '/api/admin/mark-sold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ property_id: propertyId, sold_price: soldPrice })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark as sold');
+      setListingSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: false, done: true }) }); });
+      setAdminListings(function(prev) { return prev.map(function(p) { return p.id === propertyId ? Object.assign({}, p, { is_sold: true }) : p; }); });
+      setListingSoldMsg('Property marked as sold. Agent has been notified by email.');
+      setTimeout(function() { setListingSoldMsg(''); }, 6000);
+    } catch(e) {
+      setListingSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: false }) }); });
+      setActionMsg('Error: ' + e.message);
+      setTimeout(function(){ setActionMsg(''); }, 4000);
+    }
+  };
+
+  const handleMarkSold = async function(propertyId) {
+    const sf = soldForms[propertyId] || {};
+    const salePrice = parseFloat(sf.salePrice);
+    if (!sf.salePrice || isNaN(salePrice) || salePrice <= 0) { alert('Please enter a valid sale price.'); return; }
+    setSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: true }) }); });
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(API_URL + '/api/admin/mark-sold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ property_id: propertyId, sale_price: salePrice })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark as sold');
+      const listing = allListings.find(function(p) { return p.id === propertyId; });
+      const commissionOwed = listing ? Math.round((parseFloat(listing.agency_fee) || 0) * COMMISSION_RATE) : 0;
+      setSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: false, done: true, commissionOwed }) }); });
+      setAllListings(function(prev) { return prev.map(function(p) { return p.id === propertyId ? Object.assign({}, p, { is_sold: true, sale_price: salePrice }) : p; }); });
+    } catch(e) {
+      setSoldForms(function(prev) { return Object.assign({}, prev, { [propertyId]: Object.assign({}, prev[propertyId], { loading: false }) }); });
+      setActionMsg('Error: ' + e.message);
+      setTimeout(function(){ setActionMsg(''); }, 4000);
+    }
+  };
+
+  const handleMarkCommissionPaid = async function(txId, propertyId) {
+    setMarkingPaid(function(prev) { return Object.assign({}, prev, { [txId]: true }); });
+    try {
+      const token = localStorage.getItem('gh_token');
+      const res = await fetch(API_URL + '/api/admin/mark-commission-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ property_id: propertyId, transaction_id: txId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark commission paid');
+      setTransactions(function(prev) { return prev.map(function(tx) { return tx.id === txId ? Object.assign({}, tx, { commission_paid: true }) : tx; }); });
+    } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 4000); }
+    finally { setMarkingPaid(function(prev) { return Object.assign({}, prev, { [txId]: false }); }); }
+  };
+
+  // ── Auth monitoring ───────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) { setSessionUser(session.user); if (session.access_token) localStorage.setItem('gh_token', session.access_token); }
+      setCheckingAuth(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) { setSessionUser(session.user); if (session.access_token) localStorage.setItem('gh_token', session.access_token); }
+      else { setSessionUser(null); }
+      setCheckingAuth(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Data fetching — only after admin identity is confirmed ────────────
+  useEffect(() => {
+    if (checkingAuth || !sessionUser) return;
+    if (sessionUser.email !== TARGET_ADMIN_EMAIL && user?.role !== 'admin') return;
+    fetchVerifiedPendingAgents();
+    fetchListings();
+    fetchTransactions();
+    fetchDeposits();
+    fetchAllSAs();
+    fetchAllGHAsAdmin();
+    const interval = setInterval(fetchVerifiedPendingAgents, 15000);
+    return () => clearInterval(interval);
+  }, [checkingAuth, sessionUser]);
+
+  useEffect(function() {
+    if (adminTab === 'inspections') {
+      fetchAdminInspections();
+      var inspPollInterval = setInterval(fetchAdminInspections, 30000);
+      return function() { clearInterval(inspPollInterval); };
+    }
+  }, [adminTab]);
+
+  useEffect(function() {
+    if (adminTab === 'gha-management') fetchGhaInspPerfStats(ghaInspPerfMonth);
+  }, [ghaInspPerfMonth]);
+
+  const handleApprove = async function(agentId, agentEmail) {
+    try {
+      const { error } = await supabase.from('agents').update({ status: 'approved' }).eq('id', agentId);
+      if (error) throw error;
+      setPendingAgents(function(prev) {
+        const agent = prev.find(function(a) { return a.id === agentId; });
+        if (agent) setApprovedAgents(function(ap) { return [Object.assign({}, agent, { status: 'approved' }), ...ap]; });
+        return prev.filter(function(a) { return a.id !== agentId; });
+      });
+      setActionMsg('Approved! ' + agentEmail + ' can now log in and publish listings.');
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 5000);
+  };
+
+  const handleReject = async function(agentId, agentEmail) {
+    if (!window.confirm('Reject and remove agent: ' + agentEmail + '?')) return;
+    try {
+      const { error } = await supabase.from('agents').update({ status: 'rejected' }).eq('id', agentId);
+      if (error) throw error;
+      setPendingAgents(function(prev) { return prev.filter(function(a) { return a.id !== agentId; }); });
+      setActionMsg('Rejected: ' + agentEmail);
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 4000);
+  };
+
+  const handleDisapprove = async function(agentId, agentEmail) {
+    if (!window.confirm('Disapprove agent ' + agentEmail + '? They will lose the ability to upload listings.')) return;
+    try {
+      const { error } = await supabase.from('agents').update({ status: 'disapproved' }).eq('id', agentId);
+      if (error) throw error;
+      setApprovedAgents(function(prev) {
+        const agent = prev.find(function(a) { return a.id === agentId; });
+        if (agent) setDisapprovedAgents(function(d) { return [Object.assign({}, agent, { status: 'disapproved' }), ...d]; });
+        return prev.filter(function(a) { return a.id !== agentId; });
+      });
+      setActionMsg('Disapproved: ' + agentEmail + ' can no longer upload listings.');
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 5000);
+  };
+
+  const handleReapprove = async function(agentId, agentEmail) {
+    try {
+      const { error } = await supabase.from('agents').update({ status: 'approved' }).eq('id', agentId);
+      if (error) throw error;
+      setDisapprovedAgents(function(prev) {
+        const agent = prev.find(function(a) { return a.id === agentId; });
+        if (agent) setApprovedAgents(function(ap) { return [Object.assign({}, agent, { status: 'approved' }), ...ap]; });
+        return prev.filter(function(a) { return a.id !== agentId; });
+      });
+      setActionMsg('Reapproved: ' + agentEmail + ' can now upload listings again.');
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 5000);
+  };
+
+  if (checkingAuth) return <div style={{ padding: '50px', textAlign: 'center', fontSize: '18px' }}>Syncing GetHome Security Session...</div>;
+  if (!sessionUser) return <div style={{ padding: '50px', textAlign: 'center', color: 'red' }}>Unauthorized Access: Please log in first.</div>;
+  if (sessionUser.email !== TARGET_ADMIN_EMAIL && user?.role !== 'admin') return (
+    <div style={{ padding: '50px', textAlign: 'center', color: 'red' }}>
+      Unauthorized Access: {sessionUser.email} is not registered as an administrator.
+    </div>
+  );
+
+  function renderAgentDetailsPanel(d) {
+    var missing = function(val) {
+      return val
+        ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{val}</span>
+        : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>;
+    };
+    var maskedNin = d.nin
+      ? (d.nin.length > 4 ? 'XXXXXXX' + d.nin.slice(-4) : d.nin)
+      : null;
+    var waPhone = (d.phone || '').replace(/[^0-9]/g, '');
+    if (waPhone.startsWith('0')) waPhone = '234' + waPhone.substring(1);
+    var hasPhone = waPhone.length > 0;
+    var hasEmail = !!(d.email || '').trim();
+    var regDate = d.created_at
+      ? new Date(d.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
+    var tier = d.verification || 'basic';
+    var tierCfg = tier === 'premium'
+      ? { label: 'GOLD',   bg: '#fffbeb', color: '#b45309', border: '#fde68a' }
+      : tier === 'verified'
+      ? { label: 'SILVER', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' }
+      : { label: 'BRONZE', bg: '#fdf6ec', color: '#92400e', border: '#fcd9a0' };
+    var approved = (d.status || 'pending') === 'approved';
+    return (
+      <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '14px 16px', marginTop: '10px', border: '1px solid #e2e8f0', borderTop: '2px solid #27ae60' }}>
+        <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.84rem', margin: '0 0 10px 0' }}>Agent Registration Details</p>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 24px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Full Name</span>
+            {missing(d.name)}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Email</span>
+            {d.email
+              ? <a href={'mailto:' + d.email} style={{ color: '#27ae60', fontSize: '0.82rem', fontWeight: '600', textDecoration: 'none' }}>{d.email}</a>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Phone</span>
+            {d.phone
+              ? <a href={'https://wa.me/' + waPhone + '?text=' + encodeURIComponent(d.waMessage || 'Hello')} target="_blank" rel="noopener noreferrer" style={{ color: '#27ae60', fontSize: '0.82rem', fontWeight: '600', textDecoration: 'none' }}>{d.phone}</a>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Office Address</span>
+            {missing(d.address)}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Experience</span>
+            {missing(d.experience)}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Specialty</span>
+            {missing(d.specialty)}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>NIN Number</span>
+            {maskedNin
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500', letterSpacing: '0.05em' }}>{maskedNin}</span>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>CAC Number</span>
+            {d.cac
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{d.cac}</span>
+              : <span style={{ color: '#94a3b8', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Bank Name</span>
+            {d.bank_name
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{d.bank_name}</span>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not added yet</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Account No.</span>
+            {d.account_number
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{d.account_number}</span>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not added yet</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Account Name</span>
+            {d.account_name
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{d.account_name}</span>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not added yet</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Verification</span>
+            <span style={{ fontSize: '0.68rem', backgroundColor: tierCfg.bg, color: tierCfg.color, border: '1px solid ' + tierCfg.border, padding: '2px 8px', borderRadius: '20px', fontWeight: '800' }}>{tierCfg.label}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Account Status</span>
+            <span style={{ fontSize: '0.68rem', backgroundColor: approved ? '#f0fff4' : '#fffbeb', color: approved ? '#166534' : '#92400e', border: '1px solid ' + (approved ? '#86efac' : '#fde68a'), padding: '2px 8px', borderRadius: '20px', fontWeight: '800' }}>{approved ? 'APPROVED' : 'PENDING'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600', minWidth: '120px' }}>Registered</span>
+            {regDate
+              ? <span style={{ color: '#0a2240', fontSize: '0.82rem', fontWeight: '500' }}>{regDate}</span>
+              : <span style={{ color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</span>}
+          </div>
+        </div>
+        <div style={{ marginTop: '4px', marginBottom: '10px' }}>
+          <span style={{ color: '#94a3b8', fontSize: '0.74rem', fontWeight: '600' }}>About</span>
+          {d.about
+            ? <p style={{ margin: '4px 0 0 0', lineHeight: '1.6', color: '#475569', fontSize: '0.80rem', fontStyle: 'italic' }}>{d.about}</p>
+            : <p style={{ margin: '4px 0 0 0', color: '#f59e0b', fontSize: '0.76rem', fontWeight: '500' }}>Not provided</p>}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+          {hasPhone
+            ? <a href={'https://wa.me/' + waPhone + '?text=' + encodeURIComponent(d.waMessage || 'Hello')} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
+                WhatsApp
+              </a>
+            : <span style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#e2e8f0', color: '#94a3b8', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'not-allowed' }}>No phone number</span>
+          }
+          {hasEmail
+            ? <a href={'mailto:' + d.email + '?subject=' + encodeURIComponent(d.emailSubject || '') + '&body=' + encodeURIComponent(d.emailBody || '')}
+                style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#1e40af', color: '#fff', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
+                Email Agent
+              </a>
+            : <span style={{ display: 'inline-block', padding: '8px 16px', backgroundColor: '#e2e8f0', color: '#94a3b8', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'not-allowed' }}>No email</span>
+          }
+        </div>
+      </div>
+    );
+  }
+
+  var navItems = [
+    ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
+    ['deposits','Deposits'],['inspections','Inspections'],
+    ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
+  ];
+  function switchTab(t) {
+    setAdminTab(t);
+    if (t === 'transactions') fetchTransactions();
+    if (t === 'listings') fetchListings();
+    if (t === 'deposits') fetchDeposits();
+    if (t === 'sa-management' && allSAs.length === 0) fetchAllSAs();
+    if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); }
+    if (t === 'earnings') fetchStaffEarnings(earningsMonth);
+    if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
+  }
+
+  return (
+    <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+      <style>{`* { box-sizing: border-box; } ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; }`}</style>
+
+      {/* ── Stats bar ── */}
+      <div style={{ backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', padding: isMobile ? '12px 14px' : '14px 28px', overflowX: 'auto' }}>
+        <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, gap: '10px', flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total Agents',     value: pendingAgents.length + approvedAgents.length + disapprovedAgents.length, iconBg: '#0a2240', icon: 'A' },
+            { label: 'Pending Agents',   value: pendingAgents.length,                          iconBg: '#f59e0b', icon: 'P' },
+            { label: 'Active Listings',  value: listings.filter(function(p){ return !p.is_sold; }).length, iconBg: '#22c55e', icon: 'L' },
+            { label: 'Properties Sold',  value: transactions.length,                           iconBg: '#ef4444', icon: 'S' },
+            { label: 'Pending Deposits', value: deposits.filter(function(d){ return !d.deposit_confirmed; }).length, iconBg: '#8b5cf6', icon: 'D' },
+            { label: 'Total GHAs',       value: allGHAsAdmin.length,                           iconBg: '#0d9488', icon: 'G' },
+            { label: 'Total SAs',        value: allSAs.length,                                 iconBg: '#1e40af', icon: 'SA' },
+          ].map(function(s) {
+            return (
+              <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f8fafc', borderRadius: '12px', padding: '10px 14px', flex: '1 1 140px', border: '1px solid #e8edf5' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: s.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '900', fontSize: '0.70rem', flexShrink: 0 }}>{s.icon}</div>
+                <div>
+                  <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '800', color: '#0a2240', lineHeight: 1.1 }}>{s.value}</p>
+                  <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>{s.label}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Action banner */}
+      {actionMsg && (
+        <div style={{ backgroundColor: actionMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', borderBottom: '1px solid ' + (actionMsg.startsWith('Error') ? '#fecaca' : '#86efac'), padding: '10px 28px' }}>
+          <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: actionMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{actionMsg}</p>
+        </div>
+      )}
+
+      {/* Mobile tab bar */}
+      {isMobile && (
+        <div style={{ overflowX: 'auto', padding: '10px 14px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', gap: '7px', minWidth: 'max-content' }}>
+            {navItems.map(function([t, label]) {
+              var active = adminTab === t;
+              var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
+              return (
+                <button key={t} onClick={function(){ switchTab(t); }}
+                  style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {label}{badge > 0 ? ' (' + badge + ')' : ''}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main layout */}
+      <div style={{ display: 'flex', maxWidth: '1280px', margin: '0 auto', padding: isMobile ? '16px' : '24px 28px', gap: '20px', alignItems: 'flex-start' }}>
+
+        {/* ── Sidebar (desktop) ── */}
+        {!isMobile && (
+          <div style={{ width: '220px', flexShrink: 0, position: 'sticky', top: '20px' }}>
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '10px 8px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1px solid #e8edf5' }}>
+              {navItems.map(function([t, label]) {
+                var active = adminTab === t;
+                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
                 return (
-                  <div key={svc.key} style={{ ...cardStyle, overflow: 'hidden' }}>
-                    <div onClick={() => setActiveQuote(isOpen ? null : svc.key)} style={{ display: 'flex', alignItems: 'flex-start', gap: '20px', padding: '28px 32px', cursor: 'pointer' }}>
-                      <div style={{ width: '60px', height: '60px', borderRadius: '16px', backgroundColor: '#f0fff4', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', flexShrink: 0 }}>{svc.icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <h3 style={{ color: '#0a2240', fontSize: '1.15rem', fontWeight: '800', margin: '0 0 6px 0' }}>{svc.title}</h3>
-                        <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.9rem', lineHeight: '1.6' }}>{svc.desc}</p>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          {svc.tags.map(tag => <span key={tag} style={{ fontSize: '0.75rem', color: '#27ae60', backgroundColor: '#f0fff4', border: '1px solid #86efac', padding: '3px 10px', borderRadius: '20px', fontWeight: '600' }}>{tag}</span>)}
-                        </div>
-                      </div>
-                      <div style={{ flexShrink: 0 }}>
-                        <button style={{ padding: '10px 22px', borderRadius: '10px', border: 'none', backgroundColor: isOpen ? '#f0fff4' : '#0a2240', color: isOpen ? '#27ae60' : '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          {isOpen ? 'x Close Form' : 'Get a Free Custom Quote'}
+                  <div key={t} onClick={function(){ switchTab(t); }}
+                    style={{ padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: '600', color: active ? '#fff' : '#64748b', backgroundColor: active ? '#0a2240' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                    <span>{label}</span>
+                    {badge > 0 && (
+                      <span style={{ fontSize: '0.66rem', fontWeight: '800', backgroundColor: active ? 'rgba(255,255,255,0.25)' : '#f59e0b', color: '#fff', padding: '2px 7px', borderRadius: '12px', minWidth: '20px', textAlign: 'center' }}>{badge}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Main content ── */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: isMobile ? '16px' : '20px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1px solid #e8edf5' }}>
+
+            {/* ── AGENTS ── */}
+            {adminTab === 'agents' && (function() {
+              var allAgents = [
+                ...pendingAgents.map(function(a){ return Object.assign({}, a, { _status: 'pending' }); }),
+                ...approvedAgents.map(function(a){ return Object.assign({}, a, { _status: 'approved' }); }),
+                ...disapprovedAgents.map(function(a){ return Object.assign({}, a, { _status: 'disapproved' }); }),
+              ];
+              var q = agentSearch.trim().toLowerCase();
+              var filtered = allAgents.filter(function(a) {
+                if (agentFilter === 'pending') return a._status === 'pending';
+                if (agentFilter === 'approved') return a._status === 'approved';
+                if (agentFilter === 'disapproved') return a._status === 'disapproved';
+                if (q) return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
+                return true;
+              });
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agents</h2>
+                    <button onClick={fetchAgents} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                  </div>
+                  <input type="text" value={agentSearch} onChange={function(e){ setAgentSearch(e.target.value); }}
+                    placeholder="Search by name, email or phone…"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '12px', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    {[['all','All',allAgents.length],['pending','Pending',pendingAgents.length],['approved','Approved',approvedAgents.length],['disapproved','Disapproved',disapprovedAgents.length]].map(function([f, label, count]) {
+                      var isActive = agentFilter === f && !agentSearch;
+                      return (
+                        <button key={f} onClick={function(){ setAgentFilter(f); setAgentSearch(''); }}
+                          style={{ padding: '5px 14px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.76rem', cursor: 'pointer' }}>
+                          {label} ({count})
                         </button>
-                      </div>
+                      );
+                    })}
+                  </div>
+                  {loading ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Loading…</p></div>
+                  ) : filtered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>No agents found.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {filtered.map(function(agent) {
+                        var isExpanded = expandedAgent === agent.id;
+                        var isPending = agent._status === 'pending';
+                        var isDisapproved = agent._status === 'disapproved';
+                        return (
+                          <div key={agent.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '12px 14px' }}>
+                            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
+                              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isPending ? '#f59e0b' : isDisapproved ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>
+                                {(agent.email || 'A')[0].toUpperCase()}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{agent.full_name || 'Name not provided'}</p>
+                                <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{agent.email || 'No email'}</p>
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginBottom: isMobile ? '2px' : 0 }}>
+                                <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: isPending ? '#fffbeb' : isDisapproved ? '#fef2f2' : '#f0fff4', color: isPending ? '#92400e' : isDisapproved ? '#b91c1c' : '#166534', border: '1px solid ' + (isPending ? '#fde68a' : isDisapproved ? '#fecaca' : '#86efac') }}>
+                                  {isPending ? 'PENDING' : isDisapproved ? 'DISAPPROVED' : 'APPROVED'}
+                                </span>
+                                {agent.subscription_tier && agent.subscription_tier !== 'free' && (
+                                  <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{(agent.subscription_tier || '').toUpperCase()}</span>
+                                )}
+                                {agent.sa_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>SA: {agent.sa_code}</span>}
+                                {agent.gha_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>GHA: {agent.gha_code}</span>}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '5px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+                                <button onClick={function(){ setExpandedAgent(isExpanded ? null : agent.id); }}
+                                  style={{ padding: '5px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                  {isExpanded ? 'Hide' : 'Details'}
+                                </button>
+                                {isPending && (
+                                  <>
+                                    <button onClick={function(){ handleApprove(agent.id, agent.email); }}
+                                      style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Approve</button>
+                                    <button onClick={function(){ handleReject(agent.id, agent.email); }}
+                                      style={{ padding: '5px 10px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reject</button>
+                                  </>
+                                )}
+                                {!isPending && !isDisapproved && (
+                                  <button onClick={function(){ handleDisapprove(agent.id, agent.email); }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Disapprove</button>
+                                )}
+                                {isDisapproved && (
+                                  <button onClick={function(){ handleReapprove(agent.id, agent.email); }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reapprove</button>
+                                )}
+                              </div>
+                            </div>
+                            {isExpanded && (
+                              <div>
+                                {renderAgentDetailsPanel({
+                                  name: agent.full_name, email: agent.email, phone: agent.phone,
+                                  address: agent.office_address, experience: agent.experience, specialty: agent.specialty,
+                                  nin: agent.nin_number, cac: agent.cac_number, about: agent.about || agent.about_self,
+                                  bank_name: agent.bank_name, account_number: agent.account_number, account_name: agent.account_name,
+                                  verification: agent.verification_level, status: agent.status, created_at: agent.created_at,
+                                  waMessage: 'Hello, I am contacting you from GetHome regarding your agent account.',
+                                  emailSubject: 'GetHome Agent — ' + (agent.full_name || ''),
+                                  emailBody: 'Hello ' + (agent.full_name || '') + ',\n\nGetHome Admin here.\n\nBest regards,\nGetHome',
+                                })}
+                                <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1.5px solid #bfdbfe' }}>
+                                  <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Assign to GHA</p>
+                                  {agent.gha_code && (
+                                    <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: '#166534', fontFamily: "'Inter', sans-serif" }}>
+                                      Currently assigned: <strong>{agent.gha_code}</strong>
+                                    </p>
+                                  )}
+                                  <select
+                                    value={adminAssignGha[agent.id] || ''}
+                                    onChange={function(e){ var v = e.target.value; setAdminAssignGha(function(prev){ return Object.assign({}, prev, { [agent.id]: v }); }); }}
+                                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #bfdbfe', fontSize: '0.82rem', color: '#0a2240', marginBottom: '8px', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff', boxSizing: 'border-box' }}>
+                                    <option value="">Select a GHA…</option>
+                                    {allGHAsAdmin.map(function(g) {
+                                      return <option key={g.id} value={g.id}>{g.gha_code} – {g.full_name} ({g.location || 'N/A'})</option>;
+                                    })}
+                                  </select>
+                                  {adminAssignGhaMsg[agent.id] && (
+                                    <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: (adminAssignGhaMsg[agent.id] || '').startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
+                                      {adminAssignGhaMsg[agent.id]}
+                                    </p>
+                                  )}
+                                  <button
+                                    disabled={!adminAssignGha[agent.id] || !!adminAssigningGha[agent.id]}
+                                    onClick={async function() {
+                                      var ghaId = adminAssignGha[agent.id];
+                                      if (!ghaId) return;
+                                      setAdminAssigningGha(function(prev){ return Object.assign({}, prev, { [agent.id]: true }); });
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/force-assign-agent', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ agent_id: agent.id, gha_id: ghaId }),
+                                        });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        setAdminAssignGhaMsg(function(prev){ return Object.assign({}, prev, { [agent.id]: 'Agent assigned to GHA successfully.' }); });
+                                        setTimeout(function(){ setAdminAssignGhaMsg(function(prev){ return Object.assign({}, prev, { [agent.id]: '' }); }); }, 5000);
+                                        fetchAgents();
+                                      } catch(e) {
+                                        setAdminAssignGhaMsg(function(prev){ return Object.assign({}, prev, { [agent.id]: 'Error: ' + e.message }); });
+                                        setTimeout(function(){ setAdminAssignGhaMsg(function(prev){ return Object.assign({}, prev, { [agent.id]: '' }); }); }, 5000);
+                                      } finally {
+                                        setAdminAssigningGha(function(prev){ return Object.assign({}, prev, { [agent.id]: false }); });
+                                      }
+                                    }}
+                                    style={{ width: '100%', padding: '9px', backgroundColor: (!adminAssignGha[agent.id] || adminAssigningGha[agent.id]) ? '#94a3b8' : '#1e40af', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: (!adminAssignGha[agent.id] || adminAssigningGha[agent.id]) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                                    {adminAssigningGha[agent.id] ? 'Assigning…' : 'Assign to GHA'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    {isOpen && (
-                      <div style={{ borderTop: '1px solid #e8edf3', padding: '32px', backgroundColor: '#fafbfc' }}>
-                        <p style={{ margin: '0 0 24px 0', fontSize: '0.88rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span>[chat]</span> Fill in your details below and we will compile them into a WhatsApp message for you.
-                        </p>
-                        {svc.form}
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── LISTINGS ── */}
+            {adminTab === 'listings' && (function() {
+              var q = listingSearch.trim().toLowerCase();
+              var filtered = listings.filter(function(p) {
+                var matchQ = !q || (p.title || '').toLowerCase().includes(q) || (p.location || '').toLowerCase().includes(q) || (p.agent_email || p.email || '').toLowerCase().includes(q);
+                var matchF = listingFilter === 'all' ? true : listingFilter === 'active' ? !p.is_sold : listingFilter === 'sold' ? !!p.is_sold : !!p.is_featured;
+                return matchQ && matchF;
+              });
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Listings</h2>
+                    <button onClick={fetchListings} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                  </div>
+                  {listingMsg && (
+                    <div style={{ backgroundColor: listingMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (listingMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
+                      <p style={{ margin: 0, color: listingMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.84rem' }}>{listingMsg}</p>
+                    </div>
+                  )}
+                  <input type="text" value={listingSearch} onChange={function(e){ setListingSearch(e.target.value); }}
+                    placeholder="Search by title, location or agent email…"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '12px', color: '#0a2240' }} />
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    {[['all','All'],['active','Active'],['sold','Sold'],['featured','Featured']].map(function([key, label]) {
+                      var isActive = listingFilter === key;
+                      return (
+                        <button key={key} onClick={function(){ setListingFilter(key); }}
+                          style={{ padding: '5px 12px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.74rem', cursor: 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {listingsLoading ? (
+                    <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>Loading…</p></div>
+                  ) : filtered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>No listings found.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                      {filtered.map(function(p) {
+                        var isMarking = markingSoldId === p.id;
+                        return (
+                          <div key={p.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '11px 14px' }}>
+                            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
+                              {p.image_url && <img src={p.image_url} alt={p.title} loading="lazy" style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display='none'; }} />}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
+                                <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.70rem' }}>{p.location}</p>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  {p.purpose && <span style={{ fontSize: '0.58rem', backgroundColor: '#eef2f7', color: '#0a2240', padding: '1px 7px', borderRadius: '20px', fontWeight: '600', textTransform: 'capitalize' }}>{p.purpose}</span>}
+                                  {p.is_sold ? <span style={{ fontSize: '0.58rem', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', padding: '1px 7px', borderRadius: '20px', fontWeight: '800' }}>SOLD</span>
+                                             : <span style={{ fontSize: '0.58rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '1px 7px', borderRadius: '20px', fontWeight: '800' }}>ACTIVE</span>}
+                                  <span style={{ fontSize: '0.74rem', fontWeight: '700', color: '#166534' }}>{fmtNGN(p.price)}</span>
+                                  <span style={{ fontSize: '0.64rem', color: '#94a3b8' }}>{p.agent_email || p.email || '—'}</span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '5px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+                                <button onClick={function(){ setExpandedListing(expandedListing === p.id ? null : p.id); }}
+                                  style={{ padding: '5px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>View Agent</button>
+                                {!p.is_sold && !isMarking && (
+                                  <button onClick={function(){ setMarkingSoldId(p.id); }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Mark Sold</button>
+                                )}
+                              </div>
+                            </div>
+                            {isMarking && !p.is_sold && (
+                              <div style={{ marginTop: '10px', padding: '10px 12px', backgroundColor: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <input type="number" placeholder="Final sale price (NGN)" value={soldPrice[p.id] || ''}
+                                  onChange={function(e){ setSoldPrice(function(prev){ return Object.assign({}, prev, { [p.id]: e.target.value }); }); }}
+                                  style={{ flex: 1, minWidth: '160px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #fed7aa', fontSize: '0.84rem', color: '#0a2240' }} />
+                                <button onClick={async function() {
+                                  var price = parseFloat(soldPrice[p.id]);
+                                  if (!soldPrice[p.id] || isNaN(price) || price <= 0) { alert('Enter the sale price.'); return; }
+                                  try {
+                                    var token = localStorage.getItem('gh_token');
+                                    var res = await fetch(API_URL + '/api/admin/mark-sold', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ property_id: p.id, sold_price: price }) });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setListings(function(prev){ return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { is_sold: true }) : x; }); });
+                                    setMarkingSoldId(null);
+                                    setListingMsg('Property marked as sold. Agent notified.');
+                                    setTimeout(function(){ setListingMsg(''); }, 6000);
+                                  } catch(e) { setListingMsg('Error: ' + e.message); setTimeout(function(){ setListingMsg(''); }, 5000); }
+                                }} style={{ padding: '8px 14px', backgroundColor: '#166534', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>Confirm Sale</button>
+                                <button onClick={function(){ setMarkingSoldId(null); }} style={{ padding: '8px 12px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                              </div>
+                            )}
+                            {expandedListing === p.id && renderAgentDetailsPanel({ name: p.agent_name, email: p.agent_email, phone: p.agent_phone, address: p.agent_address, experience: p.agent_experience, specialty: p.agent_specialty, nin: p.agent_nin, cac: p.agent_cac, about: p.agent_about, bank_name: p.agent_bank_name, account_number: p.agent_account_number, account_name: p.agent_account_name, verification: p.agent_verification, status: p.agent_status, created_at: p.agent_created_at, waMessage: 'Hello, I am the GetHome admin contacting you about your listing: ' + (p.title || '') + '.', emailSubject: 'Regarding listing: ' + (p.title || ''), emailBody: 'Hello ' + (p.agent_name || '') + ',\n\nGetHome Admin here regarding your listing: ' + (p.title || '') + '.\n\nBest regards,\nGetHome' })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── TRANSACTIONS ── */}
+            {adminTab === 'transactions' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Transactions</h2>
+                  <button onClick={fetchTransactions} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                </div>
+                {txLoading ? (
+                  <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>Loading…</p></div>
+                ) : transactions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>No transactions yet.</p></div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {transactions.map(function(tx) {
+                      var commission = Math.round((parseFloat(tx.agency_fee) || 0) * COMMISSION_RATE);
+                      var isPaying = markingPaid[tx.id];
+                      return (
+                        <div key={tx.id} style={{ ...cardStyle, padding: '13px 15px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{tx.property_title || tx.title || 'Untitled'}</p>
+                              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{tx.property_location || tx.location || ''}</p>
+                            </div>
+                            <span style={{ fontSize: '0.66rem', color: '#94a3b8', flexShrink: 0 }}>{tx.sold_at || tx.created_at ? new Date(tx.sold_at || tx.created_at).toLocaleDateString() : ''}</span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '3px 16px', marginBottom: '10px', fontSize: '0.76rem' }}>
+                            <p style={{ margin: 0, color: '#374151' }}>Sale Price: <strong style={{ color: '#0a2240' }}>{fmtNGN(tx.sale_price || tx.price)}</strong></p>
+                            <p style={{ margin: 0, color: '#374151' }}>Agent: <strong>{tx.agent_name || tx.full_name || '—'}</strong></p>
+                            <p style={{ margin: 0, color: '#374151' }}>Email: <span style={{ color: '#64748b' }}>{tx.agent_email || tx.email || '—'}</span></p>
+                            <p style={{ margin: 0, color: '#374151' }}>Bank: <span style={{ color: '#64748b' }}>{tx.bank_name || '—'} · {tx.account_number || '—'}</span></p>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+                            <div>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#64748b' }}>Commission (2.5% of agency fee)</p>
+                              <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.88rem' }}>{fmtNGN(commission)}</p>
+                            </div>
+                            {tx.commission_paid ? (
+                              <span style={{ fontSize: '0.68rem', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', padding: '3px 12px', borderRadius: '20px', fontWeight: '800' }}>COMMISSION PAID</span>
+                            ) : (
+                              <button onClick={function(){ handleMarkCommissionPaid(tx.id, tx.property_id || tx.id); }} disabled={isPaying}
+                                style={{ padding: '6px 14px', backgroundColor: isPaying ? '#94a3b8' : '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.70rem', fontWeight: '700', cursor: isPaying ? 'not-allowed' : 'pointer' }}>
+                                {isPaying ? 'Marking…' : 'Mark Commission Paid'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── DEPOSITS ── */}
+            {adminTab === 'deposits' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>
+                    Deposits
+                    {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
+                      <span style={{ marginLeft: '8px', padding: '2px 10px', borderRadius: '20px', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '0.68rem', fontWeight: '800' }}>
+                        {deposits.filter(function(d){ return !d.deposit_confirmed; }).length} pending
+                      </span>
+                    )}
+                  </h2>
+                  <button onClick={fetchDeposits} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                </div>
+                {depositMsg && (
+                  <div style={{ backgroundColor: depositMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (depositMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
+                    <p style={{ margin: 0, color: depositMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.84rem' }}>{depositMsg}</p>
+                  </div>
+                )}
+                {depositsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>Loading…</p></div>
+                ) : deposits.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>No deposits yet.</p></div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                    {deposits.slice().sort(function(a, b){ if (!a.deposit_confirmed && b.deposit_confirmed) return -1; if (a.deposit_confirmed && !b.deposit_confirmed) return 1; return new Date(b.created_at) - new Date(a.created_at); }).map(function(d) {
+                      var isConfirmed = !!d.deposit_confirmed;
+                      var isConfirming = confirmingDepositId === d.id;
+                      var linkedProperty = listings.find(function(l){ return l.id === d.property_id; });
+                      return (
+                        <div key={d.id} style={{ ...cardStyle, padding: '11px 14px', borderLeft: isConfirmed ? '3px solid #86efac' : '3px solid #ddd6fe' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.property_title || '—'}</p>
+                              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{d.property_location || ''}</p>
+                            </div>
+                            {isConfirmed
+                              ? <span style={{ fontSize: '0.60rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>CONFIRMED</span>
+                              : <span style={{ fontSize: '0.60rem', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>PENDING</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '8px', fontSize: '0.74rem' }}>
+                            <span style={{ color: '#64748b' }}>Customer: <strong style={{ color: '#0a2240' }}>{d.user_email || '—'}</strong></span>
+                            <span style={{ color: '#64748b' }}>Amount: <strong style={{ color: '#166534' }}>{fmtNGN(d.deposit_amount)}</strong></span>
+                            <span style={{ color: '#94a3b8', fontSize: '0.70rem' }}>Ref: {d.reference || '—'} · {d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '6px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+                            <button onClick={function(){ var msg = encodeURIComponent('Hello, following up on deposit ref: ' + (d.reference || '') + ' for: ' + (d.property_title || '')); window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + msg, '_blank'); }}
+                              style={{ padding: '5px 10px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>WhatsApp</button>
+                            {!isConfirmed && (
+                              <button onClick={function() { handleConfirmDeposit(d); }} disabled={isConfirming}
+                                style={{ padding: '5px 12px', backgroundColor: isConfirming ? '#94a3b8' : '#166534', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer', width: isMobile ? '100%' : undefined }}>
+                                {isConfirming ? 'Confirming…' : 'Confirm Deposit'}
+                              </button>
+                            )}
+                            {linkedProperty && (
+                              <button onClick={function(){ setDepositViewingProperty(linkedProperty); }}
+                                style={{ padding: '5px 10px', backgroundColor: '#eef2f7', color: '#0a2240', border: '1.5px solid #e2e8f0', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>View Listing</button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── INSPECTIONS ── */}
+            {adminTab === 'inspections' && (function() {
+              var filteredInspections = adminInspections.filter(function(insp) {
+                var s = insp.status || 'pending';
+                var matchesFilter = inspectionFilter === 'all'
+                  || (inspectionFilter === 'pending'   && (!insp.status || s === 'pending'))
+                  || (inspectionFilter === 'done'      && s === 'gha_done')
+                  || (inspectionFilter === 'confirmed' && s === 'confirmed');
+                var q = inspectionSearch.toLowerCase().trim();
+                var matchesSearch = !q
+                  || (insp.customer_name    || '').toLowerCase().includes(q)
+                  || (insp.customer_email   || '').toLowerCase().includes(q)
+                  || (insp.customer_phone   || '').toLowerCase().includes(q)
+                  || (insp.property_address || '').toLowerCase().includes(q)
+                  || (insp.property_title   || '').toLowerCase().includes(q)
+                  || (insp.sa_code          || '').toLowerCase().includes(q)
+                  || (insp.gha_code         || '').toLowerCase().includes(q);
+                return matchesFilter && matchesSearch;
+              });
+              return (
+                <div>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Inspections</h2>
+                    <button onClick={fetchAdminInspections} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                  </div>
+
+                  {/* Stats row */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    {[
+                      { label: 'Total',                value: adminInspections.length, color: '#fff', bg: '#0a2240', border: '#0a2240' },
+                      { label: 'Pending',              value: adminInspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' },
+                      { label: 'Done / Awaiting',      value: adminInspections.filter(function(i){ return i.status === 'gha_done'; }).length, color: '#92400e', bg: '#fffbeb', border: '#fde68a' },
+                      { label: 'Confirmed',            value: adminInspections.filter(function(i){ return i.status === 'confirmed'; }).length, color: '#166534', bg: '#f0fff4', border: '#86efac' },
+                    ].map(function(s) {
+                      return (
+                        <div key={s.label} style={{ backgroundColor: s.bg, border: '1.5px solid ' + s.border, borderRadius: '10px', padding: '10px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', flex: '1' }}>
+                          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: s.color, lineHeight: 1 }}>{s.value}</span>
+                          <span style={{ fontSize: '0.62rem', fontWeight: '700', color: s.color === '#fff' ? 'rgba(255,255,255,0.75)' : '#94a3b8', marginTop: '3px', textAlign: 'center', whiteSpace: 'nowrap' }}>{s.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Search */}
+                  <input
+                    type="text"
+                    value={inspectionSearch}
+                    onChange={function(e){ setInspectionSearch(e.target.value); }}
+                    placeholder="Search by customer name, email, property, SA code or GHA code…"
+                    style={{ width: '100%', padding: '9px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', boxSizing: 'border-box', marginBottom: '12px', fontFamily: "'Inter', sans-serif" }}
+                  />
+
+                  {/* Filter pills */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '18px' }}>
+                    {[
+                      ['all',       'All',       adminInspections.length],
+                      ['pending',   'Pending',   adminInspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length],
+                      ['done',      'Done',      adminInspections.filter(function(i){ return i.status === 'gha_done'; }).length],
+                      ['confirmed', 'Confirmed', adminInspections.filter(function(i){ return i.status === 'confirmed'; }).length],
+                    ].map(function([key, label, count]) {
+                      var active = inspectionFilter === key;
+                      return (
+                        <button key={key} onClick={function(){ setInspectionFilter(key); }}
+                          style={{ padding: '5px 14px', borderRadius: '20px', border: active ? 'none' : '1.5px solid #e2e8f0', backgroundColor: active ? '#0a2240' : '#fff', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          {label}
+                          <span style={{ backgroundColor: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9', color: active ? '#fff' : '#475569', borderRadius: '999px', padding: '0px 6px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.5' }}>{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Cards */}
+                  {adminInspLoading ? (
+                    <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8' }}>Loading inspections…</p></div>
+                  ) : filteredInspections.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.86rem' }}>No inspections match your search or filter.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {filteredInspections.map(function(insp) {
+                        var status = insp.status || 'pending';
+                        var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#94a3b8';
+                        var inspDateStr = insp.inspection_date || insp.requested_date;
+                        var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                        var rawPhone = (insp.customer_phone || '').replace(/\D/g, '');
+                        var waMsg = encodeURIComponent('Hello ' + (insp.customer_name || 'there') + ', this is GetHome admin following up on your property inspection for ' + (insp.property_title || insp.property_address || 'your property') + '. Kindly let us know if you need any assistance.');
+                        var isReassigning = reassigningInspId === insp.id;
+                        var isConfirming  = confirmingInspId === insp.id;
+                        return (
+                          <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', borderLeft: '4px solid ' + borderColor, padding: '16px', marginBottom: '0' }}>
+
+                            {/* Top row: status + type + date */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: '10px' }}>
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.60rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: status === 'confirmed' ? '#f0fff4' : status === 'gha_done' ? '#fffbeb' : '#f1f5f9', color: status === 'confirmed' ? '#166534' : status === 'gha_done' ? '#92400e' : '#475569', border: '1px solid ' + (status === 'confirmed' ? '#86efac' : status === 'gha_done' ? '#fde68a' : '#e2e8f0') }}>
+                                  {status === 'confirmed' ? 'CONFIRMED' : status === 'gha_done' ? 'GHA DONE' : 'PENDING'}
+                                </span>
+                                <span style={{ fontSize: '0.60rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe') }}>
+                                  {insp.inspection_type === 'virtual' ? 'Virtual' : 'Physical'}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: '600', flexShrink: 0 }}>📅 {inspDateFmt}</span>
+                            </div>
+
+                            {/* Property */}
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.90rem' }}>{insp.property_title || insp.property_address || '—'}</p>
+                            {insp.property_address && insp.property_title && (
+                              <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.80rem' }}>{insp.property_address}</p>
+                            )}
+
+                            {/* Customer + Assignment two-column */}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                              {/* Customer */}
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.62rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em' }}>CUSTOMER DETAILS</p>
+                                <p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{insp.customer_name || '—'}</p>
+                                {insp.customer_email && (
+                                  <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.76rem', color: '#22c55e', textDecoration: 'none', marginBottom: '3px', fontWeight: '600' }}>{insp.customer_email}</a>
+                                )}
+                                {rawPhone && (
+                                  <a href={'https://wa.me/' + rawPhone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.76rem', color: '#22c55e', fontWeight: '700', textDecoration: 'none' }}>WhatsApp: {insp.customer_phone}</a>
+                                )}
+                              </div>
+                              {/* Assignment */}
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.62rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em' }}>ASSIGNMENT DETAILS</p>
+                                {insp.sa_code && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '0.60rem', padding: '1px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{insp.sa_code}</span>
+                                    <span style={{ fontSize: '0.76rem', color: '#475569' }}>{insp.sa_name || ''}</span>
+                                  </div>
+                                )}
+                                {insp.gha_code && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                    <span style={{ fontSize: '0.60rem', padding: '1px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>{insp.gha_code}</span>
+                                    <span style={{ fontSize: '0.76rem', color: '#475569' }}>{insp.gha_name || ''}</span>
+                                  </div>
+                                )}
+                                {insp.created_at && <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>Assigned {new Date(insp.created_at).toLocaleDateString()}</p>}
+                              </div>
+                            </div>
+
+                            {/* GHA done notes */}
+                            {status === 'gha_done' && insp.gha_notes && (
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ margin: '0 0 4px 0', fontSize: '0.62rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em' }}>GHA INSPECTION NOTES</p>
+                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: '1.6' }}>{insp.gha_notes}</p>
+                                {insp.gha_done_at && <p style={{ margin: '5px 0 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
+                              </div>
+                            )}
+
+                            {/* Confirmed banner */}
+                            {status === 'confirmed' && (
+                              <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '1.1rem' }}>✅</span>
+                                <div>
+                                  <p style={{ margin: 0, fontWeight: '700', color: '#166534', fontSize: '0.80rem' }}>Confirmed by SA</p>
+                                  {insp.sa_confirmed_at && <p style={{ margin: '1px 0 0 0', fontSize: '0.68rem', color: '#4ade80' }}>{new Date(insp.sa_confirmed_at).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Action buttons */}
+                            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '7px', flexWrap: 'wrap', alignItems: isMobile ? 'stretch' : 'center', width: isMobile ? '100%' : undefined }}>
+                              {rawPhone && (
+                                <a href={'https://wa.me/' + rawPhone + '?text=' + waMsg} target="_blank" rel="noreferrer"
+                                  style={{ padding: '6px 14px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-block', textAlign: isMobile ? 'center' : undefined }}>
+                                  WhatsApp
+                                </a>
+                              )}
+                              {insp.customer_email && (
+                                <a href={'mailto:' + insp.customer_email}
+                                  style={{ padding: '6px 14px', backgroundColor: '#1e40af', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', textDecoration: 'none', display: 'inline-block', textAlign: isMobile ? 'center' : undefined }}>
+                                  Email
+                                </a>
+                              )}
+                              {(!insp.status || insp.status === 'pending') && (
+                                <button onClick={function(){ setReassigningInspId(isReassigning ? null : insp.id); setReassignGhaId(''); setReassignMsg(''); }}
+                                  style={{ padding: '6px 14px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>
+                                  {isReassigning ? 'Cancel' : 'Reassign'}
+                                </button>
+                              )}
+                              {status === 'gha_done' && (
+                                <button onClick={async function() {
+                                  setConfirmingInspId(insp.id);
+                                  try {
+                                    var tkn = localStorage.getItem('gh_token');
+                                    var res = await fetch(API_URL + '/api/admin/confirm-inspection', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn },
+                                      body: JSON.stringify({ inspection_id: insp.id })
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setAdminInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'confirmed', sa_confirmed_at: new Date().toISOString() }) : x; }); });
+                                  } catch(e) { setActionMsg('Error: ' + e.message); }
+                                  finally { setConfirmingInspId(null); }
+                                }} disabled={isConfirming}
+                                  style={{ padding: '6px 14px', backgroundColor: isConfirming ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: isConfirming ? 'not-allowed' : 'pointer' }}>
+                                  {isConfirming ? 'Confirming…' : 'Confirm Inspection'}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Inline reassign panel */}
+                            {isReassigning && (
+                              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1.5px solid #f1f5f9' }}>
+                                {reassignMsg && (
+                                  <div style={{ padding: '8px 12px', borderRadius: '8px', marginBottom: '10px', backgroundColor: reassignMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (reassignMsg.startsWith('Error') ? '#fecaca' : '#86efac') }}>
+                                    <p style={{ margin: 0, fontWeight: '600', fontSize: '0.76rem', color: reassignMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{reassignMsg}</p>
+                                  </div>
+                                )}
+                                <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>Reassign to a different GHA:</p>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <select value={reassignGhaId} onChange={function(e){ setReassignGhaId(e.target.value); }}
+                                    style={{ flex: 1, minWidth: '180px', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.80rem', color: '#0a2240', backgroundColor: '#fff' }}>
+                                    <option value="">-- Select GHA --</option>
+                                    {allGHAsAdmin.map(function(g) {
+                                      return <option key={g.id} value={g.id}>{g.staff_id || g.gha_code} — {g.full_name || g.name}</option>;
+                                    })}
+                                  </select>
+                                  <button onClick={async function() {
+                                    if (!reassignGhaId) { setReassignMsg('Error: Please select a GHA.'); return; }
+                                    try {
+                                      var tkn = localStorage.getItem('gh_token');
+                                      var res = await fetch(API_URL + '/api/admin/reassign-inspection', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn },
+                                        body: JSON.stringify({ inspection_id: insp.id, gha_id: reassignGhaId })
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      var newGha = allGHAsAdmin.find(function(g){ return String(g.id) === String(reassignGhaId); });
+                                      setAdminInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { gha_id: reassignGhaId, gha_code: newGha ? (newGha.staff_id || newGha.gha_code) : x.gha_code, gha_name: newGha ? (newGha.full_name || newGha.name) : x.gha_name }) : x; }); });
+                                      setReassigningInspId(null); setReassignGhaId('');
+                                      setReassignMsg('');
+                                    } catch(e) { setReassignMsg('Error: ' + e.message); }
+                                  }}
+                                    style={{ padding: '8px 16px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                    Confirm Reassign
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Count footer */}
+                  {!adminInspLoading && (
+                    <p style={{ margin: '14px 0 0 0', fontSize: '0.76rem', color: '#94a3b8', textAlign: 'right', fontWeight: '600' }}>
+                      Showing {filteredInspections.length} of {adminInspections.length} inspection{adminInspections.length !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── SA MANAGEMENT ── */}
+            {adminTab === 'sa-management' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>SA Management</h2>
+                  <button onClick={function(){ fetchAllSAs(); fetchAllGHAsAdmin(); }} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                </div>
+                {saMsg && (
+                  <div style={{ backgroundColor: saMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (saMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+                    <p style={{ margin: 0, fontWeight: '700', fontSize: '0.84rem', color: saMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{saMsg}</p>
+                  </div>
+                )}
+                <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: isMobile ? undefined : '1fr 1.6fr', gap: '20px', alignItems: 'start' }}>
+                  {/* Create SA form */}
+                  <div style={{ ...cardStyle, padding: '18px' }}>
+                    <h3 style={{ color: '#0a2240', fontSize: '0.88rem', fontWeight: '800', margin: '0 0 14px 0' }}>Create New SA</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {[['Full Name','fullName','text'],['Email','email','email'],['Phone','phone','tel'],['Location','location','text'],['Password','password','password'],['Confirm Password','confirmPassword','password']].map(function([lbl, field, type]) {
+                        return (
+                          <div key={field}>
+                            <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '3px', letterSpacing: '0.04em' }}>{lbl.toUpperCase()}</label>
+                            <input type={type} value={saForm[field]} onChange={function(e){ setSaForm(function(f){ return Object.assign({}, f, { [field]: e.target.value }); }); }} placeholder={lbl}
+                              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', boxSizing: 'border-box' }} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button onClick={async function() {
+                      if (!saForm.fullName || !saForm.email || !saForm.password) { alert('Full name, email and password required.'); return; }
+                      if (saForm.password !== saForm.confirmPassword) { alert('Passwords do not match.'); return; }
+                      setSaFormLoading(true);
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/admin/create-sa', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ full_name: saForm.fullName, email: saForm.email, phone: saForm.phone, location: saForm.location, password: saForm.password }) });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        setSaMsg('SA created! Code: ' + (data.sa_code || data.staff_id || data.code || '') + ' — share this with the SA');
+                        setSaForm({ fullName: '', email: '', phone: '', location: '', password: '', confirmPassword: '' });
+                        try { await fetchAllSAs(); } catch(e) { console.error('Refresh failed:', e.message); }
+                      } catch(e) { setSaMsg('Error: ' + e.message); }
+                      finally { setSaFormLoading(false); }
+                    }} disabled={saFormLoading}
+                      style={{ width: '100%', marginTop: '14px', padding: '10px', backgroundColor: saFormLoading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.86rem', cursor: saFormLoading ? 'not-allowed' : 'pointer' }}>
+                      {saFormLoading ? 'Creating…' : 'Create SA'}
+                    </button>
+                  </div>
+                  {/* SA list */}
+                  <div>
+                    <div style={{ marginBottom: '10px' }}>
+                      <input type="text" value={saSearch} onChange={function(e){ setSaSearch(e.target.value); }} placeholder="Search by SA code, name or email…"
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', boxSizing: 'border-box' }} />
+                    </div>
+                    {sasLoading ? (
+                      <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading SAs…</p></div>
+                    ) : allSAs.length === 0 ? (
+                      <div style={{ ...cardStyle, padding: '30px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0 }}>No SAs yet. Create one.</p></div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {allSAs.filter(function(sa){
+                          var q = saSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (sa.sa_code || sa.staff_id || '').toLowerCase().includes(q) ||
+                                 (sa.full_name || sa.name || '').toLowerCase().includes(q) ||
+                                 (sa.email || '').toLowerCase().includes(q);
+                        }).map(function(sa) {
+                          var saKey = sa.id || sa.sa_code || sa.staff_id;
+                          var isExpanded = expandedSAGhas === saKey;
+                          var saGhas = allGHAsAdmin.filter(function(g){ return g.sa_id === sa.id; });
+                          return (
+                            <div key={saKey} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '13px 15px' }}>
+                              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
+                                <span style={{ padding: '3px 12px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontSize: '0.70rem', flexShrink: 0 }}>{sa.sa_code || sa.staff_id}</span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ margin: '0 0 1px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>{sa.full_name || sa.name}</p>
+                                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.70rem' }}>{sa.email}{sa.location ? ' · ' + sa.location : ''}</p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{sa.agent_count || 0} Agents</span>
+                                  <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{sa.listing_count || 0} Listings</span>
+                                  <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{sa.active_subscriptions || 0} Active / {sa.expired_subscriptions || 0} Expired Subs</span>
+                                  <span style={{ fontSize: '0.58rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: sa.is_active === false ? '#fef2f2' : '#f0fff4', color: sa.is_active === false ? '#b91c1c' : '#166534', border: '1px solid ' + (sa.is_active === false ? '#fecaca' : '#86efac') }}>{sa.is_active === false ? 'INACTIVE' : 'ACTIVE'}</span>
+                                </div>
+                                <button onClick={function(){ setExpandedSAGhas(isExpanded ? null : saKey); if (!isExpanded && allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }}
+                                  style={{ padding: '4px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
+                                  {isExpanded ? 'Hide GHAs' : 'View GHAs'}
+                                </button>
+                                <button onClick={function(){ setDeactivateSaTarget(deactivateSaTarget && deactivateSaTarget.id === (sa.id || saKey) ? null : sa); }}
+                                  style={{ padding: '4px 10px', backgroundColor: sa.status === 'inactive' ? '#f0fff4' : '#fef2f2', color: sa.status === 'inactive' ? '#166534' : '#ef4444', border: '1px solid ' + (sa.status === 'inactive' ? '#86efac' : '#fecaca'), borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
+                                  {sa.status === 'inactive' ? 'Reactivate' : 'Deactivate'}
+                                </button>
+                                <button onClick={function(){ setCloseSaTarget(closeSaTarget && (closeSaTarget.id || closeSaTarget.sa_code || closeSaTarget.staff_id) === saKey ? null : sa); setCloseSaTargetId(''); }}
+                                  style={{ padding: '4px 10px', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
+                                  Close SA
+                                </button>
+                              </div>
+                              {/* Deactivate / Reactivate SA confirmation */}
+                              {deactivateSaTarget && deactivateSaTarget.id === (sa.id || saKey) && (
+                                <div style={{ marginTop: '10px', padding: '12px 14px', backgroundColor: sa.status === 'inactive' ? '#f0fff4' : '#fef2f2', border: '1.5px solid ' + (sa.status === 'inactive' ? '#86efac' : '#fecaca'), borderRadius: '10px' }}>
+                                  <p style={{ margin: '0 0 10px 0', fontWeight: '700', fontSize: '0.82rem', color: sa.status === 'inactive' ? '#166534' : '#b91c1c' }}>
+                                    {sa.status === 'inactive'
+                                      ? 'Reactivate SA ' + (sa.sa_code || sa.staff_id) + ' ' + (sa.full_name || sa.name) + '? They will regain access.'
+                                      : 'Deactivating SA ' + (sa.sa_code || sa.staff_id) + ' — ' + (sa.full_name || sa.name) + ' will also deactivate all GHAs under them. Are you sure?'}
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={async function() {
+                                      setDeactivatingSa(true);
+                                      var isInactive = sa.status === 'inactive';
+                                      var endpoint = isInactive ? '/api/admin/reactivate-sa' : '/api/admin/deactivate-sa';
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ sa_id: sa.id || saKey }) });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        setAllSAs(function(prev){ return prev.map(function(x){ return (x.id || x.sa_code || x.staff_id) === saKey ? Object.assign({}, x, { status: isInactive ? 'active' : 'inactive' }) : x; }); });
+                                        setDeactivateSaTarget(null);
+                                        setActionMsg((isInactive ? 'Reactivated' : 'Deactivated') + ' SA ' + (sa.sa_code || sa.staff_id) + (data.ghas_deactivated ? ' and ' + data.ghas_deactivated + ' GHAs.' : '.'));
+                                        setTimeout(function(){ setActionMsg(''); }, 6000);
+                                        try { await Promise.all([fetchAllSAs(), fetchAllGHAsAdmin()]); } catch(e) { console.error('Refresh failed:', e.message); }
+                                      } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                      finally { setDeactivatingSa(false); }
+                                    }} disabled={deactivatingSa}
+                                      style={{ padding: '6px 14px', backgroundColor: deactivatingSa ? '#94a3b8' : (sa.status === 'inactive' ? '#22c55e' : '#ef4444'), color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '700', cursor: deactivatingSa ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                      {deactivatingSa ? 'Processing…' : (sa.status === 'inactive' ? 'Confirm Reactivate' : 'Confirm Deactivate')}
+                                    </button>
+                                    <button onClick={function(){ setDeactivateSaTarget(null); }}
+                                      style={{ padding: '6px 12px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Close SA panel */}
+                              {closeSaTarget && (closeSaTarget.id || closeSaTarget.sa_code || closeSaTarget.staff_id) === saKey && (
+                                <div style={{ marginTop: '10px', padding: '14px', backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: '10px' }}>
+                                  <p style={{ margin: '0 0 4px 0', fontWeight: '800', fontSize: '0.84rem', color: '#c2410c' }}>Close SA Account — {sa.sa_code || sa.staff_id} {sa.full_name || sa.name}</p>
+                                  <p style={{ margin: '0 0 12px 0', fontSize: '0.76rem', color: '#92400e' }}>This will permanently close this SA. All GHAs and their agents will be transferred to the SA you select below.</p>
+                                  <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#92400e', marginBottom: '4px', letterSpacing: '0.04em' }}>TRANSFER GHAs &amp; AGENTS TO SA:</label>
+                                  <select value={closeSaTargetId} onChange={function(e){ setCloseSaTargetId(e.target.value); }}
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #fed7aa', fontSize: '0.82rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', marginBottom: '10px' }}>
+                                    <option value="">Select target SA…</option>
+                                    {allSAs.filter(function(s){ return (s.id || s.sa_code || s.staff_id) !== saKey && s.status !== 'inactive'; }).map(function(s){
+                                      return <option key={s.id || s.sa_code} value={s.id || s.sa_code || s.staff_id}>{(s.sa_code || s.staff_id) + ' – ' + (s.full_name || s.name)}</option>;
+                                    })}
+                                  </select>
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button disabled={closingSa || !closeSaTargetId} onClick={async function() {
+                                      setClosingSa(true);
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/close-sa', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ sa_id: sa.id || saKey, target_sa_id: closeSaTargetId }) });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        setAllSAs(function(prev){ return prev.filter(function(x){ return (x.id || x.sa_code || x.staff_id) !== saKey; }); });
+                                        setAllGHAsAdmin(function(prev){ return prev.map(function(g){ return g.sa_id === sa.id ? Object.assign({}, g, { sa_id: closeSaTargetId }) : g; }); });
+                                        setCloseSaTarget(null); setCloseSaTargetId('');
+                                        setActionMsg('SA closed. ' + (data.ghas_transferred || 0) + ' GHAs and ' + (data.agents_transferred || 0) + ' agents transferred.');
+                                        setTimeout(function(){ setActionMsg(''); }, 8000);
+                                        fetchAllSAs(); fetchAllGHAsAdmin();
+                                      } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                      finally { setClosingSa(false); }
+                                    }}
+                                      style={{ padding: '7px 16px', backgroundColor: closingSa || !closeSaTargetId ? '#94a3b8' : '#c2410c', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '700', cursor: closingSa || !closeSaTargetId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                      {closingSa ? 'Closing…' : 'Confirm Close SA'}
+                                    </button>
+                                    <button onClick={function(){ setCloseSaTarget(null); setCloseSaTargetId(''); }}
+                                      style={{ padding: '7px 12px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                  </div>
+                                </div>
+                              )}
+                              {isExpanded && (
+                                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1.5px solid #f1f5f9' }}>
+                                  <p style={{ margin: '0 0 7px 0', fontSize: '0.70rem', fontWeight: '700', color: '#64748b' }}>GHAs under {sa.sa_code || sa.staff_id}:</p>
+                                  {saGhas.length === 0 ? (
+                                    <p style={{ fontSize: '0.76rem', color: '#94a3b8', margin: 0 }}>{allGHAsAdmin.length === 0 ? 'Loading GHAs…' : 'No GHAs assigned yet.'}</p>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                      {saGhas.map(function(g) {
+                                        var ghaKey = g.id || g.gha_code || g.staff_id;
+                                        var isReassigningThis = reassignGhaSaTarget && (reassignGhaSaTarget.id || reassignGhaSaTarget.gha_code || reassignGhaSaTarget.staff_id) === ghaKey;
+                                        return (
+                                          <div key={ghaKey} style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 12px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                              <span style={{ backgroundColor: '#22c55e', color: '#fff', padding: '1px 8px', borderRadius: '12px', fontSize: '0.64rem', fontWeight: '800', flexShrink: 0 }}>{g.gha_code || g.staff_id}</span>
+                                              <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '700', color: '#0a2240', flex: 1, minWidth: 0 }}>{g.full_name || g.name}</p>
+                                              <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>{g.email}</p>
+                                              <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>Agents: {g.agent_count || 0}</p>
+                                              <button onClick={function(){ setReassignGhaSaTarget(isReassigningThis ? null : g); setReassignGhaSaNewCode(''); }}
+                                                style={{ padding: '3px 8px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '700', cursor: 'pointer', flexShrink: 0 }}>
+                                                Reassign SA
+                                              </button>
+                                            </div>
+                                            {isReassigningThis && (
+                                              <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '8px' }}>
+                                                <label style={{ display: 'block', fontSize: '0.64rem', fontWeight: '700', color: '#1e40af', marginBottom: '4px', letterSpacing: '0.04em' }}>MOVE TO SA:</label>
+                                                <select value={reassignGhaSaNewCode} onChange={function(e){ setReassignGhaSaNewCode(e.target.value); }}
+                                                  style={{ width: '100%', padding: '7px 10px', borderRadius: '7px', border: '1.5px solid #bfdbfe', fontSize: '0.78rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', marginBottom: '8px' }}>
+                                                  <option value="">Select new SA…</option>
+                                                  {allSAs.filter(function(s){ return s.id !== sa.id && s.status !== 'inactive'; }).map(function(s){
+                                                    return <option key={s.id} value={s.id}>{(s.sa_code || s.staff_id) + ' – ' + (s.full_name || s.name)}</option>;
+                                                  })}
+                                                </select>
+                                                <div style={{ display: 'flex', gap: '6px' }}>
+                                                  <button disabled={reassigningGhaSa || !reassignGhaSaNewCode} onClick={async function() {
+                                                    setReassigningGhaSa(true);
+                                                    try {
+                                                      var selectedGhaId = String(g.id || ghaKey || '');
+                                                      var selectedNewSaId = String(reassignGhaSaNewCode || '');
+                                                      if (!selectedGhaId || !selectedNewSaId) { setActionMsg('Error: GHA and SA must both be selected.'); return; }
+                                                      var token = localStorage.getItem('gh_token');
+                                                      console.log('Sending reassign - ghaId:', selectedGhaId, 'newSaId:', selectedNewSaId);
+                                                      var res = await fetch(API_URL + '/api/admin/reassign-gha', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ ghaId: selectedGhaId, newSaId: selectedNewSaId }) });
+                                                      var data = await res.json();
+                                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                                      setAllGHAsAdmin(function(prev){ return prev.map(function(x){ return (x.id || x.gha_code || x.staff_id) === ghaKey ? Object.assign({}, x, { sa_id: reassignGhaSaNewCode }) : x; }); });
+                                                      setReassignGhaSaTarget(null); setReassignGhaSaNewCode('');
+                                                      setActionMsg('GHA ' + (g.gha_code || g.staff_id) + ' reassigned to SA ' + reassignGhaSaNewCode + '.');
+                                                      setTimeout(function(){ setActionMsg(''); }, 6000);
+                                                      try { await Promise.all([fetchAllSAs(), fetchAllGHAsAdmin()]); } catch(e) { console.error('Refresh failed:', e.message); }
+                                                    } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                                    finally { setReassigningGhaSa(false); }
+                                                  }}
+                                                    style={{ padding: '5px 12px', backgroundColor: reassigningGhaSa || !reassignGhaSaNewCode ? '#94a3b8' : '#1e40af', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: reassigningGhaSa || !reassignGhaSaNewCode ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                                    {reassigningGhaSa ? 'Reassigning…' : 'Confirm Reassign'}
+                                                  </button>
+                                                  <button onClick={function(){ setReassignGhaSaTarget(null); setReassignGhaSaNewCode(''); }}
+                                                    style={{ padding: '5px 10px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── GHA MANAGEMENT ── */}
+            {adminTab === 'gha-management' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>GHA Management</h2>
+                  <button onClick={function(){ fetchAllGHAsAdmin(); fetchAllSAs(); }} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                </div>
+                {ghaAdminMsg && (
+                  <div style={{ backgroundColor: ghaAdminMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (ghaAdminMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '14px' }}>
+                    <p style={{ margin: 0, fontWeight: '700', fontSize: '0.84rem', color: ghaAdminMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{ghaAdminMsg}</p>
+                  </div>
+                )}
+                <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: isMobile ? undefined : '1fr 1.6fr', gap: '20px', alignItems: 'start' }}>
+                  {/* Create GHA form */}
+                  <div style={{ ...cardStyle, padding: '18px' }}>
+                    <h3 style={{ color: '#0a2240', fontSize: '0.88rem', fontWeight: '800', margin: '0 0 14px 0' }}>Create New GHA</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {[['Full Name','fullName','text'],['Email','email','email'],['Phone','phone','tel'],['Location','location','text'],['Password','password','password'],['Confirm Password','confirmPassword','password']].map(function([lbl, field, type]) {
+                        return (
+                          <div key={field}>
+                            <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '3px', letterSpacing: '0.04em' }}>{lbl.toUpperCase()}</label>
+                            <input type={type} value={ghaAdminForm[field]} onChange={function(e){ setGhaAdminForm(function(f){ return Object.assign({}, f, { [field]: e.target.value }); }); }} placeholder={lbl}
+                              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', boxSizing: 'border-box' }} />
+                          </div>
+                        );
+                      })}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '3px', letterSpacing: '0.04em' }}>ASSIGN TO SA</label>
+                        <select value={ghaAdminForm.saCode} onChange={function(e){ setGhaAdminForm(function(f){ return Object.assign({}, f, { saCode: e.target.value }); }); }}
+                          style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', cursor: 'pointer' }}>
+                          <option value="">-- Select SA --</option>
+                          {allSAs.map(function(sa){ return <option key={sa.id || sa.sa_code} value={sa.sa_code || sa.staff_id}>{(sa.sa_code || sa.staff_id) + ' – ' + (sa.full_name || sa.name)}</option>; })}
+                        </select>
+                      </div>
+                    </div>
+                    <button onClick={async function() {
+                      if (!ghaAdminForm.fullName || !ghaAdminForm.email || !ghaAdminForm.password) { alert('Full name, email and password required.'); return; }
+                      if (ghaAdminForm.password !== ghaAdminForm.confirmPassword) { alert('Passwords do not match.'); return; }
+                      setGhaAdminFormLoading(true);
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/admin/create-gha', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ full_name: ghaAdminForm.fullName, email: ghaAdminForm.email, phone: ghaAdminForm.phone, location: ghaAdminForm.location, sa_code: ghaAdminForm.saCode, password: ghaAdminForm.password }) });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        setGhaAdminMsg('GHA created! Code: ' + (data.gha_code || data.staff_id || data.code || '') + ' — share this with the GHA');
+                        setGhaAdminForm({ fullName: '', email: '', phone: '', location: '', saCode: '', password: '', confirmPassword: '' });
+                        try { await Promise.all([fetchAllGHAsAdmin(), fetchAllSAs()]); } catch(e) { console.error('Refresh failed:', e.message); }
+                      } catch(e) { setGhaAdminMsg('Error: ' + e.message); }
+                      finally { setGhaAdminFormLoading(false); }
+                    }} disabled={ghaAdminFormLoading}
+                      style={{ width: '100%', marginTop: '14px', padding: '10px', backgroundColor: ghaAdminFormLoading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.86rem', cursor: ghaAdminFormLoading ? 'not-allowed' : 'pointer' }}>
+                      {ghaAdminFormLoading ? 'Creating…' : 'Create GHA'}
+                    </button>
+                  </div>
+                  {/* GHA list grouped by SA */}
+                  <div>
+                    <div style={{ marginBottom: '10px' }}>
+                      <input type="text" value={ghaSearch} onChange={function(e){ setGhaSearch(e.target.value); }} placeholder="Search by GHA code, name, email or SA code…"
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', boxSizing: 'border-box' }} />
+                    </div>
+                    {ghasAdminLoading ? (
+                      <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading GHAs…</p></div>
+                    ) : allGHAsAdmin.length === 0 ? (
+                      <div style={{ ...cardStyle, padding: '30px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0 }}>No GHAs yet.</p></div>
+                    ) : (
+                      <div>
+                        {(function(){
+                          var filteredGHAs = allGHAsAdmin.filter(function(g){
+                            var q = ghaSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return (g.gha_code || g.staff_id || '').toLowerCase().includes(q) ||
+                                   (g.full_name || g.name || '').toLowerCase().includes(q) ||
+                                   (g.email || '').toLowerCase().includes(q) ||
+                                   (g.sa_code || g.sa_id || '').toLowerCase().includes(q);
+                          });
+                          return Array.from(new Set(filteredGHAs.map(function(g){ return g.sa_code || g.sa_id || 'Unassigned'; }))).map(function(saCode) {
+                          var group = filteredGHAs.filter(function(g){ return (g.sa_code || g.sa_id || 'Unassigned') === saCode; });
+                          var saInfo = allSAs.find(function(s){ return (s.sa_code || s.staff_id) === saCode; });
+                          return (
+                            <div key={saCode} style={{ marginBottom: '16px' }}>
+                              <div style={{ padding: '7px 12px', backgroundColor: '#f1f5f9', borderRadius: '8px', marginBottom: '7px' }}>
+                                <p style={{ margin: 0, fontSize: '0.76rem', fontWeight: '800', color: '#0a2240' }}>SA: {saCode}{saInfo ? ' – ' + (saInfo.full_name || saInfo.name) : ''}</p>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {group.map(function(g) {
+                                  var gKey = g.id || g.gha_code || g.staff_id;
+                                  return (
+                                    <div key={gKey} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '11px 13px' }}>
+                                      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '8px' }}>
+                                        <span style={{ padding: '2px 9px', backgroundColor: '#22c55e', color: '#fff', borderRadius: '20px', fontWeight: '800', fontSize: '0.68rem', flexShrink: 0 }}>{g.gha_code || g.staff_id}</span>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>{g.full_name || g.name}</p>
+                                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.68rem' }}>{g.email}{g.location ? ' · ' + g.location : ''}</p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', alignItems: 'center' }}>
+                                          <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{g.agent_count || 0} Agents</span>
+                                          <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{g.listing_count || 0} Listings</span>
+                                          <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{g.active_subscriptions || 0} Active / {g.expired_subscriptions || 0} Expired Subs</span>
+                                        </div>
+                                        <button onClick={function(){ setExpandedGHAAgents(expandedGHAAgents === gKey ? null : gKey); }}
+                                          style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                          {expandedGHAAgents === gKey ? 'Hide' : 'Agents'}
+                                        </button>
+                                        <button onClick={function(){ setReassignGhaSaTarget(reassignGhaSaTarget && (reassignGhaSaTarget.id || reassignGhaSaTarget.gha_code || reassignGhaSaTarget.staff_id) === gKey ? null : g); setReassignGhaSaNewCode(''); }}
+                                          style={{ padding: '4px 8px', backgroundColor: '#f0f9ff', color: '#0369a1', border: '1px solid #7dd3fc', borderRadius: '6px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                          Change SA
+                                        </button>
+                                        <button onClick={function(){ setDeactivateGhaTarget(deactivateGhaTarget && deactivateGhaTarget.id === gKey ? null : g); }}
+                                          style={{ padding: '4px 8px', backgroundColor: g.status === 'inactive' ? '#f0fff4' : '#fef2f2', color: g.status === 'inactive' ? '#166534' : '#ef4444', border: '1px solid ' + (g.status === 'inactive' ? '#86efac' : '#fecaca'), borderRadius: '6px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                          {g.status === 'inactive' ? 'Reactivate' : 'Deactivate'}
+                                        </button>
+                                        <button onClick={function(){ setCloseGhaTarget(closeGhaTarget && (closeGhaTarget.id || closeGhaTarget.gha_code) === gKey ? null : g); setCloseGhaTargetId(''); }}
+                                          style={{ padding: '4px 8px', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '6px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                          Close GHA
+                                        </button>
+                                      </div>
+                                      {/* Deactivate / Reactivate GHA confirmation */}
+                                      {deactivateGhaTarget && deactivateGhaTarget.id === gKey && (
+                                        <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: g.status === 'inactive' ? '#f0fff4' : '#fef2f2', border: '1.5px solid ' + (g.status === 'inactive' ? '#86efac' : '#fecaca'), borderRadius: '8px' }}>
+                                          <p style={{ margin: '0 0 8px 0', fontWeight: '700', fontSize: '0.78rem', color: g.status === 'inactive' ? '#166534' : '#b91c1c' }}>
+                                            {g.status === 'inactive'
+                                              ? 'Reactivate GHA ' + (g.gha_code || g.staff_id) + ' ' + (g.full_name || g.name) + '? They will regain access.'
+                                              : 'Are you sure you want to deactivate ' + (g.gha_code || g.staff_id) + ' ' + (g.full_name || g.name) + '? They will lose access immediately.'}
+                                          </p>
+                                          <div style={{ display: 'flex', gap: '7px' }}>
+                                            <button onClick={async function() {
+                                              setDeactivatingGha(true);
+                                              var isInactive = g.status === 'inactive';
+                                              var endpoint = isInactive ? '/api/admin/reactivate-gha' : '/api/admin/deactivate-gha';
+                                              try {
+                                                var token = localStorage.getItem('gh_token');
+                                                var res = await fetch(API_URL + endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ gha_id: gKey }) });
+                                                var data = await res.json();
+                                                if (!res.ok) throw new Error(data.error || 'Failed');
+                                                setAllGHAsAdmin(function(prev){ return prev.map(function(x){ return (x.id || x.gha_code) === gKey ? Object.assign({}, x, { status: isInactive ? 'active' : 'inactive' }) : x; }); });
+                                                setDeactivateGhaTarget(null);
+                                                setActionMsg((isInactive ? 'Reactivated' : 'Deactivated') + ' GHA ' + (g.gha_code || g.staff_id) + (data.unassigned_agents && data.unassigned_agents.length ? '. ' + data.unassigned_agents.length + ' agents unassigned and need reassignment.' : '.'));
+                                                setTimeout(function(){ setActionMsg(''); }, 8000);
+                                                try { await Promise.all([fetchAllGHAsAdmin(), fetchAllSAs()]); } catch(e) { console.error('Refresh failed:', e.message); }
+                                              } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                              finally { setDeactivatingGha(false); }
+                                            }} disabled={deactivatingGha}
+                                              style={{ padding: '5px 12px', backgroundColor: deactivatingGha ? '#94a3b8' : (g.status === 'inactive' ? '#22c55e' : '#ef4444'), color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: deactivatingGha ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                              {deactivatingGha ? 'Processing…' : (g.status === 'inactive' ? 'Confirm Reactivate' : 'Confirm Deactivate')}
+                                            </button>
+                                            <button onClick={function(){ setDeactivateGhaTarget(null); }}
+                                              style={{ padding: '5px 10px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Close GHA panel */}
+                                      {closeGhaTarget && (closeGhaTarget.id || closeGhaTarget.gha_code) === gKey && (
+                                        <div style={{ marginTop: '8px', padding: '12px 14px', backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: '9px' }}>
+                                          <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.82rem', color: '#c2410c' }}>Close GHA Account — {g.gha_code || g.staff_id} {g.full_name || g.name}</p>
+                                          <p style={{ margin: '0 0 10px 0', fontSize: '0.74rem', color: '#92400e' }}>This will permanently close this GHA. All agents under this GHA will be transferred to the GHA you select below.</p>
+                                          <label style={{ display: 'block', fontSize: '0.66rem', fontWeight: '700', color: '#92400e', marginBottom: '3px', letterSpacing: '0.04em' }}>TRANSFER AGENTS TO GHA:</label>
+                                          <select value={closeGhaTargetId} onChange={function(e){ setCloseGhaTargetId(e.target.value); }}
+                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #fed7aa', fontSize: '0.80rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', marginBottom: '9px' }}>
+                                            <option value="">Select target GHA…</option>
+                                            {allGHAsAdmin.filter(function(x){ return (x.id || x.gha_code) !== gKey && x.status !== 'inactive'; }).map(function(x){
+                                              return <option key={x.id || x.gha_code} value={x.id || x.gha_code || x.staff_id}>{(x.gha_code || x.staff_id) + ' – ' + (x.full_name || x.name)}</option>;
+                                            })}
+                                          </select>
+                                          <div style={{ display: 'flex', gap: '7px' }}>
+                                            <button disabled={closingGha || !closeGhaTargetId} onClick={async function() {
+                                              setClosingGha(true);
+                                              try {
+                                                var token = localStorage.getItem('gh_token');
+                                                var res = await fetch(API_URL + '/api/admin/close-gha', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ gha_id: g.id || gKey, target_gha_id: closeGhaTargetId }) });
+                                                var data = await res.json();
+                                                if (!res.ok) throw new Error(data.error || 'Failed');
+                                                setAllGHAsAdmin(function(prev){ return prev.filter(function(x){ return (x.id || x.gha_code) !== gKey; }); });
+                                                setCloseGhaTarget(null); setCloseGhaTargetId('');
+                                                setActionMsg('GHA closed. ' + (data.agents_transferred || 0) + ' agents transferred to ' + closeGhaTargetId + '.');
+                                                setTimeout(function(){ setActionMsg(''); }, 8000);
+                                                fetchAllGHAsAdmin();
+                                              } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                              finally { setClosingGha(false); }
+                                            }}
+                                              style={{ padding: '5px 14px', backgroundColor: closingGha || !closeGhaTargetId ? '#94a3b8' : '#c2410c', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: closingGha || !closeGhaTargetId ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                              {closingGha ? 'Closing…' : 'Confirm Close GHA'}
+                                            </button>
+                                            <button onClick={function(){ setCloseGhaTarget(null); setCloseGhaTargetId(''); }}
+                                              style={{ padding: '5px 10px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {/* Change SA panel */}
+                                      {reassignGhaSaTarget && (reassignGhaSaTarget.id || reassignGhaSaTarget.gha_code || reassignGhaSaTarget.staff_id) === gKey && (
+                                        <div style={{ marginTop: '8px', padding: '12px 14px', backgroundColor: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: '9px' }}>
+                                          <p style={{ margin: '0 0 2px 0', fontWeight: '800', fontSize: '0.82rem', color: '#0369a1' }}>Change SA — {g.gha_code || g.staff_id} {g.full_name || g.name}</p>
+                                          <p style={{ margin: '0 0 10px 0', fontSize: '0.74rem', color: '#0369a1' }}>Current SA: <strong>{g.sa_code || g.sa_id || 'Unassigned'}</strong></p>
+                                          <label style={{ display: 'block', fontSize: '0.66rem', fontWeight: '700', color: '#0369a1', marginBottom: '3px', letterSpacing: '0.04em' }}>ASSIGN TO SA:</label>
+                                          <select value={reassignGhaSaNewCode} onChange={function(e){ setReassignGhaSaNewCode(e.target.value); }}
+                                            style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #7dd3fc', fontSize: '0.80rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', marginBottom: '9px' }}>
+                                            <option value="">Select SA…</option>
+                                            {allSAs.filter(function(s){ return s.status !== 'inactive'; }).map(function(s){
+                                              return <option key={s.id} value={s.id}>{(s.sa_code || s.staff_id) + ' – ' + (s.full_name || s.name)}{s.id === g.sa_id ? ' (current)' : ''}</option>;
+                                            })}
+                                          </select>
+                                          <div style={{ display: 'flex', gap: '7px' }}>
+                                            <button disabled={reassigningGhaSa || !reassignGhaSaNewCode || reassignGhaSaNewCode === g.sa_id} onClick={async function() {
+                                              setReassigningGhaSa(true);
+                                              try {
+                                                var selectedGhaId = String(g.id || gKey || '');
+                                                var selectedNewSaId = String(reassignGhaSaNewCode || '');
+                                                if (!selectedGhaId || !selectedNewSaId) { setActionMsg('Error: GHA and SA must both be selected.'); return; }
+                                                var token = localStorage.getItem('gh_token');
+                                                console.log('Sending reassign - ghaId:', selectedGhaId, 'newSaId:', selectedNewSaId);
+                                                var res = await fetch(API_URL + '/api/admin/reassign-gha', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ ghaId: selectedGhaId, newSaId: selectedNewSaId }) });
+                                                var data = await res.json();
+                                                if (!res.ok) throw new Error(data.error || 'Failed');
+                                                setAllGHAsAdmin(function(prev){ return prev.map(function(x){ return (x.id || x.gha_code || x.staff_id) === gKey ? Object.assign({}, x, { sa_id: reassignGhaSaNewCode }) : x; }); });
+                                                setReassignGhaSaTarget(null); setReassignGhaSaNewCode('');
+                                                setActionMsg('GHA ' + (g.gha_code || g.staff_id) + ' reassigned to SA ' + (data.new_sa_code || reassignGhaSaNewCode) + '.');
+                                                setTimeout(function(){ setActionMsg(''); }, 6000);
+                                                try { await Promise.all([fetchAllSAs(), fetchAllGHAsAdmin()]); } catch(e) { console.error('Refresh failed:', e.message); }
+                                              } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 5000); }
+                                              finally { setReassigningGhaSa(false); }
+                                            }}
+                                              style={{ padding: '5px 14px', backgroundColor: reassigningGhaSa || !reassignGhaSaNewCode || reassignGhaSaNewCode === g.sa_id ? '#94a3b8' : '#0369a1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: reassigningGhaSa || !reassignGhaSaNewCode || reassignGhaSaNewCode === g.sa_id ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                              {reassigningGhaSa ? 'Reassigning…' : 'Confirm Change SA'}
+                                            </button>
+                                            <button onClick={function(){ setReassignGhaSaTarget(null); setReassignGhaSaNewCode(''); }}
+                                              style={{ padding: '5px 10px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {expandedGHAAgents === gKey && (
+                                        <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+                                          {(() => {
+                                            var ghaAgents = approvedAgents.filter(function(a){ return a.gha_code === (g.gha_code || g.staff_id); });
+                                            return ghaAgents.length === 0 ? (
+                                              <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: 0 }}>No agents linked yet.</p>
+                                            ) : (
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {ghaAgents.map(function(a) {
+                                                  return (
+                                                    <div key={a.id} style={{ backgroundColor: '#f8fafc', borderRadius: '6px', padding: '6px 10px', border: '1px solid #e2e8f0', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '0.74rem' }}>
+                                                      <span style={{ fontWeight: '700', color: '#0a2240' }}>{a.full_name}</span>
+                                                      <span style={{ color: '#94a3b8' }}>{a.email}</span>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        }); })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── INSPECTION PERFORMANCE ── */}
+                <div style={{ marginTop: '28px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: 0 }}>Inspection Performance</h3>
+                    <input type="month" value={ghaInspPerfMonth}
+                      onChange={function(e){ setGhaInspPerfMonth(e.target.value); fetchGhaInspPerfStats(e.target.value); }}
+                      style={{ padding: '5px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.80rem', color: '#0a2240', cursor: 'pointer' }} />
+                    <button onClick={function(){ fetchGhaInspPerfStats(ghaInspPerfMonth); }}
+                      style={{ padding: '5px 12px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                  </div>
+                  {(function() {
+                    if (ghaInspPerfLoading) return (
+                      <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Loading…</p></div>
+                    );
+                    var statsMap = {};
+                    ghaInspPerfStats.forEach(function(s){ statsMap[s.gha_id] = s; });
+                    var rows = allGHAsAdmin.map(function(g) {
+                      var stat = statsMap[g.id] || {};
+                      var saInfo = allSAs.find(function(s){ return s.id === g.sa_id || (s.sa_code || s.staff_id) === g.sa_code; });
+                      return {
+                        gha_code: g.gha_code || g.staff_id || '',
+                        gha_name: g.full_name || g.name || '',
+                        sa_code: g.sa_code || (saInfo && (saInfo.sa_code || saInfo.staff_id)) || '-',
+                        completed: stat.completed_count || 0,
+                        pending: stat.pending_count || 0,
+                      };
+                    });
+                    rows.sort(function(a, b){ return b.completed - a.completed; });
+                    if (rows.length === 0) return (
+                      <div style={{ ...cardStyle, padding: '28px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.82rem' }}>No GHAs found.</p></div>
+                    );
+                    var medalBorder = ['3px solid #f59e0b', '3px solid #94a3b8', '3px solid #cd7f32'];
+                    return (
+                      <div style={{ overflowX: isMobile ? 'auto' : undefined }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 1fr 0.8fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.60rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', minWidth: isMobile ? '500px' : undefined }}>
+                          <span>GHA CODE</span><span>NAME</span><span>SA</span><span>COMPLETED THIS MONTH</span><span>PENDING NOW</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: isMobile ? '500px' : undefined }}>
+                          {rows.map(function(row, idx) {
+                            var isInactive = row.completed === 0;
+                            var borderLeft = idx < 3 ? medalBorder[idx] : '3px solid transparent';
+                            var textColor = isInactive ? '#94a3b8' : '#0a2240';
+                            return (
+                              <div key={row.gha_code + idx} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 1fr 0.8fr', gap: '0 10px', padding: '9px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderLeft: borderLeft, borderRadius: '8px', alignItems: 'center' }}>
+                                <span style={{ fontWeight: '800', fontSize: '0.74rem', color: isInactive ? '#94a3b8' : '#22c55e', fontFamily: "'Inter', sans-serif" }}>{row.gha_code}</span>
+                                <span style={{ fontWeight: '600', fontSize: '0.78rem', color: textColor, fontFamily: "'Inter', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.gha_name}</span>
+                                <span style={{ fontSize: '0.72rem', color: isInactive ? '#94a3b8' : '#475569', fontFamily: "'Inter', sans-serif" }}>{row.sa_code}</span>
+                                <span style={{ fontWeight: '800', fontSize: '0.82rem', color: isInactive ? '#94a3b8' : '#166534', fontFamily: "'Inter', sans-serif" }}>{row.completed}</span>
+                                <span style={{ fontWeight: '700', fontSize: '0.78rem', color: isInactive ? '#94a3b8' : '#b45309', fontFamily: "'Inter', sans-serif" }}>{row.pending}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ── EARNINGS ── */}
+            {adminTab === 'earnings' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Earnings</h2>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input type="month" value={earningsMonth} onChange={function(e){ setEarningsMonth(e.target.value); fetchStaffEarnings(e.target.value); }}
+                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                    <button onClick={function(){ fetchStaffEarnings(earningsMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Load</button>
+                  </div>
+                </div>
+                {/* Sub-tabs */}
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                  {[['gha','GHA Earnings (5%)'],['sa','SA Earnings (5%)']].map(function([t, label]) {
+                    var isActive = earningsSubTab === t;
+                    return (
+                      <button key={t} onClick={function(){ setEarningsSubTab(t); }}
+                        style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {earningsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading earnings…</p></div>
+                ) : (!staffEarnings || ((staffEarnings.gha_earnings || []).length === 0 && (staffEarnings.sa_earnings || []).length === 0)) ? (
+                  <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>No earnings data for this month yet.</p></div>
+                ) : (
+                  <div style={{ overflowX: isMobile ? 'auto' : undefined }}>
+                    {/* Table header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.5fr 1fr 0.8fr 0.8fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', minWidth: isMobile ? '480px' : undefined }}>
+                      <span>{earningsSubTab === 'gha' ? 'GHA' : 'SA'}</span>
+                      <span>AGENTS</span>
+                      <span>SUBSCRIPTIONS</span>
+                      <span>{earningsSubTab === 'gha' ? '5% COMM' : '5% COMM'}</span>
+                      <span>STATUS</span>
+                    </div>
+                    {(earningsSubTab === 'gha' ? (staffEarnings.gha_earnings || []) : (staffEarnings.sa_earnings || [])).length === 0 ? (
+                      <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0' }}>No earnings data for this month yet.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '16px' }}>
+                        {(earningsSubTab === 'gha' ? (staffEarnings.gha_earnings || []) : (staffEarnings.sa_earnings || [])).map(function(s) {
+                          var key = s.id || s.gha_code || s.sa_code;
+                          var prefixedKey = (earningsSubTab === 'gha' ? 'gha_' : 'sa_') + key;
+                          var isPaid = !!s.salary_paid;
+                          var isMarkingNow = !!markingStaffPaid[prefixedKey];
+                          var commField = earningsSubTab === 'gha' ? 'commission_5pct' : 'commission_5pct';
+                          var codeVal = earningsSubTab === 'gha' ? s.gha_code : s.sa_code;
+                          var apiEP = earningsSubTab === 'gha' ? '/api/admin/mark-gha-paid' : '/api/admin/mark-sa-paid';
+                          var idF = earningsSubTab === 'gha' ? 'gha_id' : 'sa_id';
+                          return (
+                            <div key={key} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.5fr 1fr 0.8fr 0.8fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', minWidth: isMobile ? '480px' : undefined }}>
+                              <div>
+                                <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{codeVal || s.full_name}</p>
+                                {s.full_name && codeVal && <p style={{ margin: 0, color: '#64748b', fontSize: '0.68rem' }}>{s.full_name}</p>}
+                              </div>
+                              <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{s.agent_count || s.total_agents || 0}</span>
+                              <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(s.total_subscriptions || 0).toLocaleString()}</span>
+                              <span style={{ fontWeight: '900', color: earningsSubTab === 'gha' ? '#166534' : '#1e40af', fontSize: '0.84rem' }}>₦{Number(s[commField] || 0).toLocaleString()}</span>
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                {isPaid ? (
+                                  <span style={{ fontSize: '0.58rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontWeight: '800', whiteSpace: 'nowrap' }}>PAID{s.salary_paid_at ? ' · ' + new Date(s.salary_paid_at).toLocaleDateString() : ''}</span>
+                                ) : (
+                                  <button onClick={async function() {
+                                    setMarkingStaffPaid(function(prev){ return Object.assign({}, prev, { [prefixedKey]: true }); });
+                                    try {
+                                      var token = localStorage.getItem('gh_token');
+                                      var body = { month: earningsMonth };
+                                      body[idF] = s.id || key;
+                                      var res = await fetch(API_URL + apiEP, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      setStaffEarnings(function(prev) {
+                                        var lk = earningsSubTab === 'gha' ? 'gha_earnings' : 'sa_earnings';
+                                        return Object.assign({}, prev, { [lk]: (prev[lk] || []).map(function(x){ return (x.id || x.gha_code || x.sa_code) === key ? Object.assign({}, x, { salary_paid: true, salary_paid_at: new Date().toISOString() }) : x; }) });
+                                      });
+                                      setActionMsg('Marked paid: ' + (s.full_name || codeVal));
+                                      setTimeout(function(){ setActionMsg(''); }, 4000);
+                                      try {
+                                        if (earningsSubTab === 'gha') { await fetchAllGHAsAdmin(); } else { await fetchAllSAs(); }
+                                        await fetchStaffEarnings(earningsMonth);
+                                      } catch(e) { console.error('Refresh failed:', e.message); }
+                                    } catch(e) { setActionMsg('Error: ' + e.message); setTimeout(function(){ setActionMsg(''); }, 4000); }
+                                    finally { setMarkingStaffPaid(function(prev){ return Object.assign({}, prev, { [prefixedKey]: false }); }); }
+                                  }} disabled={isMarkingNow}
+                                    style={{ padding: '4px 10px', backgroundColor: isMarkingNow ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '700', cursor: isMarkingNow ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                    {isMarkingNow ? '…' : 'Mark Paid'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Grand totals */}
+                    {((staffEarnings.gha_earnings || []).length > 0 || (staffEarnings.sa_earnings || []).length > 0) && (
+                      <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', borderRadius: '12px', padding: '16px 20px', color: '#fff' }}>
+                        <p style={{ margin: '0 0 12px 0', fontWeight: '800', fontSize: '0.70rem', color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em' }}>GRAND TOTALS — {earningsMonth}</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>TOTAL SUBSCRIPTIONS</p>
+                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.total_subscriptions || 0); }, 0)).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>GHA COMMISSIONS (5%)</p>
+                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#22c55e' }}>₦{Number((staffEarnings.gha_earnings || []).reduce(function(s, g){ return s + (g.commission_5pct || 0); }, 0)).toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>SA COMMISSIONS (5%)</p>
+                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#60a5fa' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.commission_5pct || 0); }, 0)).toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {depositViewingProperty && (
+        <PricingModal property={depositViewingProperty} onClose={function(){ setDepositViewingProperty(null); }} user={user} onUserChange={function(){}} />
+      )}
+    </div>
+  );
+}
+function GHADashboard({ staffUser, onLogout }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var token = localStorage.getItem('gh_staff_token');
+  var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
+  var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
+  function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
+
+  const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
+  const [ghaTab, setGhaTab]                         = useState('overview');
+  const [agents, setAgents]                         = useState([]);
+  const [agentsLoading, setAgentsLoading]           = useState(false);
+  const [listings, setListings]                     = useState([]);
+  const [listingsLoading, setListingsLoading]       = useState(false);
+  const [inspections, setInspections]               = useState([]);
+  const [inspLoading, setInspLoading]               = useState(false);
+  const [overview, setOverview]                     = useState(null);
+  const [overviewLoading, setOverviewLoading]       = useState(false);
+  const [actionMsg, setActionMsg]                   = useState('');
+  const [confirmingId, setConfirmingId]             = useState(null);
+  const [verifyingId, setVerifyingId]               = useState(null);
+  const [updatingInspId, setUpdatingInspId]         = useState(null);
+  const [noteEditId, setNoteEditId]                 = useState(null);
+  const [noteDraft, setNoteDraft]                   = useState('');
+  const [savingNoteId, setSavingNoteId]             = useState(null);
+  const [expandedAgent, setExpandedAgent]           = useState(null);
+  const [doneNotes, setDoneNotes]                   = useState({});
+  const [markingDone, setMarkingDone]               = useState(null);
+  const [ghaNotifications, setGhaNotifications]     = useState([]);
+  const [newInspIds, setNewInspIds]                 = useState(new Set());
+  const knownInspIdsRef                             = useRef(new Set());
+  const [ghaNotifs, setGhaNotifs]                   = useState([]);
+  const [unreadCount, setUnreadCount]               = useState(0);
+  const [showNotifDropdown, setShowNotifDropdown]   = useState(false);
+  const [notifLoading, setNotifLoading]             = useState(false);
+  const notifBellRef                                = useRef(null);
+
+  function showMsg(msg) { setActionMsg(msg); setTimeout(function(){ setActionMsg(''); }, 4000); }
+
+  async function fetchOverview() {
+    setOverviewLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/overview', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setOverview(data);
+    } catch(e) { console.error(e); }
+    finally { setOverviewLoading(false); }
+  }
+  async function fetchAgents(silent) {
+    if (!silent) setAgentsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/my-agents', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      console.log('GHA my-agents response:', JSON.stringify(data));
+      setAgents(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { if (!silent) setAgentsLoading(false); }
+  }
+  async function fetchListings() {
+    setListingsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/my-listings', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setListings(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setListingsLoading(false); }
+  }
+  async function fetchInspections(silent) {
+    if (!silent) setInspLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/inspections', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      var list = Array.isArray(data) ? data : [];
+      setInspections(list);
+      var pendingIds = list.filter(function(i){ return !i.status || i.status === 'pending'; }).map(function(i){ return i.id; });
+      var brandNew = pendingIds.filter(function(id){ return !knownInspIdsRef.current.has(id); });
+      if (brandNew.length > 0 && knownInspIdsRef.current.size > 0) {
+        setNewInspIds(function(prev){ var next = new Set(prev); brandNew.forEach(function(id){ next.add(id); }); return next; });
+        var origTitle = document.title;
+        document.title = 'New Inspection - GetHome';
+        setTimeout(function(){ document.title = origTitle; }, 3000);
+      }
+      pendingIds.forEach(function(id){ knownInspIdsRef.current.add(id); });
+    } catch(e) { console.error(e); }
+    finally { if (!silent) setInspLoading(false); }
+  }
+
+  const fetchGHANotifications = async function() {
+    try {
+      var res = await fetch(API_URL + '/api/gha/notifications', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) {
+        var notifList = data.notifications || (Array.isArray(data) ? data : []);
+        setGhaNotifs(notifList);
+        setGhaNotifications(notifList);
+        setUnreadCount(data.unread_count !== undefined ? data.unread_count : notifList.filter(function(n){ return !n.is_read && !n.read; }).length);
+      }
+    } catch(e) { console.error('Notif fetch error:', e.message); }
+  };
+
+  async function markAllRead() {
+    try {
+      var tkn = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/gha/mark-notifications-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn }
+      });
+      setUnreadCount(0);
+      setGhaNotifs(function(prev){ return prev.map(function(n){ return Object.assign({}, n, { is_read: true, read: true }); }); });
+      setGhaNotifications(function(prev){ return prev.map(function(n){ return Object.assign({}, n, { is_read: true, read: true }); }); });
+    } catch(e) { console.error('markAllRead error:', e.message); }
+  }
+
+  const fetchGHAProfile = async function() {
+    try {
+      var tkn = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/gha/profile', {
+        headers: { Authorization: 'Bearer ' + tkn }
+      });
+      if (res.ok) {
+        var data = await res.json();
+        setGhaProfile(data);
+        var stored = JSON.parse(localStorage.getItem('gh_staff_user') || '{}');
+        localStorage.setItem('gh_staff_user', JSON.stringify(Object.assign({}, stored, data)));
+      }
+    } catch(e) { console.error('GHA profile fetch error:', e.message); }
+  };
+
+  useEffect(function() { fetchGHAProfile(); }, []);
+
+  useEffect(function() {
+    fetchOverview(); fetchAgents(); fetchGHANotifications();
+    var notifInterval = setInterval(fetchGHANotifications, 20000);
+    return function() { clearInterval(notifInterval); };
+  }, []);
+  useEffect(function() {
+    if (ghaTab === 'inspections') {
+      fetchInspections();
+      var inspInterval = setInterval(function(){ fetchInspections(true); }, 15000);
+      return function() { clearInterval(inspInterval); };
+    }
+    if (ghaTab === 'agents') {
+      fetchAgents();
+      var agentsInterval = setInterval(function(){ fetchAgents(true); }, 20000);
+      return function() { clearInterval(agentsInterval); };
+    }
+  }, [ghaTab]);
+  useEffect(function() {
+    function handleClickOutside(e) {
+      if (notifBellRef.current && !notifBellRef.current.contains(e.target)) {
+        setShowNotifDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return function() { document.removeEventListener('mousedown', handleClickOutside); };
+  }, []);
+
+  var activeSubscriptions = agents.filter(function(a) { return a.subscription_tier && a.subscription_tier !== 'free' && a.subscription_expires_at && new Date(a.subscription_expires_at) > new Date(); }).length;
+  var expiredSubscriptions = agents.filter(function(a) { return a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date(); }).length;
+  var monthlyEarnings = agents.reduce(function(sum, a) { return sum + (TIER_PRICE[a.subscription_tier] || 0) * 0.05; }, 0);
+
+  function verLevelBadge(level) {
+    var cfg = { basic: { bg: '#f1f5f9', color: '#64748b', label: 'Basic' }, verified: { bg: '#f0fff4', color: '#166534', label: 'Verified' }, premium: { bg: '#eff6ff', color: '#1e40af', label: 'Premium' } };
+    var c = cfg[level] || cfg.basic;
+    return <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid currentColor', fontFamily: "'Inter', sans-serif" }}>{c.label}</span>;
+  }
+  function tierBadge(tier) {
+    var cfg = { free: { bg: '#f1f5f9', color: '#64748b' }, premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
+    var c = cfg[tier] || cfg.free;
+    return <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid currentColor', fontFamily: "'Inter', sans-serif" }}>{(tier || 'free').toUpperCase()}</span>;
+  }
+  function statusBadge(status) {
+    var cfg = { pending: { bg: '#fffbeb', color: '#92400e', border: '#fde68a' }, confirmed: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' }, completed: { bg: '#f0fff4', color: '#166534', border: '#86efac' }, cancelled: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' } };
+    var c = cfg[status] || cfg.pending;
+    return <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid ' + c.border, fontFamily: "'Inter', sans-serif" }}>{(status || 'pending').toUpperCase()}</span>;
+  }
+
+  return (
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+      <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes newAssignFlash { 0%,100%{border-color:#27ae60;box-shadow:0 0 0 3px rgba(39,174,96,0.20)} 50%{border-color:transparent;box-shadow:none} } .new-assignment-card { animation: newAssignFlash 1s ease-in-out infinite; }`}</style>
+
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', padding: isMobile ? '14px 16px' : '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', boxShadow: '0 4px 20px rgba(10,34,64,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ backgroundColor: '#22c55e', borderRadius: '12px', padding: '8px 14px', fontWeight: '900', fontSize: '1.1rem', color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{staffUser.staff_id || staffUser.staffId || 'GHA'}</div>
+          <div>
+            <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{staffUser.full_name || staffUser.name || 'GetHome Agent'}</p>
+            <p style={{ margin: 0, color: 'rgba(255,255,255,0.55)', fontSize: '0.75rem' }}>GHA Portal</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button onClick={function(){ fetchOverview(); fetchAgents(); fetchGHANotifications(); if (ghaTab === 'listings') fetchListings(); if (ghaTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
+
+          {/* Notification Bell */}
+          <div ref={notifBellRef} style={{ position: 'relative', display: 'inline-block' }}>
+            <button onClick={function(){ setShowNotifDropdown(function(v){ return !v; }); }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', padding: '8px', color: 'white', fontSize: '1.3rem', lineHeight: 1 }}>
+              🔔
+              {unreadCount > 0 && (
+                <span style={{ position: 'absolute', top: 0, right: 0, width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                  {unreadCount < 10 ? unreadCount : '9+'}
+                </span>
+              )}
+            </button>
+
+            {showNotifDropdown && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, width: isMobile ? '280px' : '320px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: '420px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+                {/* Dropdown header */}
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                  <span style={{ fontWeight: 700, color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Notifications</span>
+                  <button onClick={function(){ markAllRead(); setShowNotifDropdown(false); }}
+                    style={{ color: '#27ae60', fontSize: '0.74rem', cursor: 'pointer', background: 'none', border: 'none', fontWeight: 600, fontFamily: "'Inter', sans-serif" }}>Mark all read</button>
+                </div>
+
+                {/* Notification items */}
+                {ghaNotifs.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <div style={{ fontSize: '1.8rem' }}>🔔</div>
+                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No notifications yet</p>
+                  </div>
+                ) : ghaNotifs.map(function(notif) {
+                  var iconBg = notif.type === 'inspection_passed' ? '#22c55e' : notif.type === 'agent_verification' ? '#3b82f6' : '#f59e0b';
+                  var iconChar = notif.type === 'inspection_passed' ? '✓' : notif.type === 'agent_verification' ? '👤' : '🔍';
+                  var isRead = notif.is_read || notif.read;
+                  var createdAt = notif.created_at ? new Date(notif.created_at) : null;
+                  var timeAgo = '';
+                  if (createdAt) {
+                    var diffMs = Date.now() - createdAt.getTime();
+                    var diffMins = Math.floor(diffMs / 60000);
+                    if (diffMins < 1) timeAgo = 'Just now';
+                    else if (diffMins < 60) timeAgo = diffMins + 'm ago';
+                    else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
+                    else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
+                  }
+                  return (
+                    <div key={notif.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: !isRead ? '#f0fff4' : '#fff', cursor: 'pointer' }}
+                      onClick={function(){ setGhaNotifs(function(prev){ return prev.map(function(n){ return n.id === notif.id ? Object.assign({}, n, { is_read: true, read: true }) : n; }); }); }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: iconBg, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '0.82rem' }}>
+                          {iconChar}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: 0, fontWeight: 700, color: '#0a2240', fontSize: '0.82rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{notif.title || 'Notification'}</p>
+                          <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.76rem', lineHeight: 1.5, fontFamily: "'Inter', sans-serif" }}>{notif.message || ''}</p>
+                          <p style={{ margin: '4px 0 0 0', color: '#94a3b8', fontSize: '0.70rem', fontFamily: "'Inter', sans-serif" }}>{timeAgo}</p>
+                          {notif.type === 'agent_verification' && (
+                            <button onClick={function(e){ e.stopPropagation(); setGhaTab('agents'); setShowNotifDropdown(false); }}
+                              style={{ marginTop: '6px', padding: '4px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              Confirm Agent
+                            </button>
+                          )}
+                          {notif.type === 'inspection_passed' && (
+                            <button onClick={function(e){ e.stopPropagation(); setGhaTab('inspections'); setShowNotifDropdown(false); }}
+                              style={{ marginTop: '6px', padding: '4px 10px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              View Inspection
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <button onClick={onLogout} style={{ padding: '7px 16px', border: 'none', borderRadius: '8px', backgroundColor: '#ef4444', color: '#fff', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>Logout</button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div style={{ padding: isMobile ? '20px 14px' : '32px', maxWidth: '1100px', margin: '0 auto' }}>
+
+        {actionMsg && (
+          <div style={{ backgroundColor: actionMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (actionMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontWeight: '600', fontSize: '0.86rem', color: actionMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{actionMsg}</p>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? '4px' : undefined }}>
+          {[['overview','Overview'],['agents','My Agents'],['listings','Listings'],['inspections','Inspections']].map(function([t, label]) {
+            var active = ghaTab === t;
+            var tabBadge = t === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
+            return (
+              <button key={t} onClick={function(){
+                setGhaTab(t);
+                if (t === 'listings' && listings.length === 0) fetchListings();
+                if (t === 'inspections' && inspections.length === 0) fetchInspections();
+              }} style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {label}
+                {tabBadge > 0 && (
+                  <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4', animation: 'newAssignFlash 1s ease-in-out infinite' }}>{tabBadge}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── OVERVIEW ── */}
+        {ghaTab === 'overview' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+            {overviewLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading...</p></div>
+            ) : (
+              <div>
+                {/* Identity cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                  <div style={{ ...cardSt, padding: '18px 20px' }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY GHA CODE</p>
+                    <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ghaProfile.gha_code || staffUser.code || staffUser.gha_code || 'Not assigned'}</p>
+                  </div>
+                  <div style={{ ...cardSt, padding: '18px 20px' }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>SA ASSIGNED TO</p>
+                    <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ghaProfile.sa_name || staffUser.sa_name || 'Not assigned'}</p>
+                    {ghaProfile.sa_whatsapp && (
+                      <a
+                        href={'https://wa.me/' + ghaProfile.sa_whatsapp.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent('Hello, I am GHA ' + (ghaProfile.gha_code || '') + ', I need to discuss something with you.')}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '10px', padding: '7px 14px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.76rem', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>
+                        Contact SA on WhatsApp
+                      </a>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stat cards */}
+                <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                  {[
+                    { label: 'TOTAL AGENTS',   value: ghaProfile.agent_count || 0, borderColor: '#0a2240' },
+                    { label: 'ACTIVE SUBS',    value: activeSubscriptions,          borderColor: '#27ae60' },
+                    { label: 'EXPIRED',        value: expiredSubscriptions,         borderColor: '#ef4444' },
+                  ].map(function(s) {
+                    return (
+                      <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
+                        <p style={{ fontSize: isMobile ? '1.6rem' : '2rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
+                        <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Earnings card */}
+                <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS (5%)</p>
+                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(monthlyEarnings)}</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
+                    {overview?.earnings_paid
+                      ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
+                      : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MY AGENTS ── */}
+        {ghaTab === 'agents' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents</h2>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '10px 14px', marginBottom: '20px' }}>
+              <span style={{ fontSize: '1rem', flexShrink: 0 }}>ℹ️</span>
+              <p style={{ margin: 0, color: '#0369a1', fontSize: '0.78rem', fontWeight: '600', fontFamily: "'Inter', sans-serif", lineHeight: '1.5' }}>Agents are assigned to you by your SA. Contact your SA to add agents under you.</p>
+            </div>
+            {agentsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading agents...</p></div>
+            ) : agents.length === 0 ? (
+              <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>👤</div>
+                <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No agents assigned to your GHA yet</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {agents.map(function(a) {
+                  var expired = a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date();
+                  var agentKey = a.id || a.email;
+                  var isExpanded = expandedAgent === agentKey;
+                  var isConfirming = confirmingId === agentKey;
+                  var isGhaVerified = !!a.gha_confirmed;
+                  return (
+                    <div key={agentKey} style={{ ...cardSt, padding: '18px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '12px', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '1rem', flexShrink: 0 }}>{(a.full_name || a.email || 'A')[0].toUpperCase()}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.9rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.full_name || a.name || 'Agent'}</p>
+                          <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{a.email}</p>
+                          {a.phone && <p style={{ margin: '0 0 6px 0', color: '#94a3b8', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif" }}>{a.phone}</p>}
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {verLevelBadge(a.verification_level || a.level)}
+                            {tierBadge(a.subscription_tier)}
+                            <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff', fontFamily: "'Inter', sans-serif" }}>{a.listing_count || 0} Listings</span>
+                            {(a.is_subscription_expired || expired) ? (
+                              <>
+                                <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', fontFamily: "'Inter', sans-serif" }}>EXPIRED</span>
+                                {a.subscription_expires_at && <span style={{ fontSize: '0.64rem', color: '#ef4444', alignSelf: 'center', fontFamily: "'Inter', sans-serif" }}>Expires: {new Date(a.subscription_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                              </>
+                            ) : a.subscription_expires_at ? (
+                              <span style={{ fontSize: '0.64rem', color: '#94a3b8', alignSelf: 'center', fontFamily: "'Inter', sans-serif" }}>Expires: {new Date(a.subscription_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            ) : null}
+                            {isGhaVerified && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>GHA CONFIRMED</span>}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: isMobile ? '100%' : undefined }}>
+                          <button onClick={function(){ window.open('https://wa.me/' + (a.phone || '').replace(/\D/g,'') + '?text=' + encodeURIComponent('Hello ' + (a.full_name || 'Agent') + ', this is your GetHome GHA. Please check your registration details.'), '_blank'); }}
+                            style={{ padding: '6px 12px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                            WhatsApp
+                          </button>
+                          {!isGhaVerified && (
+                            <button onClick={async function() {
+                              console.log('Agent id for this card:', a.id);
+                              setConfirmingId(agentKey);
+                              try {
+                                var res = await fetch(API_URL + '/api/gha/confirm-agent', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                  body: JSON.stringify({ agent_id: a.id, agentEmail: a.email })
+                                });
+                                var data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Failed');
+                                setAgents(function(prev) { return prev.map(function(x){ return (x.id || x.email) === agentKey ? Object.assign({}, x, { gha_confirmed: true }) : x; }); });
+                                showMsg('Agent details confirmed. Passed to SA for approval.');
+                              } catch(e) { showMsg('Error: ' + e.message); }
+                              finally { setConfirmingId(null); }
+                            }} disabled={isConfirming}
+                              style={{ padding: '6px 12px', backgroundColor: isConfirming ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                              {isConfirming ? 'Confirming…' : 'Confirm Details'}
+                            </button>
+                          )}
+                          <button onClick={function(){ setExpandedAgent(isExpanded ? null : agentKey); }}
+                            style={{ padding: '6px 12px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1.5px solid #bfdbfe', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                            {isExpanded ? 'Hide Details' : 'View Details'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expanded registration details */}
+                      {isExpanded && (
+                        <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1.5px solid #f1f5f9' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px 20px' }}>
+                            {[
+                              ['Full Name', a.full_name || a.name],
+                              ['Email', a.email],
+                              ['Phone', a.phone],
+                              ['Office Address', a.office_address || a.address],
+                              ['Experience', a.experience],
+                              ['Specialty', a.specialty],
+                              ['NIN', a.nin_number ? ('XXXXXXX' + String(a.nin_number).slice(-4)) : null],
+                              ['CAC Number', a.cac_number],
+                              ['Bank Name', a.bank_name],
+                              ['Account Number', a.account_number],
+                              ['Account Name', a.account_name],
+                              ['Status', a.status],
+                              ['Joined', a.created_at ? new Date(a.created_at).toLocaleDateString() : null],
+                            ].map(function([label, val]) {
+                              if (!val) return null;
+                              return (
+                                <div key={label}>
+                                  <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>{label}</p>
+                                  <p style={{ margin: '1px 0 0 0', fontSize: '0.80rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{val}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {(a.about || a.about_self) && (
+                            <div style={{ marginTop: '10px' }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>About</p>
+                              <p style={{ margin: 0, fontSize: '0.80rem', color: '#475569', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{a.about || a.about_self}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── LISTINGS ── */}
+        {ghaTab === 'listings' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agent Listings</h2>
+            <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>All properties listed by agents under your GHA. You can physically verify and GHA-stamp listings.</p>
+            {listingsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading listings...</p></div>
+            ) : listings.length === 0 ? (
+              <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🏠</div>
+                <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No listings from your agents yet</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {listings.map(function(p) {
+                  var isVerifying = verifyingId === p.id;
+                  var isVerified = !!p.gha_verified;
+                  var purposeColors = { rent: { bg: '#eff6ff', color: '#1e40af' }, sale: { bg: '#fef9ee', color: '#b45309' }, shortlet: { bg: '#f5f3ff', color: '#7c3aed' } };
+                  var pc = purposeColors[p.purpose] || { bg: '#f1f5f9', color: '#64748b' };
+                  return (
+                    <div key={p.id} style={{ ...cardSt, padding: '16px 18px', display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                      {p.image_url && (
+                        <img src={p.image_url} alt={p.title} loading="lazy"
+                          style={{ width: '72px', height: '60px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }}
+                          onError={function(e){ e.target.style.display='none'; }} />
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.9rem', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</p>
+                        <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{p.location}</p>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                          {p.purpose && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: pc.bg, color: pc.color, fontFamily: "'Inter', sans-serif" }}>{p.purpose.toUpperCase()}</span>}
+                          {p.is_sold
+                            ? <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', fontFamily: "'Inter', sans-serif" }}>SOLD</span>
+                            : <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>ACTIVE</span>
+                          }
+                          {isVerified && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #22c55e', fontFamily: "'Inter', sans-serif" }}>GHA VERIFIED</span>}
+                        </div>
+                        <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Agent: {p.agent_name || p.agent_email || '—'}</p>
+                        <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>₦{Number(p.price || 0).toLocaleString()}</p>
+                      </div>
+                      {!isVerified && (
+                        <button onClick={async function() {
+                          setVerifyingId(p.id);
+                          try {
+                            var res = await fetch(API_URL + '/api/gha/verify-listing', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                              body: JSON.stringify({ property_id: p.id })
+                            });
+                            var data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Failed');
+                            setListings(function(prev) { return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { gha_verified: true }) : x; }); });
+                            showMsg('Listing marked as GHA Verified.');
+                          } catch(e) { showMsg('Error: ' + e.message); }
+                          finally { setVerifyingId(null); }
+                        }} disabled={isVerifying}
+                          style={{ padding: '8px 14px', backgroundColor: isVerifying ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isVerifying ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
+                          {isVerifying ? 'Verifying…' : 'Mark GHA Verified'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── INSPECTIONS ── */}
+        {ghaTab === 'inspections' && (
+          <div>
+            {/* Heading + refresh */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Assigned Inspections</h2>
+              <button onClick={fetchInspections} style={{ padding: '7px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', color: '#0a2240', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Refresh</button>
+            </div>
+
+            {/* Summary row */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length} Pending
+              </span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} Done
+              </span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return i.status === 'confirmed'; }).length} Confirmed
+              </span>
+            </div>
+
+            {inspLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
+            ) : inspections.length === 0 ? (
+              <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>📋</div>
+                <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No inspections assigned to you yet</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                {/* ── NEW ASSIGNMENTS ── */}
+                {newInspIds.size > 0 && (
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                      <h3 style={{ margin: 0, color: '#166534', fontSize: '0.88rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New Assignments</h3>
+                      <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{newInspIds.size} NEW</span>
+                    </div>
+                    {inspections.filter(function(i){ return newInspIds.has(i.id); }).map(function(insp) {
+                      var inspDateStr = insp.inspection_date || insp.requested_date;
+                      var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                      var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
+                      var rawPhone = (insp.customer_phone || insp.phone || '').replace(/\D/g, '');
+                      var ghaName = staffUser.full_name || staffUser.name || 'your GetHome agent';
+                      var propAddr = insp.property_address || insp.property_title || 'the property';
+                      var waMsg = encodeURIComponent('Hello, I am ' + ghaName + ' from GetHome. I am your assigned inspection agent for the property at ' + propAddr + '. Your inspection is scheduled for ' + waDateStr + '. Please confirm this is still convenient for you.');
+                      return (
+                        <div key={insp.id} className="new-assignment-card" style={{ borderRadius: '14px', border: '3px solid #27ae60', backgroundColor: '#f0fff4', padding: '18px 20px', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                            <span style={{ padding: '3px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', backgroundColor: '#22c55e', color: '#fff', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>NEW</span>
+                            <button onClick={function(){ setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; }); }}
+                              style={{ padding: '4px 10px', backgroundColor: 'transparent', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', color: '#166534', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              Acknowledge
+                            </button>
+                          </div>
+                          <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{propAddr}</p>
+                          <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
+                          {(insp.customer_email || insp.user_email) && <p style={{ margin: '0 0 10px 0', fontSize: '0.76rem', color: '#1e40af', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email || insp.user_email}</p>}
+                          <div style={{ backgroundColor: '#dcfce7', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '1rem', flexShrink: 0 }}>📅</span>
+                            <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{inspDateFmt}</p>
+                          </div>
+                          {rawPhone && (
+                            <a href={'https://wa.me/' + rawPhone + '?text=' + waMsg} target="_blank" rel="noreferrer"
+                              style={{ display: 'block', width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
+                              WhatsApp Customer: {insp.customer_phone || insp.phone}
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── ALL INSPECTIONS ── */}
+                {inspections.slice().sort(function(a, b){
+                  return new Date(a.inspection_date || a.requested_date || 0) - new Date(b.inspection_date || b.requested_date || 0);
+                }).map(function(insp) {
+                  var status = insp.status || 'pending';
+                  var isNew = newInspIds.has(insp.id);
+                  var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#cbd5e1';
+                  var isMarkingThisOne = markingDone === insp.id;
+                  var currentNote = doneNotes[insp.id] || '';
+                  var rawPhone = (insp.customer_phone || insp.phone || '').replace(/\D/g, '');
+                  var inspDateStr = insp.inspection_date || insp.requested_date;
+                  var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                  var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
+                  var ghaName = staffUser.full_name || staffUser.name || 'your GetHome agent';
+                  var propAddr = insp.property_address || insp.property_title || 'the property';
+                  var waMsg = encodeURIComponent('Hello, I am ' + ghaName + ' from GetHome. I am your assigned inspection agent for the property at ' + propAddr + '. Your inspection is scheduled for ' + waDateStr + '. Please confirm this is still convenient for you.');
+                  var MIN_NOTES = 20;
+                  var noteOk = currentNote.trim().length >= MIN_NOTES;
+                  return (
+                    <div key={insp.id} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + (isNew ? '#27ae60' : borderColor) }}>
+
+                      {/* Top: address + NEW badge */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                        <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Plus Jakarta Sans', sans-serif", flex: 1 }}>{propAddr}</p>
+                        {isNew && <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', backgroundColor: '#22c55e', color: '#fff', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>NEW</span>}
+                      </div>
+
+                      {/* Customer section */}
+                      <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1.5px solid #e2e8f0' }}>
+                        <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER</p>
+                        <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
+                        {(insp.customer_email || insp.user_email) && (
+                          <a href={'mailto:' + (insp.customer_email || insp.user_email)} style={{ display: 'block', fontSize: '0.78rem', color: '#1e40af', textDecoration: 'none', marginBottom: rawPhone ? '10px' : '0', fontFamily: "'Inter', sans-serif" }}>
+                            {insp.customer_email || insp.user_email}
+                          </a>
+                        )}
+                        {rawPhone && (
+                          <a href={'https://wa.me/' + rawPhone + '?text=' + waMsg} target="_blank" rel="noreferrer"
+                            style={{ display: 'block', padding: '11px 14px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', fontWeight: '700', fontSize: '0.86rem', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }}>
+                            WhatsApp: {insp.customer_phone || insp.phone}
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Inspection date/time */}
+                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>📅</span>
+                        <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{inspDateFmt}</p>
+                      </div>
+
+                      {/* Badges */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>
+                          {insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}
+                        </span>
+                        {status === 'gha_done' && (
+                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>Awaiting SA Confirmation</span>
+                        )}
+                        {status === 'confirmed' && (
+                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
+                            ✓ Confirmed{insp.confirmed_at ? ' · ' + new Date(insp.confirmed_at).toLocaleDateString() : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* SA notes */}
+                      {(insp.sa_notes || insp.notes) && (
+                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1.5px solid #e2e8f0' }}>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>SA NOTES</p>
+                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#475569', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.sa_notes || insp.notes}</p>
+                        </div>
+                      )}
+
+                      {/* GHA notes (once submitted) */}
+                      {insp.gha_notes && status !== 'pending' && (
+                        <div style={{ backgroundColor: '#fffbeb', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1.5px solid #fde68a' }}>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#92400e', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>MY INSPECTION NOTES</p>
+                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#78350f', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
+                        </div>
+                      )}
+
+                      {/* CONFIRMED: green checkmark card */}
+                      {status === 'confirmed' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f0fff4', borderRadius: '10px', padding: '12px 16px', border: '1.5px solid #86efac' }}>
+                          <span style={{ fontSize: '1.4rem' }}>✅</span>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>Inspection Confirmed by SA</p>
+                            {insp.confirmed_at && <p style={{ margin: 0, fontSize: '0.72rem', color: '#4ade80', fontFamily: "'Inter', sans-serif" }}>on {new Date(insp.confirmed_at).toLocaleDateString()}</p>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PENDING: Mark as Done flow */}
+                      {status === 'pending' && (
+                        <div>
+                          {!isMarkingThisOne ? (
+                            <button onClick={function(){ setMarkingDone(insp.id); setDoneNotes(function(prev){ return Object.assign({}, prev, { [insp.id]: '' }); }); if (isNew) setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; }); }}
+                              style={{ width: '100%', padding: '13px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '1rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.2px' }}>
+                              Mark as Done
+                            </button>
+                          ) : (
+                            <div>
+                              <p style={{ margin: '0 0 6px 0', fontSize: '0.78rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Inspection Notes <span style={{ color: '#94a3b8', fontWeight: '400' }}>(minimum 20 characters)</span></p>
+                              <textarea
+                                value={currentNote}
+                                onChange={function(e){ var v = e.target.value; setDoneNotes(function(prev){ return Object.assign({}, prev, { [insp.id]: v }); }); }}
+                                placeholder="Describe what you found, condition of the property, any issues observed, your recommendations for the customer…"
+                                rows={5}
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid ' + (currentNote.length > 0 && !noteOk ? '#fca5a5' : '#e2e8f0'), fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", resize: 'vertical', color: '#0a2240', lineHeight: '1.6', boxSizing: 'border-box', marginBottom: '4px' }}
+                              />
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                <span style={{ fontSize: '0.72rem', color: noteOk ? '#166534' : currentNote.length > 0 ? '#b91c1c' : '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
+                                  {currentNote.trim().length} / 20 characters{noteOk ? ' ✓' : ''}
+                                </span>
+                                <button onClick={function(){ setMarkingDone(null); }} style={{ fontSize: '0.72rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Cancel</button>
+                              </div>
+                              <button onClick={async function() {
+                                if (!noteOk) { showMsg('Error: Please write at least 20 characters of inspection notes.'); return; }
+                                try {
+                                  var res = await fetch(API_URL + '/api/gha/mark-inspection-done', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ inspection_id: insp.id, notes: currentNote })
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'gha_done', gha_notes: currentNote, gha_done_at: new Date().toISOString() }) : x; }); });
+                                  setMarkingDone(null);
+                                  setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; });
+                                  showMsg('Inspection marked as done. Awaiting SA confirmation.');
+                                } catch(e) { showMsg('Error: ' + e.message); }
+                              }} disabled={!noteOk}
+                                style={{ width: '100%', padding: '13px', backgroundColor: noteOk ? '#22c55e' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '1rem', cursor: noteOk ? 'pointer' : 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
+                                Submit Inspection Report
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* GHA DONE: submitted state */}
+                      {status === 'gha_done' && (
+                        <button disabled style={{ width: '100%', padding: '11px', backgroundColor: '#fef3c7', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
+                          Submitted — Awaiting SA Confirmation
+                        </button>
+                      )}
+
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+function SADashboard({ staffUser, onLogout }) {
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  var token = localStorage.getItem('gh_staff_token');
+  var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
+  function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
+  var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
+
+  const [saTab, setSaTab]                     = useState('overview');
+  const [ghas, setGhas]                       = useState([]);
+  const [ghasLoading, setGhasLoading]         = useState(false);
+  const [agents, setAgents]                   = useState([]);
+  const [agentsLoading, setAgentsLoading]     = useState(false);
+  const [agentSearch, setAgentSearch]         = useState('');
+  const [expandedGha, setExpandedGha]         = useState(null);
+  const [subscriptions, setSubscriptions]     = useState([]);
+  const [subsLoading, setSubsLoading]         = useState(false);
+  const [subMonth, setSubMonth]               = useState(new Date().toISOString().slice(0, 7));
+  const [deposits, setDeposits]               = useState([]);
+  const [depositsLoading, setDepositsLoading] = useState(false);
+  const [depositMsg, setDepositMsg]           = useState('');
+  const [confirmingId, setConfirmingId]       = useState(null);
+  const [actionMsg, setActionMsg]             = useState('');
+  const [assigningAgentId, setAssigningAgentId] = useState(null);
+  const [assignGhaCode, setAssignGhaCode]     = useState('');
+  const [approvingAgentId, setApprovingAgentId] = useState(null);
+  const [showAddGha, setShowAddGha]             = useState(false);
+  const [addGhaForm, setAddGhaForm]             = useState({ full_name: '', email: '', phone: '', location: '', password: '' });
+  const [addGhaLoading, setAddGhaLoading]       = useState(false);
+  const [addGhaMsg, setAddGhaMsg]               = useState('');
+  const [addAgentGhaId, setAddAgentGhaId]       = useState(null);
+  const [agentSearchEmail, setAgentSearchEmail] = useState('');
+  const [agentSearchResult, setAgentSearchResult] = useState(null);
+  const [agentSearchLoading, setAgentSearchLoading] = useState(false);
+  const [agentSearchMsg, setAgentSearchMsg]     = useState('');
+  const [assigningToGha, setAssigningToGha]     = useState(false);
+  const [inspections, setInspections]           = useState([]);
+  const [inspLoading, setInspLoading]           = useState(false);
+  const [showCreateInsp, setShowCreateInsp]     = useState(false);
+  const [inspMsg, setInspMsg]                   = useState('');
+  const [inspForm, setInspForm]                 = useState({
+    property_id: '', customer_name: '', customer_email: '',
+    customer_phone: '', inspection_date: '', gha_id: '',
+    property_address: '', notes: '', inspection_type: 'physical'
+  });
+  const [notifications, setNotifications]           = useState([]);
+  const [assigningNotifId, setAssigningNotifId]     = useState(null);
+  const [assignNotifGhaId, setAssignNotifGhaId]     = useState('');
+  const [assignNotifDate, setAssignNotifDate]       = useState('');
+  const [assignNotifNotes, setAssignNotifNotes]     = useState('');
+  const [assignNotifMsg, setAssignNotifMsg]         = useState('');
+  const [assignNotifLoading, setAssignNotifLoading] = useState(false);
+  const [profileForm, setProfileForm]               = useState({
+    full_name: staffUser.full_name || staffUser.name || '',
+    phone: staffUser.phone || '',
+    location: staffUser.location || '',
+    whatsapp_number: staffUser.whatsapp_number || '',
+  });
+  const [profileMsg, setProfileMsg]                 = useState('');
+  const [profileLoading, setProfileLoading]         = useState(false);
+  const [showWaBanner, setShowWaBanner]             = useState(!staffUser.whatsapp_number || !staffUser.whatsapp_number.trim());
+  const [pendingAgents, setPendingAgents]           = useState([]);
+  const [ghaInspectionAgents, setGhaInspectionAgents] = useState([]);
+  const [approvedAgents, setApprovedAgents]         = useState([]);
+  const [saGhas, setSaGhas]                         = useState([]);
+  const [selectedGhaForAgent, setSelectedGhaForAgent] = useState({});
+  const [agentWorkflowMsg, setAgentWorkflowMsg]     = useState('');
+  const [agentTab, setAgentTab]                     = useState('pending');
+  const [pendingAgentAction, setPendingAgentAction] = useState({});
+  const [rejectingAgentId, setRejectingAgentId]     = useState(null);
+  const [rejectReason, setRejectReason]             = useState('');
+  const [expandedPendingId, setExpandedPendingId]   = useState(null);
+  const [allMyAgents, setAllMyAgents]               = useState([]);
+  const [expandedGhaId, setExpandedGhaId]           = useState(null);
+  const [inspectionStats, setInspectionStats]       = useState([]);
+  const [statsMonth, setStatsMonth]                 = useState(new Date().toISOString().slice(0, 7));
+
+  async function fetchGhas() {
+    setGhasLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/my-ghas', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setGhas(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setGhasLoading(false); }
+  }
+
+  async function fetchAgents() {
+    setAgentsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/my-agents', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setAgents(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setAgentsLoading(false); }
+  }
+
+  async function fetchSubscriptions() {
+    setSubsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/subscriptions?month=' + subMonth, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setSubscriptions(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setSubsLoading(false); }
+  }
+
+  async function fetchDeposits() {
+    setDepositsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/deposits', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setDeposits(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { setDepositsLoading(false); }
+  }
+
+  async function fetchInspections(silent) {
+    if (!silent) setInspLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/inspections', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setInspections(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+    finally { if (!silent) setInspLoading(false); }
+  }
+
+  async function fetchNotifications() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      console.log('[fetchNotifications] token at', new Date().toISOString(), ':', token ? token.substring(0, 15) + '...' : 'NULL/EMPTY');
+      var res = await fetch(API_URL + '/api/sa/notifications', { headers: { Authorization: 'Bearer ' + token } });
+      if (res.ok) {
+        var data = await res.json();
+        setNotifications(Array.isArray(data) ? data : []);
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  async function fetchPendingAgents() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/sa/pending-agents', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      console.log('Pending agents response:', data);
+      setPendingAgents(data.pending || []);
+      console.log('Set pendingAgents count:', (data.pending || []).length);
+      setGhaInspectionAgents(data.pending_gha_inspection || []);
+      setApprovedAgents(data.approved || []);
+    } catch(e) {
+      console.error('Fetch pending agents error:', e.message);
+    }
+  }
+
+  async function fetchSaGhas() {
+    try {
+      var res = await fetch(API_URL + '/api/sa/my-ghas', { headers: { Authorization: 'Bearer ' + token } });
+      if (res.ok) {
+        var data = await res.json();
+        setSaGhas(Array.isArray(data) ? data : []);
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  async function fetchAllMyAgents() {
+    try {
+      var res = await fetch(API_URL + '/api/sa/my-agents', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setAllMyAgents(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+  }
+
+  async function fetchInspectionStats() {
+    try {
+      var res = await fetch(API_URL + '/api/gha-inspection-stats?month=' + statsMonth, { headers: { Authorization: 'Bearer ' + token } });
+      if (res.ok) {
+        var data = await res.json();
+        setInspectionStats(Array.isArray(data) ? data : []);
+      }
+    } catch(e) { console.error(e); }
+  }
+
+  async function syncProfile() {
+    try {
+      var res = await fetch(API_URL + '/api/sa/profile', { headers: { Authorization: 'Bearer ' + token } });
+      if (res.ok) {
+        var data = await res.json();
+        var synced = Object.assign({}, staffUser, data);
+        localStorage.setItem('gh_staff_user', JSON.stringify(synced));
+        setProfileForm(function(f) {
+          return Object.assign({}, f, {
+            full_name: data.full_name || f.full_name,
+            phone: data.phone || f.phone,
+            location: data.location || f.location,
+            whatsapp_number: data.whatsapp_number || f.whatsapp_number,
+          });
+        });
+        if (data.whatsapp_number && data.whatsapp_number.trim()) {
+          setShowWaBanner(false);
+        }
+      }
+    } catch(e) { /* silent — dashboard works even if profile sync fails */ }
+  }
+
+  useEffect(function() {
+    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile();
+    var notifInterval = setInterval(fetchNotifications, 30000);
+    return function() { clearInterval(notifInterval); };
+  }, []);
+  useEffect(function() {
+    if (saTab === 'subscriptions') fetchSubscriptions();
+    if (saTab === 'inspections') {
+      fetchInspections();
+      var inspInterval = setInterval(function(){ fetchInspections(true); }, 20000);
+      return function() { clearInterval(inspInterval); };
+    }
+    if (saTab === 'ghas') { fetchSaGhas(); fetchAllMyAgents(); fetchInspectionStats(); }
+    if (saTab === 'agents') { fetchPendingAgents(); fetchSaGhas(); }
+  }, [saTab, subMonth]);
+
+  useEffect(function() {
+    if (saTab === 'ghas') fetchInspectionStats();
+  }, [statsMonth]);
+
+  useEffect(function() {
+    if (saGhas.length === 0 || pendingAgents.length === 0) return;
+    setSelectedGhaForAgent(function(prev) {
+      var next = Object.assign({}, prev);
+      pendingAgents.forEach(function(a) {
+        if (a.requested_gha_code && !next[a.id]) {
+          var match = saGhas.find(function(g) { return g.gha_code === a.requested_gha_code; });
+          if (match) next[a.id] = match.id;
+        }
+      });
+      return next;
+    });
+  }, [saGhas, pendingAgents]);
+
+  var activeSubscriptions = agents.filter(function(a) { return a.subscription_tier && a.subscription_tier !== 'free' && a.subscription_expires_at && new Date(a.subscription_expires_at) > new Date(); }).length;
+  var expiredSubscriptions = agents.filter(function(a) { return a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date(); }).length;
+  var subTotal = subscriptions.reduce(function(sum, s) { return sum + (s.amount || 0); }, 0);
+  var saCity = (profileForm.location || staffUser.location || '').trim();
+  var cityFilteredPendingAgents = saCity
+    ? pendingAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
+    : pendingAgents;
+  var cityFilteredGhaAgents = saCity
+    ? ghaInspectionAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
+    : ghaInspectionAgents;
+  var monthlyEarnings = subTotal * 0.05;
+  var filteredAgents = agents.filter(function(a) {
+    if (!agentSearch.trim()) return true;
+    var q = agentSearch.toLowerCase();
+    return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
+  });
+
+  return (
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+      <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.5)} } .live-dot { animation: livePulse 1.5s ease-in-out infinite; }`}</style>
+
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', padding: isMobile ? '14px 16px' : '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', boxShadow: '0 4px 20px rgba(10,34,64,0.3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ backgroundColor: '#22c55e', borderRadius: '12px', padding: '8px 14px', fontWeight: '900', fontSize: '1.1rem', color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>
+            {staffUser.staff_id || staffUser.staffId || 'SA'}
+          </div>
+          <div>
+            <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{staffUser.full_name || staffUser.name || 'Service Agent'}</p>
+            <p style={{ margin: 0, color: 'rgba(255,255,255,0.55)', fontSize: '0.75rem' }}>Service Agent Portal</p>
+            <div style={{ backgroundColor: '#f1f5f9', borderRadius: '20px', padding: '3px 10px', fontSize: '0.76rem', color: '#64748b', display: 'inline-block', marginTop: '5px' }}>
+              📍 {staffUser.location || 'Location not set'}
+            </div>
+            <p style={{ margin: '3px 0 0 0', color: 'rgba(255,255,255,0.45)', fontSize: '0.71rem' }}>Showing agents in your area: {staffUser.location || 'N/A'}</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button onClick={function(){ fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); if (saTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
+          <button onClick={onLogout} style={{ padding: '7px 16px', border: 'none', borderRadius: '8px', backgroundColor: '#ef4444', color: '#fff', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>Logout</button>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div style={{ padding: isMobile ? '20px 14px' : '32px', maxWidth: '1100px', margin: '0 auto' }}>
+
+        {/* Action banner */}
+        {actionMsg && (
+          <div style={{ backgroundColor: actionMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (actionMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, fontWeight: '600', fontSize: '0.86rem', color: actionMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{actionMsg}</p>
+          </div>
+        )}
+
+        {/* WhatsApp missing banner */}
+        {showWaBanner && (
+          <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderLeft: '5px solid #f59e0b', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', display: 'flex', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>
+                Important: Add your WhatsApp number so customers can reach you for inspection requests.
+              </p>
+              <p style={{ margin: '0 0 10px 0', color: '#b45309', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>
+                Without this, customers will contact GetHome directly instead of you.
+              </p>
+              <button onClick={function(){ setSaTab('profile'); }}
+                style={{ padding: '7px 18px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                Add WhatsApp Number
+              </button>
+            </div>
+            <button onClick={function(){ setShowWaBanner(false); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer', padding: '0', flexShrink: 0 }}>✕</button>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? '4px' : undefined }}>
+          {[['overview','Overview'],['ghas','My GHAs'],['agents','Agents'],['subscriptions','Subscriptions'],['payments','Customer Payments'],['inspections','Inspections'],['profile','Profile']].map(function([t, label]) {
+            var active = saTab === t;
+            return (
+              <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); }}
+                style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {label}
+                {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
+                {t === 'inspections' && notifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{notifications.filter(function(n){ return !n.read; }).length}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── OVERVIEW ── */}
+        {saTab === 'overview' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+            <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+              {[
+                { label: 'TOTAL GHAs',       value: ghas.length,                                                          borderColor: '#0a2240' },
+                { label: 'ACTIVE SUBS',      value: activeSubscriptions,                                                  borderColor: '#27ae60' },
+                { label: 'PENDING DEPOSITS', value: deposits.filter(function(d){ return !d.deposit_confirmed; }).length,  borderColor: '#f59e0b' },
+                { label: 'EARNINGS (5%)',    value: fmtMoney(monthlyEarnings),                                            borderColor: '#7c3aed' },
+              ].map(function(s) {
+                return (
+                  <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
+                    <p style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
+                    <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+            {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
+              <div style={{ ...cardSt, padding: '14px 18px', backgroundColor: '#fffbeb', borderLeft: '4px solid #f59e0b' }}>
+                <p style={{ margin: 0, fontWeight: '700', color: '#92400e', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>
+                  {deposits.filter(function(d){ return !d.deposit_confirmed; }).length} pending customer deposit{deposits.filter(function(d){ return !d.deposit_confirmed; }).length !== 1 ? 's' : ''} awaiting confirmation
+                  <button onClick={function(){ setSaTab('payments'); }} style={{ marginLeft: '12px', padding: '4px 10px', border: 'none', borderRadius: '6px', backgroundColor: '#f59e0b', color: '#fff', fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer' }}>View</button>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── MY GHAs ── */}
+        {saTab === 'ghas' && (
+          <div>
+            {/* Top bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My GHA Agents</h2>
+              <button onClick={function(){ setShowAddGha(function(v){ return !v; }); setAddGhaMsg(''); }}
+                style={{ padding: '8px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                {showAddGha ? 'Cancel' : '+ Add GHA'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.73rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>Inspection stats for:</label>
+              <input type="month" value={statsMonth} onChange={function(e){ setStatsMonth(e.target.value); }}
+                style={{ padding: '5px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.80rem', color: '#0a2240', fontFamily: "'Inter', sans-serif", cursor: 'pointer' }} />
+            </div>
+
+            {/* Add GHA inline form */}
+            {showAddGha && (
+              <div style={{ ...cardSt, padding: '20px', marginBottom: '20px', backgroundColor: '#f8fafc' }}>
+                <h3 style={{ color: '#0a2240', fontSize: '0.88rem', fontWeight: '800', margin: '0 0 14px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New GHA Details</h3>
+                {addGhaMsg && (
+                  <div style={{ padding: '10px 14px', borderRadius: '8px', marginBottom: '12px', backgroundColor: addGhaMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (addGhaMsg.startsWith('Error') ? '#fecaca' : '#86efac') }}>
+                    <p style={{ margin: 0, fontWeight: '700', fontSize: '0.82rem', color: addGhaMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{addGhaMsg}</p>
+                  </div>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
+                  {[['Full Name','full_name','text'],['Email','email','email'],['Phone','phone','tel'],['Location','location','text'],['Password','password','password']].map(function([lbl, field, type]) {
+                    return (
+                      <div key={field}>
+                        <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>{lbl}</label>
+                        <input type={type} value={addGhaForm[field]} placeholder={lbl}
+                          onChange={function(e){ var v = e.target.value; setAddGhaForm(function(f){ return Object.assign({}, f, { [field]: v }); }); }}
+                          style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <button onClick={async function() {
+                  if (!addGhaForm.full_name || !addGhaForm.email || !addGhaForm.password) { setAddGhaMsg('Error: Full name, email and password are required.'); return; }
+                  setAddGhaLoading(true);
+                  try {
+                    var res = await fetch(API_URL + '/api/sa/add-gha', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                      body: JSON.stringify(addGhaForm)
+                    });
+                    var data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to add GHA');
+                    var code = data.gha_code || data.staff_id || data.code || '';
+                    setAddGhaMsg('GHA added successfully. Code: ' + code);
+                    setAddGhaForm({ full_name: '', email: '', phone: '', location: '', password: '' });
+                    setShowAddGha(false);
+                    fetchGhas();
+                  } catch(e) { setAddGhaMsg('Error: ' + e.message); }
+                  finally { setAddGhaLoading(false); }
+                }} disabled={addGhaLoading}
+                  style={{ padding: '10px 24px', backgroundColor: addGhaLoading ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: addGhaLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                  {addGhaLoading ? 'Adding GHA…' : 'Create GHA'}
+                </button>
+              </div>
+            )}
+
+            {/* Success banner (persists after form closes) */}
+            {!showAddGha && addGhaMsg && !addGhaMsg.startsWith('Error') && (
+              <div style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '16px', backgroundColor: '#f0fff4', border: '1.5px solid #86efac' }}>
+                <p style={{ margin: 0, fontWeight: '700', fontSize: '0.84rem', color: '#166534', fontFamily: "'Inter', sans-serif" }}>{addGhaMsg}</p>
+              </div>
+            )}
+
+            {ghasLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading GHAs...</p></div>
+            ) : ghas.length === 0 ? (
+              <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
+                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🏢</div>
+                <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No GHA agents in your team yet</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {ghas.map(function(gha) {
+                  var ghaId = gha.id || gha.staff_id || gha.gha_code;
+                  var isExpanded = expandedGha === ghaId;
+                  var isAddingAgent = addAgentGhaId === ghaId;
+                  var ghaAgents = gha.agents || [];
+                  var commissionBase = ghaAgents.reduce(function(sum, a) { return sum + (TIER_PRICE[a.subscription_tier] || 0); }, 0);
+                  var isActive = gha.status === 'active' || gha.is_active;
+                  return (
+                    <Fragment key={ghaId}><div style={{ ...cardSt, padding: isMobile ? '12px 14px' : '18px 20px' }}>
+                      {/* GHA row */}
+                      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '14px' }}>
+                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22c55e', fontWeight: '900', fontSize: '0.78rem', flexShrink: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{gha.staff_id || gha.gha_code || 'GHA'}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{gha.full_name || gha.name || 'GHA Agent'}</p>
+                            <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: isActive ? '#f0fff4' : '#f1f5f9', color: isActive ? '#166534' : '#64748b', border: '1px solid ' + (isActive ? '#86efac' : '#e2e8f0') }}>{isActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                          </div>
+                          <p style={{ margin: '2px 0', color: '#64748b', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{gha.email}</p>
+                          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
+                            {gha.phone && <span style={{ fontSize: '0.73rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{gha.phone}</span>}
+                            {gha.location && <span style={{ fontSize: '0.73rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{gha.location}</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                            <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{gha.agent_count != null ? gha.agent_count : ghaAgents.length} Agent{(gha.agent_count != null ? gha.agent_count : ghaAgents.length) !== 1 ? 's' : ''}</span>
+                            <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{gha.listing_count || 0} Listings</span>
+                            <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{gha.active_subscriptions || 0} Active / {gha.expired_subscriptions || 0} Expired Subs</span>
+                            <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0f9ff', color: '#0369a1', fontFamily: "'Inter', sans-serif" }}>{(inspectionStats.find(function(s){ return s.gha_id === gha.id; }) || {}).completed_count || 0} Inspections This Month</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '6px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
+                          <button onClick={function(){ setExpandedGhaId(expandedGhaId === gha.id ? null : gha.id); }}
+                            style={{ padding: '6px 14px', border: '1px solid #0a2240', borderRadius: '8px', backgroundColor: 'transparent', color: '#0a2240', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", width: isMobile ? '100%' : undefined }}>
+                            {expandedGhaId === gha.id ? 'Hide Agents' : 'View Agents'}
+                          </button>
+                          <button onClick={function(){
+                            setAddAgentGhaId(isAddingAgent ? null : ghaId);
+                            setAgentSearchEmail('');
+                            setAgentSearchResult(null);
+                            setAgentSearchMsg('');
+                          }}
+                            style={{ padding: '7px 12px', backgroundColor: isAddingAgent ? '#f1f5f9' : '#eff6ff', color: isAddingAgent ? '#64748b' : '#1e40af', border: '1.5px solid ' + (isAddingAgent ? '#e2e8f0' : '#bfdbfe'), borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif", width: isMobile ? '100%' : undefined }}>
+                            {isAddingAgent ? 'Cancel' : '+ Add Agent'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p style={{ margin: '6px 2px 0 2px', fontSize: '0.72rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Contact admin to deactivate this GHA account.</p>
+
+                      {/* Add Agent to GHA inline form */}
+                      {isAddingAgent && (
+                        <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1.5px solid #f1f5f9' }}>
+                          <p style={{ margin: '0 0 10px 0', fontWeight: '700', fontSize: '0.82rem', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Add Agent to {gha.full_name || gha.name || 'this GHA'}</p>
+                          {agentSearchMsg && (
+                            <div style={{ padding: '8px 12px', borderRadius: '8px', marginBottom: '10px', backgroundColor: agentSearchMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (agentSearchMsg.startsWith('Error') ? '#fecaca' : '#86efac') }}>
+                              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.78rem', color: agentSearchMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{agentSearchMsg}</p>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+                            <input type="email" value={agentSearchEmail}
+                              onChange={function(e){ setAgentSearchEmail(e.target.value); setAgentSearchResult(null); setAgentSearchMsg(''); }}
+                              placeholder="Enter registered agent email"
+                              style={{ flex: 1, padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
+                            <button onClick={async function() {
+                              if (!agentSearchEmail.trim()) return;
+                              setAgentSearchLoading(true);
+                              setAgentSearchResult(null);
+                              setAgentSearchMsg('');
+                              try {
+                                var res = await fetch(API_URL + '/api/sa/search-agent?email=' + encodeURIComponent(agentSearchEmail.trim()), { headers: { Authorization: 'Bearer ' + token } });
+                                var data = await res.json();
+                                console.log('Search result raw:', JSON.stringify(data));
+                                if (!res.ok || !data || data.error) throw new Error(data && data.error ? data.error : 'Agent not found');
+                                var foundAgent = data.agent || data;
+                                if (!foundAgent || !foundAgent.id) {
+                                  setAgentSearchMsg('Agent found but missing database ID. Please try again.');
+                                  return;
+                                }
+                                setAgentSearchResult(foundAgent);
+                              } catch(e) { setAgentSearchMsg('Error: ' + e.message); }
+                              finally { setAgentSearchLoading(false); }
+                            }} disabled={agentSearchLoading}
+                              style={{ padding: '9px 16px', backgroundColor: agentSearchLoading ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: agentSearchLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                              {agentSearchLoading ? 'Searching…' : 'Search'}
+                            </button>
+                          </div>
+                          {agentSearchResult && (
+                            <div style={{ padding: '12px 14px', backgroundColor: agentSearchResult.already_assigned_other_sa ? '#fef2f2' : agentSearchResult.already_assigned ? '#fffbeb' : '#f8fafc', borderRadius: '10px', border: '1.5px solid ' + (agentSearchResult.already_assigned_other_sa ? '#fecaca' : agentSearchResult.already_assigned ? '#fcd34d' : '#e2e8f0'), marginBottom: '10px' }}>
+                              {agentSearchResult.already_assigned_other_sa ? (
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', marginBottom: '10px' }}>
+                                  <span style={{ fontSize: '1rem', lineHeight: '1.4' }}>🔒</span>
+                                  <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '700', color: '#b91c1c', fontFamily: "'Inter', sans-serif" }}>
+                                    This agent is locked under another SA. Only admin can reassign them.
+                                  </p>
+                                </div>
+                              ) : agentSearchResult.already_assigned ? (
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 10px', backgroundColor: '#fef9c3', border: '1.5px solid #fcd34d', borderRadius: '8px', marginBottom: '10px' }}>
+                                  <span style={{ fontSize: '1rem', lineHeight: '1.4' }}>⚠️</span>
+                                  <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '600', color: '#92400e', fontFamily: "'Inter', sans-serif" }}>
+                                    {'Already assigned to ' + agentSearchResult.assigned_gha_code + '. You can reassign to a different GHA.'}
+                                  </p>
+                                </div>
+                              ) : null}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                                <div>
+                                  <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{agentSearchResult.full_name || agentSearchResult.name || agentSearchResult.email || 'Unknown Agent'}</p>
+                                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>{agentSearchResult.email} · Status: <strong>{agentSearchResult.status || 'registered'}</strong></p>
+                                </div>
+                                {!agentSearchResult.already_assigned_other_sa && (
+                                  <button onClick={async function() {
+                                    var agentId = agentSearchResult?.id;
+                                    var ghaId = gha?.id;
+                                    console.log('Assigning - agentId:', agentId, 'ghaId:', ghaId);
+                                    if (!agentId) {
+                                      alert('Agent ID is missing. Please search for the agent again.');
+                                      return;
+                                    }
+                                    if (!ghaId) {
+                                      alert('GHA ID is missing. Please refresh the page and try again.');
+                                      return;
+                                    }
+                                    setAssigningToGha(true);
+                                    try {
+                                      var res = await fetch(API_URL + '/api/sa/assign-agent-to-gha', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({
+                                          agent_id: agentId,
+                                          gha_id: ghaId,
+                                        })
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed to assign');
+                                      setAgentSearchMsg('Agent assigned to ' + (gha.full_name || gha.name || 'GHA') + ' successfully.');
+                                      setAgentSearchResult(null);
+                                      setAgentSearchEmail('');
+                                      fetchGhas();
+                                    } catch(e) { setAgentSearchMsg('Error: ' + e.message); }
+                                    finally { setAssigningToGha(false); }
+                                  }} disabled={assigningToGha}
+                                    style={{ padding: '8px 16px', backgroundColor: assigningToGha ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: assigningToGha ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                                    {assigningToGha ? 'Assigning…' : 'Assign to this GHA'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                    </div>
+                    {expandedGhaId === gha.id && (
+                      <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px', marginTop: '8px', border: '1px solid #e2e8f0' }}>
+                        {(function() {
+                          var agentsForThisGha = allMyAgents.filter(function(a) { return a.gha_id === gha.id; });
+                          return agentsForThisGha.length === 0 ? (
+                            <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0, fontStyle: 'italic', fontFamily: "'Inter', sans-serif" }}>No agents under this GHA yet</p>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {agentsForThisGha.map(function(a) {
+                                var statusColors = { pending: { bg: '#fffbeb', color: '#92400e', border: '#fcd34d' }, approved: { bg: '#f0fff4', color: '#166534', border: '#86efac' }, rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' } };
+                                var sc = statusColors[a.status] || { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' };
+                                return (
+                                  <div key={a.id || a.email} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>{a.full_name || 'Name not provided'}</p>
+                                      <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif" }}>{a.email}</p>
+                                    </div>
+                                    <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: sc.bg, color: sc.color, border: '1px solid ' + sc.border }}>{(a.status || 'pending').toUpperCase()}</span>
+                                    {a.subscription_tier && a.subscription_tier !== 'free' && (
+                                      <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#1e40af', border: '1px solid #c7d2fe' }}>{a.subscription_tier.toUpperCase()}</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    </Fragment>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── AGENTS ── */}
+        {saTab === 'agents' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agent Approval Workflow</h2>
+
+            {agentWorkflowMsg && (
+              <div style={{ backgroundColor: agentWorkflowMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (agentWorkflowMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                <p style={{ margin: 0, fontWeight: '600', fontSize: '0.86rem', color: agentWorkflowMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{agentWorkflowMsg}</p>
+              </div>
+            )}
+
+            {/* Sub-tab row */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+              <button onClick={function(){ setAgentTab('pending'); }}
+                style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", backgroundColor: agentTab === 'pending' ? '#0a2240' : '#f1f5f9', color: agentTab === 'pending' ? '#fff' : '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Awaiting Review
+                <span style={{ backgroundColor: agentTab === 'pending' ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: agentTab === 'pending' ? '#fff' : '#64748b', borderRadius: '20px', padding: '1px 7px', fontSize: '0.72rem', fontWeight: '800' }}>{cityFilteredPendingAgents.length}</span>
+              </button>
+              <button onClick={function(){ setAgentTab('gha_inspection'); }}
+                style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', cursor: 'pointer', fontWeight: '700', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", backgroundColor: agentTab === 'gha_inspection' ? '#0a2240' : '#f1f5f9', color: agentTab === 'gha_inspection' ? '#fff' : '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                Sent to GHA
+                <span style={{ backgroundColor: agentTab === 'gha_inspection' ? 'rgba(255,255,255,0.25)' : '#e2e8f0', color: agentTab === 'gha_inspection' ? '#fff' : '#64748b', borderRadius: '20px', padding: '1px 7px', fontSize: '0.72rem', fontWeight: '800' }}>{cityFilteredGhaAgents.length}</span>
+              </button>
+            </div>
+
+            {/* Phase A — Awaiting Review */}
+            {agentTab === 'pending' && (
+              <div>
+                {cityFilteredPendingAgents.length === 0 ? (
+                  <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>✅</div>
+                    <p style={{ margin: 0, color: '#94a3b8', fontWeight: '500', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>No pending agents right now{saCity ? ' in ' + saCity : ''}</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {cityFilteredPendingAgents.map(function(a) {
+                      var ninMasked = a.nin ? a.nin.slice(0, 3) + '******' + a.nin.slice(-2) : '—';
+                      var verLevel = a.verification_level ? a.verification_level.toUpperCase() : null;
+                      var verColor = verLevel === 'GOLD' ? { bg: '#fef9c3', color: '#92400e', border: '#fde68a' } : verLevel === 'SILVER' ? { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' } : { bg: '#fef3c7', color: '#78350f', border: '#fcd34d' };
+                      return (
+                        <div key={a.id} style={{ ...cardSt, padding: '16px' }}>
+                          <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.92rem', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.full_name || 'Agent'}</p>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
+                            <a href={'mailto:' + a.email} style={{ color: '#2563eb' }}>{a.email}</a>
+                          </p>
+                          {a.phone && (
+                            <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
+                              <a href={'https://wa.me/' + a.phone.replace(/\D/g, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
+                            </p>
+                          )}
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' }}>
+                            {a.requested_gha_code ? (
+                              <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '700' }}>GHA: {a.requested_gha_code}</span>
+                            ) : (
+                              <span style={{ backgroundColor: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '600' }}>No GHA preferred</span>
+                            )}
+                            {a.city && <span style={{ backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '600' }}>{a.city}</span>}
+                            {verLevel && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: verColor.bg, color: verColor.color, border: '1px solid ' + verColor.border, fontWeight: '800' }}>{verLevel}</span>}
+                          </div>
+                          <button onClick={function(){ setExpandedPendingId(expandedPendingId === a.id ? null : a.id); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0a2240', fontSize: '0.74rem', fontWeight: '700', padding: '0 0 10px 0', fontFamily: "'Inter', sans-serif", textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                            {expandedPendingId === a.id ? 'Hide Details' : 'View Details'}
+                          </button>
+                          {expandedPendingId === a.id && (
+                            <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
+                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📍 {a.office_address}</p>}
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                {a.years_experience && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>{a.years_experience} yrs exp</span>}
+                                {a.specialty && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: '700' }}>{a.specialty}</span>}
+                              </div>
+                              <p style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>NIN: <strong>{ninMasked}</strong></p>
+                              {a.cac_number && <p style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>CAC: {a.cac_number}</p>}
+                              {a.about && <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#475569', fontStyle: 'italic', lineHeight: '1.5', fontFamily: "'Inter', sans-serif" }}>{a.about}</p>}
+                              {a.created_at && <p style={{ margin: '6px 0 0 0', fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Registered: {new Date(a.created_at).toLocaleDateString()}</p>}
+                            </div>
+                          )}
+
+                          {/* Phase B — Assign to GHA */}
+                          <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '12px', marginTop: '10px' }}>
+                            <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Assign to GHA for Inspection</p>
+                            <select
+                              value={selectedGhaForAgent[a.id] || ''}
+                              onChange={function(e){ var v = e.target.value; setSelectedGhaForAgent(function(prev){ return Object.assign({}, prev, { [a.id]: v }); }); }}
+                              style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #bfdbfe', fontSize: '0.82rem', color: '#0a2240', marginBottom: '8px', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff', boxSizing: 'border-box' }}>
+                              <option value="">Select a GHA…</option>
+                              {saGhas.map(function(g) {
+                                return <option key={g.id} value={g.id}>{g.gha_code} - {g.full_name} ({g.agent_count} agents)</option>;
+                              })}
+                            </select>
+                            {(function() {
+                              if (!a.requested_gha_code) return null;
+                              var preferredMatch = saGhas.find(function(g) { return g.gha_code === a.requested_gha_code; });
+                              if (preferredMatch) {
+                                return (
+                                  <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
+                                    <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontFamily: "'Inter', sans-serif" }}>
+                                      This agent requested GHA: <strong>{a.requested_gha_code}</strong>. The dropdown has been pre-selected but you can change it.
+                                    </p>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px' }}>
+                                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#92400e', fontFamily: "'Inter', sans-serif" }}>
+                                    Agent requested <strong>{a.requested_gha_code}</strong> but that GHA is not in your team. Please assign manually.
+                                  </p>
+                                </div>
+                              );
+                            })()}
+                            <button
+                              disabled={!selectedGhaForAgent[a.id] || !!pendingAgentAction[a.id]}
+                              onClick={async function() {
+                                var ghaId = selectedGhaForAgent[a.id];
+                                if (!ghaId) return;
+                                try {
+                                  var res = await fetch(API_URL + '/api/sa/send-to-gha', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ agent_id: a.id, gha_id: ghaId }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setAgentWorkflowMsg('Agent sent to GHA for inspection. You will be notified when GHA confirms.');
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
+                                  fetchPendingAgents();
+                                } catch(e) {
+                                  setAgentWorkflowMsg('Error: ' + e.message);
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
+                                }
+                              }}
+                              style={{ width: '100%', padding: '10px', backgroundColor: (selectedGhaForAgent[a.id] && !pendingAgentAction[a.id]) ? '#16a34a' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: (selectedGhaForAgent[a.id] && !pendingAgentAction[a.id]) ? 'pointer' : 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
+                              Assign and Send to GHA for Inspection
+                            </button>
+                          </div>
+
+                          {/* Direct Approve / Reject */}
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                            <button
+                              disabled={!!pendingAgentAction[a.id]}
+                              onClick={function() {
+                                if (rejectingAgentId === a.id) {
+                                  setRejectingAgentId(null);
+                                  setRejectReason('');
+                                } else {
+                                  setRejectingAgentId(a.id);
+                                  setRejectReason('');
+                                }
+                              }}
+                              style={{ flex: 1, padding: '10px', backgroundColor: pendingAgentAction[a.id] ? '#e2e8f0' : '#fef2f2', color: pendingAgentAction[a.id] ? '#94a3b8' : '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: pendingAgentAction[a.id] ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              {pendingAgentAction[a.id] === 'rejecting' ? 'Rejecting…' : (rejectingAgentId === a.id ? 'Cancel' : 'Reject')}
+                            </button>
+                            <button
+                              disabled={!!pendingAgentAction[a.id]}
+                              onClick={async function() {
+                                setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: 'approving' }); });
+                                try {
+                                  var res = await fetch(API_URL + '/api/sa/approve-agent', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ agent_id: a.id }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setAgentWorkflowMsg('Agent approved successfully.');
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                  setPendingAgents(function(prev){ return prev.filter(function(x){ return x.id !== a.id; }); });
+                                } catch(e) {
+                                  setAgentWorkflowMsg('Error: ' + e.message);
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                }
+                                setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: null }); });
+                              }}
+                              style={{ flex: 1, padding: '10px', backgroundColor: pendingAgentAction[a.id] ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: pendingAgentAction[a.id] ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              {pendingAgentAction[a.id] === 'approving' ? 'Approving…' : 'Approve Directly'}
+                            </button>
+                          </div>
+                          {rejectingAgentId === a.id && (
+                            <div style={{ marginTop: '10px', backgroundColor: '#fff5f5', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px' }}>
+                              <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#b91c1c', fontSize: '0.82rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Reason for rejection</p>
+                              <textarea
+                                value={rejectReason}
+                                onChange={function(e){ setRejectReason(e.target.value); }}
+                                placeholder="Enter reason (required)…"
+                                rows={3}
+                                style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #fecaca', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", resize: 'vertical', boxSizing: 'border-box', color: '#0a2240' }}
+                              />
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                <button
+                                  onClick={function(){ setRejectingAgentId(null); setRejectReason(''); }}
+                                  style={{ flex: 1, padding: '9px', backgroundColor: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                                  Cancel
+                                </button>
+                                <button
+                                  disabled={!rejectReason.trim() || !!pendingAgentAction[a.id]}
+                                  onClick={async function() {
+                                    if (!rejectReason.trim()) return;
+                                    setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: 'rejecting' }); });
+                                    try {
+                                      var res = await fetch(API_URL + '/api/sa/reject-agent', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ agent_id: a.id, reason: rejectReason.trim() }),
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      setAgentWorkflowMsg('Agent rejected successfully.');
+                                      setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                      setPendingAgents(function(prev){ return prev.filter(function(x){ return x.id !== a.id; }); });
+                                      setRejectingAgentId(null);
+                                      setRejectReason('');
+                                    } catch(e) {
+                                      setAgentWorkflowMsg('Error: ' + e.message);
+                                      setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                    }
+                                    setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: null }); });
+                                  }}
+                                  style={{ flex: 2, padding: '9px', backgroundColor: (!rejectReason.trim() || !!pendingAgentAction[a.id]) ? '#fca5a5' : '#dc2626', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.8rem', cursor: (!rejectReason.trim() || !!pendingAgentAction[a.id]) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                                  {pendingAgentAction[a.id] === 'rejecting' ? 'Rejecting…' : 'Confirm Reject'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Phase C & D — Sent to GHA */}
+            {agentTab === 'gha_inspection' && (
+              <div>
+                {cityFilteredGhaAgents.length === 0 ? (
+                  <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🔍</div>
+                    <p style={{ margin: 0, color: '#94a3b8', fontWeight: '500', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>No agents are currently with a GHA for inspection{saCity ? ' in ' + saCity : ''}</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {cityFilteredGhaAgents.map(function(a) {
+                      var ninMasked = a.nin ? a.nin.slice(0, 3) + '******' + a.nin.slice(-2) : '—';
+                      var verLevel = a.verification_level ? a.verification_level.toUpperCase() : null;
+                      var verColor = verLevel === 'GOLD' ? { bg: '#fef9c3', color: '#92400e', border: '#fde68a' } : verLevel === 'SILVER' ? { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' } : { bg: '#fef3c7', color: '#78350f', border: '#fcd34d' };
+                      var ghaVerified = !!a.gha_verified;
+                      return (
+                        <div key={a.id} style={{ ...cardSt, padding: '16px' }}>
+                          <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.92rem', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.full_name || 'Agent'}</p>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
+                            <a href={'mailto:' + a.email} style={{ color: '#2563eb' }}>{a.email}</a>
+                          </p>
+                          {a.phone && (
+                            <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
+                              <a href={'https://wa.me/' + a.phone.replace(/\D/g, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
+                            </p>
+                          )}
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' }}>
+                            {a.city && <span style={{ backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '600' }}>{a.city}</span>}
+                            {verLevel && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: verColor.bg, color: verColor.color, border: '1px solid ' + verColor.border, fontWeight: '800' }}>{verLevel}</span>}
+                          </div>
+                          <button onClick={function(){ setExpandedPendingId(expandedPendingId === a.id ? null : a.id); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0a2240', fontSize: '0.74rem', fontWeight: '700', padding: '0 0 10px 0', fontFamily: "'Inter', sans-serif", textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                            {expandedPendingId === a.id ? 'Hide Details' : 'View Details'}
+                          </button>
+                          {expandedPendingId === a.id && (
+                            <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
+                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📍 {a.office_address}</p>}
+                              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                {a.years_experience && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>{a.years_experience} yrs exp</span>}
+                                {a.specialty && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: '700' }}>{a.specialty}</span>}
+                              </div>
+                              <p style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>NIN: <strong>{ninMasked}</strong></p>
+                              {a.cac_number && <p style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>CAC: {a.cac_number}</p>}
+                              {a.about && <p style={{ margin: '6px 0 0 0', fontSize: '0.75rem', color: '#475569', fontStyle: 'italic', lineHeight: '1.5', fontFamily: "'Inter', sans-serif" }}>{a.about}</p>}
+                              {a.created_at && <p style={{ margin: '6px 0 0 0', fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Registered: {new Date(a.created_at).toLocaleDateString()}</p>}
+                            </div>
+                          )}
+
+                          {/* GHA status panel */}
+                          <div style={{ backgroundColor: '#fffbeb', borderRadius: '10px', padding: '12px', marginTop: '10px', border: '1.5px solid #fde68a' }}>
+                            <span style={{ display: 'inline-block', fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d', fontWeight: '800', marginBottom: '8px' }}>Awaiting GHA Verification</span>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.78rem', color: '#78350f', fontFamily: "'Inter', sans-serif" }}>Assigned GHA: <strong>{a.gha_code || a.gha_name || '—'}</strong></p>
+                            {a.sent_to_gha_at && <p style={{ margin: '0 0 8px 0', fontSize: '0.74rem', color: '#92400e', fontFamily: "'Inter', sans-serif" }}>Sent: {new Date(a.sent_to_gha_at).toLocaleDateString()}</p>}
+
+                            {ghaVerified ? (
+                              <button
+                                onClick={async function() {
+                                  try {
+                                    var res = await fetch(API_URL + '/api/sa/approve-agent', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                      body: JSON.stringify({ agent_id: a.id }),
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setAgentWorkflowMsg('Agent approved successfully.');
+                                    setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                    setGhaInspectionAgents(function(prev){ return prev.filter(function(x){ return x.id !== a.id; }); });
+                                  } catch(e) {
+                                    setAgentWorkflowMsg('Error: ' + e.message);
+                                    setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                  }
+                                }}
+                                style={{ width: '100%', padding: '10px', backgroundColor: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", marginBottom: '8px' }}>
+                                Approve Agent
+                              </button>
+                            ) : (
+                              <div>
+                                <button disabled style={{ width: '100%', padding: '10px', backgroundColor: '#94a3b8', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'not-allowed', opacity: 0.5, fontFamily: "'Inter', sans-serif", marginBottom: '4px' }}>
+                                  Approve Agent — Locked
+                                </button>
+                                <p style={{ margin: '0 0 8px 0', fontSize: '0.72rem', color: '#92400e', fontFamily: "'Inter', sans-serif", textAlign: 'center' }}>This button unlocks after the assigned GHA confirms the inspection</p>
+                              </div>
+                            )}
+
+                            <button
+                              disabled={!!pendingAgentAction[a.id]}
+                              onClick={async function() {
+                                setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: 'rejecting' }); });
+                                try {
+                                  var res = await fetch(API_URL + '/api/sa/reject-agent', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ agent_id: a.id }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setAgentWorkflowMsg('Agent rejected.');
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                  setGhaInspectionAgents(function(prev){ return prev.filter(function(x){ return x.id !== a.id; }); });
+                                } catch(e) {
+                                  setAgentWorkflowMsg('Error: ' + e.message);
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 5000);
+                                }
+                                setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: null }); });
+                              }}
+                              style={{ width: '100%', padding: '9px', backgroundColor: pendingAgentAction[a.id] ? '#e2e8f0' : '#fef2f2', color: pendingAgentAction[a.id] ? '#94a3b8' : '#b91c1c', border: '1.5px solid #fecaca', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: pendingAgentAction[a.id] ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", marginTop: '8px' }}>
+                              {pendingAgentAction[a.id] === 'rejecting' ? 'Rejecting…' : 'Reject Agent'}
+                            </button>
+
+                            {(a.gha_phone || a.gha_whatsapp) && (
+                              <a
+                                href={'https://wa.me/' + (a.gha_whatsapp || a.gha_phone || '').replace(/\D/g, '') + '?text=' + encodeURIComponent('Hi, I wanted to follow up on agent ' + (a.full_name || '') + ' who was sent for inspection.')}
+                                target="_blank" rel="noopener noreferrer"
+                                style={{ display: 'block', textAlign: 'center', padding: '9px', backgroundColor: '#dcfce7', color: '#16a34a', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', textDecoration: 'none', fontFamily: "'Inter', sans-serif", marginTop: '8px' }}>
+                                WhatsApp GHA about this agent
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SUBSCRIPTIONS ── */}
+        {saTab === 'subscriptions' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '20px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Subscriptions</h2>
+              <input type="month" value={subMonth} onChange={function(e){ setSubMonth(e.target.value); }}
+                style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
+            </div>
+            {subsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading...</p></div>
+            ) : subscriptions.length === 0 ? (
+              <div style={{ ...cardSt, padding: '30px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No subscriptions for this month.</p></div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+                  {subscriptions.map(function(s, i) {
+                    return (
+                      <div key={s.id || i} style={{ ...cardSt, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.agent_name || s.full_name || s.email}</p>
+                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>{s.email}{s.gha_code ? ' · GHA: ' + s.gha_code : ''}</p>
+                        </div>
+                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{s.tier || s.subscription_tier}</span>
+                        <span style={{ fontWeight: '800', color: '#166534', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>₦{Number(s.amount || 0).toLocaleString()}</span>
+                        <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: s.paid ? '#f0fff4' : '#fffbeb', color: s.paid ? '#166534' : '#92400e', border: '1px solid ' + (s.paid ? '#86efac' : '#fde68a') }}>{s.paid ? 'PAID' : 'UNPAID'}</span>
+                        <span style={{ fontSize: '0.70rem', color: '#7c3aed', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>5%: {fmtMoney((s.amount || 0) * 0.05)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ ...cardSt, padding: '20px 24px', backgroundColor: '#f0fff4', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.74rem', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>TOTAL SUBSCRIPTION REVENUE</p>
+                    <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>₦{subTotal.toLocaleString()}</p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.74rem', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>YOUR EARNINGS (5%)</p>
+                    <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#166534', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(subTotal * 0.05)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── CUSTOMER PAYMENTS ── */}
+        {saTab === 'payments' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              Customer Payments
+              {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
+                <span style={{ marginLeft: '8px', padding: '2px 10px', borderRadius: '20px', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '0.72rem', fontWeight: '800' }}>
+                  {deposits.filter(function(d){ return !d.deposit_confirmed; }).length} pending
+                </span>
+              )}
+            </h2>
+            {depositMsg && (
+              <div style={{ backgroundColor: depositMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (depositMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '14px' }}>
+                <p style={{ margin: 0, color: depositMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>{depositMsg}</p>
+              </div>
+            )}
+            {depositsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading deposits...</p></div>
+            ) : deposits.length === 0 ? (
+              <div style={{ ...cardSt, padding: '30px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No deposit requests yet.</p></div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {deposits.slice().sort(function(a, b) {
+                  if (!a.deposit_confirmed && b.deposit_confirmed) return -1;
+                  if (a.deposit_confirmed && !b.deposit_confirmed) return 1;
+                  return new Date(b.created_at) - new Date(a.created_at);
+                }).map(function(d) {
+                  var isConfirmed = !!d.deposit_confirmed;
+                  var isConfirming = confirmingId === d.id;
+                  return (
+                    <div key={d.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isConfirmed ? '3px solid #86efac' : '3px solid #ddd6fe' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{d.property_title || '—'}</p>
+                          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{d.property_location || ''}</p>
+                        </div>
+                        {isConfirmed
+                          ? <span style={{ fontSize: '0.65rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>CONFIRMED</span>
+                          : <span style={{ fontSize: '0.65rem', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>AWAITING CONFIRMATION</span>
+                        }
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '3px 16px', marginBottom: '10px' }}>
+                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Customer: <span style={{ color: '#0a2240' }}>{d.user_email || '—'}</span></p>
+                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Amount: <strong style={{ color: '#166534' }}>₦{Number(d.deposit_amount || 0).toLocaleString()}</strong></p>
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Ref: {d.reference || '—'}</p>
+                        <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</p>
+                      </div>
+                      {!isConfirmed && (
+                        <button onClick={async function() {
+                          setConfirmingId(d.id);
+                          try {
+                            var res = await fetch(API_URL + '/api/sa/confirm-deposit', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                              body: JSON.stringify({ property_id: d.id })
+                            });
+                            var result = await res.json();
+                            if (!res.ok) throw new Error(result.error || 'Failed to confirm deposit');
+                            setDeposits(function(prev) { return prev.map(function(x){ return x.id === d.id ? Object.assign({}, x, { deposit_confirmed: true }) : x; }); });
+                            setDepositMsg('Deposit confirmed for ' + (d.property_title || 'property') + '.');
+                            setTimeout(function(){ setDepositMsg(''); }, 5000);
+                          } catch(e) {
+                            setDepositMsg('Error: ' + e.message);
+                            setTimeout(function(){ setDepositMsg(''); }, 5000);
+                          } finally { setConfirmingId(null); }
+                        }} disabled={isConfirming}
+                          style={{ padding: '7px 14px', backgroundColor: isConfirming ? '#94a3b8' : '#166534', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                          {isConfirming ? 'Confirming...' : 'Confirm Deposit'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── INSPECTIONS ── */}
+        {saTab === 'inspections' && (
+          <div>
+            {/* Top bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inspection Management</h2>
+              <button onClick={function(){ setShowCreateInsp(!showCreateInsp); setInspMsg(''); }}
+                style={{ padding: '9px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                {showCreateInsp ? 'Cancel' : '+ Create New Inspection'}
+              </button>
+            </div>
+
+            {/* Status banner */}
+            {inspMsg && (
+              <div style={{ backgroundColor: inspMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (inspMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                <p style={{ margin: 0, fontWeight: '600', fontSize: '0.86rem', color: inspMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{inspMsg}</p>
+              </div>
+            )}
+
+            {/* Create form */}
+            {showCreateInsp && (
+              <div style={{ ...cardSt, padding: '22px 24px', marginBottom: '24px' }}>
+                <h3 style={{ margin: '0 0 18px 0', color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New Inspection</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ID</label>
+                    <input type="text" value={inspForm.property_id} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_id: e.target.value }); }); }}
+                      placeholder="Enter property ID or search"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER NAME</label>
+                    <input type="text" value={inspForm.customer_name} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { customer_name: e.target.value }); }); }}
+                      placeholder="Customer full name"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER EMAIL</label>
+                    <input type="email" value={inspForm.customer_email} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { customer_email: e.target.value }); }); }}
+                      placeholder="customer@email.com"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER PHONE</label>
+                    <input type="tel" value={inspForm.customer_phone} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { customer_phone: e.target.value }); }); }}
+                      placeholder="+234 800 000 0000"
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ADDRESS</label>
+                    <textarea value={inspForm.property_address} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_address: e.target.value }); }); }}
+                      placeholder="Full property address"
+                      rows={2}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>GHA TO HANDLE THIS INSPECTION</label>
+                    <select value={inspForm.gha_id} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { gha_id: e.target.value }); }); }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box' }}>
+                      <option value="">-- Select GHA --</option>
+                      {ghas.map(function(g){ return <option key={g.id} value={g.id}>{g.staff_id || g.gha_code} — {g.full_name || g.name}</option>; })}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>INSPECTION DATE & TIME</label>
+                    <input type="datetime-local" value={inspForm.inspection_date} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { inspection_date: e.target.value }); }); }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>INSPECTION TYPE</label>
+                    <select value={inspForm.inspection_type} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { inspection_type: e.target.value }); }); }}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box' }}>
+                      <option value="physical">Physical Visit</option>
+                      <option value="virtual">Virtual Tour</option>
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>NOTES</label>
+                    <textarea value={inspForm.notes} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { notes: e.target.value }); }); }}
+                      placeholder="Additional notes or instructions for the GHA…"
+                      rows={3}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+                <button onClick={async function() {
+                  if (!inspForm.gha_id) { setInspMsg('Error: Please select a GHA.'); return; }
+                  if (!inspForm.customer_name.trim()) { setInspMsg('Error: Customer name is required.'); return; }
+                  if (!inspForm.inspection_date) { setInspMsg('Error: Inspection date and time are required.'); return; }
+                  setInspLoading(true);
+                  try {
+                    var res = await fetch(API_URL + '/api/sa/create-inspection', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                      body: JSON.stringify(inspForm)
+                    });
+                    var data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to create inspection');
+                    var assignedGha = ghas.find(function(g){ return String(g.id) === String(inspForm.gha_id); });
+                    var ghaName = assignedGha ? (assignedGha.full_name || assignedGha.name) : 'the GHA';
+                    setInspMsg('Inspection assigned to ' + ghaName + '. They have been notified.');
+                    setInspForm({ property_id: '', customer_name: '', customer_email: '', customer_phone: '', inspection_date: '', gha_id: '', property_address: '', notes: '', inspection_type: 'physical' });
+                    setShowCreateInsp(false);
+                    fetchInspections();
+                  } catch(e) { setInspMsg('Error: ' + e.message); }
+                  finally { setInspLoading(false); }
+                }} disabled={inspLoading}
+                  style={{ marginTop: '16px', padding: '11px 28px', backgroundColor: inspLoading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.86rem', cursor: inspLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                  {inspLoading ? 'Submitting…' : 'Submit Inspection'}
+                </button>
+              </div>
+            )}
+
+            {/* Incoming Inspection Requests */}
+            {notifications.length > 0 && (
+              <div style={{ marginBottom: '28px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                  <h3 style={{ margin: 0, color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Incoming Inspection Requests</h3>
+                  {notifications.filter(function(n){ return !n.read; }).length > 0 && (
+                    <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '2px 9px', fontSize: '0.70rem', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>
+                      {notifications.filter(function(n){ return !n.read; }).length} new
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {notifications.map(function(notif) {
+                    var isAssigning = assigningNotifId === notif.id;
+                    var notifTimeAgo = (function() {
+                      if (!notif.created_at) return '';
+                      var diff = Date.now() - new Date(notif.created_at).getTime();
+                      var mins = Math.floor(diff / 60000);
+                      if (mins < 1) return 'just now';
+                      if (mins < 60) return mins + ' minute' + (mins !== 1 ? 's' : '') + ' ago';
+                      var hrs = Math.floor(mins / 60);
+                      if (hrs < 24) return hrs + ' hour' + (hrs !== 1 ? 's' : '') + ' ago';
+                      var days = Math.floor(hrs / 24);
+                      return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+                    })();
+                    return (
+                      <div key={notif.id} style={{ borderRadius: '12px', border: '1.5px solid #fde68a', borderLeft: '5px solid #f59e0b', backgroundColor: '#fffef0', padding: '16px 18px', boxShadow: '0 2px 8px rgba(245,158,11,0.10)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '800', backgroundColor: '#fef3c7', color: '#92400e', border: '1.5px solid #fde68a', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>INSPECTION REQUEST</span>
+                            <span style={{ fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{notifTimeAgo}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '7px', flexShrink: 0 }}>
+                            <button onClick={function(){ setAssigningNotifId(isAssigning ? null : notif.id); setAssignNotifGhaId(''); setAssignNotifDate(''); setAssignNotifNotes(''); setAssignNotifMsg(''); }}
+                              style={{ padding: '5px 14px', backgroundColor: isAssigning ? '#64748b' : '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              {isAssigning ? 'Cancel' : 'Assign to GHA'}
+                            </button>
+                            <button onClick={async function() {
+                              try { await fetch(API_URL + '/api/sa/notifications/' + notif.id + '/dismiss', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch(e) {}
+                              setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+                              if (assigningNotifId === notif.id) setAssigningNotifId(null);
+                            }}
+                              style={{ padding: '5px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1.5px solid #e2e8f0', borderRadius: '7px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '4px 20px', marginBottom: '10px' }}>
+                          <div>
+                            <p style={{ margin: '0 0 1px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER</p>
+                            <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{notif.customer_name || notif.user_name || 'Unknown'}</p>
+                            <p style={{ margin: '1px 0 0 0', fontSize: '0.76rem', color: '#1e40af', fontFamily: "'Inter', sans-serif" }}>{notif.customer_email || notif.user_email || ''}</p>
+                          </div>
+                          <div>
+                            <p style={{ margin: '0 0 1px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY</p>
+                            <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{notif.property_title || '—'}</p>
+                            <p style={{ margin: '1px 0 0 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>{notif.property_location || notif.property_address || ''}</p>
+                          </div>
+                        </div>
+                        {notif.inspection_type && (
+                          <span style={{ display: 'inline-block', fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: notif.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: notif.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (notif.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif", marginBottom: '10px' }}>
+                            {notif.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}
+                          </span>
+                        )}
+                        {isAssigning && (
+                          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1.5px solid #fde68a' }}>
+                            {assignNotifMsg && (
+                              <div style={{ backgroundColor: assignNotifMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (assignNotifMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
+                                <p style={{ margin: 0, fontWeight: '700', fontSize: '0.82rem', color: assignNotifMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{assignNotifMsg}</p>
+                              </div>
+                            )}
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>SELECT GHA</label>
+                                <select value={assignNotifGhaId} onChange={function(e){ setAssignNotifGhaId(e.target.value); }}
+                                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }}>
+                                  <option value="">-- Select GHA --</option>
+                                  {ghas.map(function(g) {
+                                    var pendingCount = inspections.filter(function(i){ return (String(i.gha_id) === String(g.id) || i.gha_code === g.staff_id) && (!i.status || i.status === 'pending'); }).length;
+                                    return <option key={g.id} value={g.id}>{g.staff_id || g.gha_code} — {g.full_name || g.name} ({pendingCount} pending)</option>;
+                                  })}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>INSPECTION DATE & TIME</label>
+                                <input type="datetime-local" value={assignNotifDate} onChange={function(e){ setAssignNotifDate(e.target.value); }}
+                                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }} />
+                              </div>
+                            </div>
+                            <div style={{ marginBottom: '12px' }}>
+                              <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>NOTES (optional)</label>
+                              <textarea value={assignNotifNotes} onChange={function(e){ setAssignNotifNotes(e.target.value); }} rows={2} placeholder="Any instructions for the GHA…"
+                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', resize: 'vertical', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }} />
+                            </div>
+                            <button onClick={async function() {
+                              if (!assignNotifGhaId) { setAssignNotifMsg('Error: Please select a GHA.'); return; }
+                              if (!assignNotifDate) { setAssignNotifMsg('Error: Please pick an inspection date and time.'); return; }
+                              setAssignNotifLoading(true);
+                              try {
+                                var selectedGha = ghas.find(function(g){ return String(g.id) === String(assignNotifGhaId); });
+                                var res = await fetch(API_URL + '/api/sa/assign-inspection', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                  body: JSON.stringify({
+                                    gha_id: assignNotifGhaId,
+                                    notification_id: notif.id,
+                                    customer_name: notif.customer_name || notif.user_name || '',
+                                    customer_email: notif.customer_email || notif.user_email || '',
+                                    customer_phone: notif.customer_phone || '',
+                                    property_id: notif.property_id,
+                                    property_title: notif.property_title || '',
+                                    property_location: notif.property_location || notif.property_address || '',
+                                    inspection_type: notif.inspection_type || 'physical',
+                                    inspection_date: assignNotifDate,
+                                    notes: assignNotifNotes,
+                                  })
+                                });
+                                var data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Assignment failed');
+                                var ghaCode = selectedGha ? (selectedGha.staff_id || selectedGha.gha_code || 'GHA') : 'GHA';
+                                setInspMsg('Inspection assigned to ' + ghaCode + '. They have been notified immediately.');
+                                setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+                                setAssigningNotifId(null);
+                                setAssignNotifGhaId(''); setAssignNotifDate(''); setAssignNotifNotes(''); setAssignNotifMsg('');
+                                fetchInspections();
+                              } catch(e) { setAssignNotifMsg('Error: ' + e.message); }
+                              finally { setAssignNotifLoading(false); }
+                            }} disabled={assignNotifLoading}
+                              style={{ padding: '9px 22px', backgroundColor: assignNotifLoading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: assignNotifLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              {assignNotifLoading ? 'Assigning…' : 'Confirm Assignment'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Summary row */}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length} Pending
+              </span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} GHA Done
+              </span>
+              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
+                {inspections.filter(function(i){ return i.status === 'confirmed'; }).length} Confirmed
+              </span>
+            </div>
+
+            {/* Board */}
+            {inspLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
+            ) : (
+              <div style={isMobile ? { display: 'flex', flexDirection: 'column', gap: '24px' } : { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', alignItems: 'start' }}>
+
+                {/* PENDING column */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94a3b8', flexShrink: 0 }}></div>
+                    <p style={{ margin: 0, fontWeight: '800', color: '#475569', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
+                      PENDING ({inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length})
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
+                      <div className="live-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#22c55e', flexShrink: 0 }}></div>
+                      <span style={{ fontSize: '0.60rem', fontWeight: '800', color: '#22c55e', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>LIVE</span>
+                    </div>
+                  </div>
+                  {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #e2e8f0', borderRadius: '10px' }}>No pending inspections</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).map(function(insp) {
+                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
+                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                        return (
+                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #94a3b8' : undefined }}>
+                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
+                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
+                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
+                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
+                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
+                            </div>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
+                            {insp.created_at && <p style={{ margin: 0, fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* GHA DONE column */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0 }}></div>
+                    <p style={{ margin: 0, fontWeight: '800', color: '#92400e', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
+                      GHA DONE ({inspections.filter(function(i){ return i.status === 'gha_done'; }).length})
+                    </p>
+                  </div>
+                  {inspections.filter(function(i){ return i.status === 'gha_done'; }).length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #fde68a', borderRadius: '10px' }}>No completed inspections awaiting review</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {inspections.filter(function(i){ return i.status === 'gha_done'; }).map(function(insp) {
+                        var isConfirming = confirmingId === insp.id;
+                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
+                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                        return (
+                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #f59e0b' : undefined }}>
+                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
+                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
+                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
+                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
+                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
+                            </div>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
+                            {insp.gha_notes && (
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', border: '1.5px solid #e2e8f0' }}>
+                                <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>GHA Inspection Report</p>
+                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
+                                {insp.gha_done_at && <p style={{ margin: '8px 0 0 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
+                              </div>
+                            )}
+                            {insp.created_at && <p style={{ margin: '4px 0 8px 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
+                            <button onClick={async function() {
+                              setConfirmingId(insp.id);
+                              try {
+                                var res = await fetch(API_URL + '/api/sa/confirm-inspection', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                  body: JSON.stringify({ inspection_id: insp.id })
+                                });
+                                var data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Failed');
+                                setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'confirmed', confirmed_at: new Date().toISOString() }) : x; }); });
+                                setInspMsg('Inspection confirmed successfully.');
+                              } catch(e) { setInspMsg('Error: ' + e.message); }
+                              finally { setConfirmingId(null); }
+                            }} disabled={isConfirming}
+                              style={{ width: '100%', padding: '9px', backgroundColor: isConfirming ? '#94a3b8' : '#166534', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: isConfirming ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                              {isConfirming ? 'Confirming…' : 'Confirm Inspection'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* SA CONFIRMED column */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e', flexShrink: 0 }}></div>
+                    <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
+                      SA CONFIRMED ({inspections.filter(function(i){ return i.status === 'confirmed'; }).length})
+                    </p>
+                  </div>
+                  {inspections.filter(function(i){ return i.status === 'confirmed'; }).length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #86efac', borderRadius: '10px' }}>No confirmed inspections yet</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {inspections.filter(function(i){ return i.status === 'confirmed'; }).map(function(insp) {
+                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
+                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                        return (
+                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #22c55e' : undefined }}>
+                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
+                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
+                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
+                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
+                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
+                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>CONFIRMED</span>
+                            </div>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
+                            {insp.confirmed_at && <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>Confirmed on {new Date(insp.confirmed_at).toLocaleDateString()}</p>}
+                            {insp.gha_notes && (
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', margin: '8px 0', border: '1.5px solid #e2e8f0' }}>
+                                <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>GHA Inspection Report</p>
+                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
+                                {insp.gha_done_at && <p style={{ margin: '8px 0 0 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
+                              </div>
+                            )}
+                            {insp.created_at && <p style={{ margin: 0, fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── PROFILE / SETTINGS ── */}
+        {saTab === 'profile' && (
+          <div>
+            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 24px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Profile & Settings</h2>
+
+            {profileMsg && (
+              <div style={{ backgroundColor: profileMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (profileMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '20px' }}>
+                <p style={{ margin: 0, fontWeight: '600', fontSize: '0.86rem', color: profileMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{profileMsg}</p>
+              </div>
+            )}
+
+            <div style={{ ...cardSt, padding: '24px 28px', maxWidth: '560px' }}>
+              <h3 style={{ margin: '0 0 20px 0', color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Update Your Details</h3>
+
+              {/* WhatsApp — highlighted */}
+              <div style={{ backgroundColor: '#fffef0', border: '1.5px solid #fde68a', borderRadius: '10px', padding: '16px 18px', marginBottom: '18px' }}>
+                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '800', color: '#92400e', marginBottom: '6px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>WHATSAPP NUMBER</label>
+                <input
+                  type="tel"
+                  value={profileForm.whatsapp_number}
+                  onChange={function(e){ var v = e.target.value; setProfileForm(function(f){ return Object.assign({}, f, { whatsapp_number: v }); }); }}
+                  placeholder="+2348012345678 or 08012345678"
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #fde68a', fontSize: '0.86rem', color: '#0a2240', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }}
+                />
+                <p style={{ margin: '6px 0 0 0', fontSize: '0.72rem', color: '#92400e', fontFamily: "'Inter', sans-serif" }}>Customers will WhatsApp you directly on this number when booking inspections.</p>
+              </div>
+
+              {/* Other fields */}
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                {[['Full Name','full_name','text'],['Phone','phone','tel'],['Location / Area','location','text']].map(function([lbl, field, type]) {
+                  return (
+                    <div key={field} style={{ gridColumn: field === 'location' && !isMobile ? '1 / -1' : undefined }}>
+                      <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{lbl.toUpperCase()}</label>
+                      <input
+                        type={type}
+                        value={profileForm[field]}
+                        onChange={function(e){ var v = e.target.value; setProfileForm(function(f){ return Object.assign({}, f, { [field]: v }); }); }}
+                        placeholder={lbl}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button onClick={async function() {
+                setProfileLoading(true);
+                setProfileMsg('');
+                try {
+                  var res = await fetch(API_URL + '/api/sa/update-profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      full_name: profileForm.full_name,
+                      phone: profileForm.phone,
+                      location: profileForm.location,
+                      whatsapp_number: profileForm.whatsapp_number,
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Update failed');
+                  if (profileForm.whatsapp_number && profileForm.whatsapp_number.trim()) {
+                    setShowWaBanner(false);
+                    setProfileMsg('WhatsApp number saved. Inspection requests will now be sent directly to your WhatsApp.');
+                  } else {
+                    setProfileMsg('Profile updated successfully.');
+                  }
+                  var updatedUser = Object.assign({}, staffUser, data, {
+                    whatsapp_number: profileForm.whatsapp_number,
+                    full_name: profileForm.full_name,
+                    phone: profileForm.phone,
+                    location: profileForm.location,
+                  });
+                  localStorage.setItem('gh_staff_user', JSON.stringify(updatedUser));
+                } catch(e) { setProfileMsg('Error: ' + e.message); }
+                finally { setProfileLoading(false); }
+              }} disabled={profileLoading}
+                style={{ width: '100%', padding: '12px', backgroundColor: profileLoading ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: profileLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                {profileLoading ? 'Saving…' : 'Save Profile'}
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+function AppContent() {
+  var windowWidth = useWindowWidth();
+  var isMobile = windowWidth < 768;
+  var isVerySmall = windowWidth < 480;
+  var { activeCountry, setCountryByCode, fmtCurrency, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
+  var isGhana = activeCountry && activeCountry.code === 'GH';
+  var plans = [
+    { key: 'free',    label: 'Free',          price: 'Free',        listingLimit: 3,   popular: false },
+    { key: 'premium', label: 'Premium Agent', price: isGhana ? 'GH₵ 73.84'  : '₦ 8,500',  listingLimit: 15,  popular: true  },
+    { key: 'agency',  label: 'Agency',        price: isGhana ? 'GH₵ 304.05' : '₦ 35,000', listingLimit: 100, popular: false },
+  ];
+  var footerLoanUrl = isGhana ? LOAN_PARTNER_URL_GH : LOAN_PARTNER_URL;
+  usePaystackSDK();
+  useEffect(function() {
+    if (!ENABLE_ADS) return;
+    async function initAdMob() { try { console.log('AdMob ready'); } catch(e) {} }
+    initAdMob();
+  }, []);
+  useEffect(function() {
+    if (document.getElementById('gh-fonts')) return;
+    var link = document.createElement('link');
+    link.id = 'gh-fonts';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Inter:wght@400;500;600;700&display=swap';
+    document.head.appendChild(link);
+  }, []);
+  // No Supabase CDN needed - we use stored JWT from localStorage
+  useEffect(function() {
+    // Hide native splash screen when React mounts
+    if (window.__hideSplash) window.__hideSplash();
+    // Wake up Render backend
+    fetch(`${API_URL}/`).catch(function(){});
+  }, []);
+  const [user, setUser]                         = useState(null);
+  const [authChecked, setAuthChecked]           = useState(false);
+  const [showNavAuth, setShowNavAuth]           = useState(false);
+  const [properties, setProperties]             = useState([]);
+  const [isLoading, setIsLoading]               = useState(true);
+  const [isError, setIsError]                   = useState(false);
+  const [agentTier, setAgentTier]               = useState('free');
+  const [renewalDate, setRenewalDate]           = useState(null);
+  // Sync tab with URL - read tab from URL on mount, default to 'rent'
+  var validTabs = ['rent', 'sale', 'shortlet', 'services', 'upload', 'agent', 'admin'];
+  var initialTab = (function() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var tabFromQuery = params.get('tab');
+      var tabFromPath = window.location.pathname.replace('/', '').replace(/\//g, '');
+      var tab = tabFromQuery || tabFromPath || 'rent';
+      return validTabs.includes(tab) ? tab : 'rent';
+    } catch(e) { return 'rent'; }
+  })();
+  const [currentTab, setCurrentTab] = useState(initialTab);
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [searchQuery, setSearchQuery]           = useState(function() {
+    try { return new URLSearchParams(window.location.search).get('q') || ''; } catch(e) { return ''; }
+  });
+  const [filterCity, setFilterCity]             = useState(function() {
+    try { return new URLSearchParams(window.location.search).get('city') || 'All'; } catch(e) { return 'All'; }
+  });
+  const [footerModal, setFooterModal]           = useState(null);
+  const [menuOpen, setMenuOpen]                 = useState(false);
+  const [emailConfirmed, setEmailConfirmed]     = useState(false);
+  const [showStaffLogin, setShowStaffLogin]     = useState(false);
+  const [staffRole, setStaffRole]               = useState(null);
+  const [staffId, setStaffId]                   = useState('');
+  const [staffPassword, setStaffPassword]       = useState('');
+  const [staffLoading, setStaffLoading]         = useState(false);
+  const [staffError, setStaffError]             = useState('');
+  const [staffUser, setStaffUser]               = useState(function(){ try { var s = localStorage.getItem('gh_staff_user'); return s ? JSON.parse(s) : null; } catch(e){ return null; } });
+  const [showStaffPass, setShowStaffPass]       = useState(false);
+  const [showInstallBtn, setShowInstallBtn]           = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [newPasswordValue, setNewPasswordValue]             = useState('');
+  const [resetPasswordLoading, setResetPasswordLoading]     = useState(false);
+  const [resetPasswordError, setResetPasswordError]         = useState('');
+  useEffect(function() {
+    var handler = function(e) {
+      e.preventDefault();
+      window.deferredPrompt = e;
+      setShowInstallBtn(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return function() { window.removeEventListener('beforeinstallprompt', handler); };
+  }, []);
+  useEffect(function() {
+    setAuthChecked(false);
+    try {
+      if (!window.history.state || !window.history.state.tab) {
+        window.history.replaceState({ tab: initialTab }, '', window.location.href);
+      }
+    } catch(e) {}
+    try {
+      const hash = window.location.hash;
+      // Recovery links contain both access_token AND type=recovery — check this first
+      // so the email-confirmation branch below never steals and clears a recovery hash.
+      if (hash.includes('type=recovery')) {
+        setShowResetPasswordModal(true);
+        window.history.replaceState(null, '', window.location.pathname);
+        setAuthChecked(true);
+        return;
+      }
+      // Detect Supabase email confirmation redirect
+      const params = new URLSearchParams(window.location.search);
+      const isEmailConfirm = hash.includes('access_token') ||
+                             hash.includes('type=signup') ||
+                             params.get('type') === 'signup' ||
+                             (params.get('token_hash') !== null && params.get('token_hash') !== '') ||
+                             window.location.pathname === '/confirm';
+      if (isEmailConfirm) {
+        if (hash.includes('access_token')) {
+          try {
+            const hashParams = new URLSearchParams(hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+            if (accessToken) localStorage.setItem('gh_token', accessToken);
+          } catch (e) {}
+        }
+        window.history.replaceState(null, '', '/');
+        setShowNavAuth(true);
+        setEmailConfirmed(true);
+        setAuthChecked(true);
+        return;
+      }
+
+      const savedUser = localStorage.getItem('gh_user');
+      const savedToken = localStorage.getItem('gh_token');
+      if (savedUser && savedToken) {
+        var parsedUser = JSON.parse(savedUser);
+        setUser(parsedUser);
+
+        fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: 'Bearer ' + savedToken }
+        })
+        .then(function(r) {
+          if (r.status === 401 || r.status === 403) {
+            localStorage.removeItem('gh_user');
+            localStorage.removeItem('gh_token');
+            setUser(null);
+            return null;
+          }
+          return r.ok ? r.json() : null;
+        })
+        .then(function(d) {
+          if (d && d.user) {
+            var freshUser = Object.assign({}, parsedUser, {
+              role: d.user.role || parsedUser.role,
+              status: d.user.status || parsedUser.status,
+              is_unlimited: d.user.is_unlimited != null ? d.user.is_unlimited : parsedUser.is_unlimited,
+            });
+            localStorage.setItem('gh_user', JSON.stringify(freshUser));
+            setUser(freshUser);
+          }
+        })
+        .catch(function() {
+          // Network error — keep cached user, don't log out
+        })
+        .finally(function() {
+          setAuthChecked(true);
+        });
+        return;
+      }
+    } catch (e) {
+      console.error('Session restore error:', e);
+    }
+    setAuthChecked(true);
+  }, []);
+  // ── Supabase token refresh + sign-out monitoring ──────────────────────
+  useEffect(function() {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(function(event, session) {
+      if (event === 'TOKEN_REFRESHED') {
+        if (session?.access_token) localStorage.setItem('gh_token', session.access_token);
+      }
+      if (event === 'SIGNED_OUT') {
+        // Clean up credentials only — never close the nav modal here.
+        // InlineAuthForm calls signOut({ scope: 'local' }) before signInWithPassword
+        // to flush stale sessions, which fires this event. Closing the modal here
+        // would destroy the form mid-login before the error can render.
+        localStorage.removeItem('gh_token');
+        localStorage.removeItem('gh_user');
+        setUser(null);
+        navigateTab('rent');
+      }
+    });
+    return function() { subscription.unsubscribe(); };
+  }, []);
+  // Update URL when tab changes
+  const navigateTab = useCallback(function(tab) {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    setCurrentTab(tab);
+    try {
+      var url = tab === 'rent' ? '/' : '/?tab=' + tab;
+      window.history.pushState({ tab: tab }, '', url);
+    } catch(e) {}
+  }, []);
+  const updateSearch = function(q) {
+    setSearchQuery(q);
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (q) params.set('q', q); else params.delete('q');
+      params.set('tab', currentTab);
+      window.history.replaceState({ tab: currentTab }, '', '?' + params.toString());
+    } catch(e) {}
+  };
+  const updateCity = function(city) {
+    setFilterCity(city);
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (city && city !== 'All') params.set('city', city); else params.delete('city');
+      params.set('tab', currentTab);
+      window.history.replaceState({ tab: currentTab }, '', '?' + params.toString());
+    } catch(e) {}
+  };
+  // Handle browser back/forward buttons
+  useEffect(function() {
+    function handlePopState(e) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      try {
+        var tab = (e.state && e.state.tab) ? e.state.tab : 'rent';
+        var params = new URLSearchParams(window.location.search);
+        var tabFromUrl = params.get('tab') || tab;
+        var validTabs2 = ['rent', 'sale', 'shortlet', 'services', 'upload', 'agent', 'admin'];
+        setCurrentTab(validTabs2.includes(tabFromUrl) ? tabFromUrl : 'rent');
+      } catch(ex) { setCurrentTab('rent'); }
+    }
+    window.addEventListener('popstate', handlePopState);
+    return function() { window.removeEventListener('popstate', handlePopState); };
+  }, []);
+  const fetchData = useCallback(async function() {
+    setIsLoading(true); setIsError(false);
+    try {
+      var lastErr;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        try {
+          console.log('[fetchData] attempt', attempt, '| API_URL =', API_URL, '| country =', activeCountry.code);
+          var res = await fetch(`${API_URL}/api/properties?country=${activeCountry.code}`);
+          if (!res.ok) throw new Error('Fetch failed');
+          var data = await res.json();
+          var props = Array.isArray(data) ? data : (data.properties || []);
+          var createdByIds = [...new Set(props.map(function(p){ return p.created_by; }).filter(Boolean))];
+          if (createdByIds.length > 0) {
+            try {
+              var { data: profiles } = await supabase.from('profiles').select('id, verification_level').in('id', createdByIds);
+              if (profiles && profiles.length > 0) {
+                var tierMap = {};
+                profiles.forEach(function(prof){ tierMap[prof.id] = prof.verification_level || 'basic'; });
+                props = props.map(function(p){ return Object.assign({}, p, { agent_tier: tierMap[p.created_by] || 'basic' }); });
+              }
+            } catch(te) { console.warn('[fetchData] tier fetch error:', te); }
+          }
+          setProperties(props);
+          return;
+        } catch(e) {
+          console.error('[fetchData] attempt', attempt, 'error:', e);
+          lastErr = e;
+          if (attempt < 2) await new Promise(function(r){ setTimeout(r, 3000); });
+        }
+      }
+      throw lastErr;
+    } catch (e) { console.error('[fetchData] final error:', e); setIsError(true); }
+    finally { setIsLoading(false); }
+  }, [activeCountry.code]);
+  useEffect(function() { fetchData(); }, [fetchData]);
+
+  // ── Supabase Realtime — sync properties across all tabs and users ─────
+  useEffect(function() {
+    const channel = supabase
+      .channel('public:properties')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'properties' }, function(payload) {
+        if (payload.eventType === 'DELETE') {
+          setProperties(function(prev) { return prev.filter(function(item) { return item.id !== payload.old.id; }); });
+        } else if (payload.eventType === 'INSERT') {
+          setProperties(function(prev) {
+            // Replace optimistic insert with the complete row from Postgres
+            if (prev.some(function(item) { return item.id === payload.new.id; })) {
+              return prev.map(function(item) { return item.id === payload.new.id ? payload.new : item; });
+            }
+            return [payload.new, ...prev];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setProperties(function(prev) { return prev.map(function(item) { return item.id === payload.new.id ? payload.new : item; }); });
+        }
+      })
+      .subscribe();
+    return function() { supabase.removeChannel(channel); };
+  }, []);
+
+  useEffect(function() { setFilterCity('All'); }, [activeCountry.code]);
+  const handleLogout = async function() {
+    try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }); } catch (e) {}
+    localStorage.removeItem('gh_user'); localStorage.removeItem('gh_token');
+    setUser(null); setShowNavAuth(false); navigateTab('rent');
+  };
+  const handleAdminClick = () => {
+    if (user && user.email.toLowerCase() === MASTER_ADMIN.toLowerCase()) {
+      navigateTab('admin');
+    } else {
+      alert("Access Denied: This area is restricted to the master administrator account.");
+    }
+  };
+  const countryProperties = (properties || []).filter(function(p) {
+    const pCountry    = (p.country || '').toLowerCase().trim();
+    const activeName  = activeCountry.name.toLowerCase();
+    const activeCode  = activeCountry.code.toLowerCase();
+    // Properties with no country field are treated as Nigeria-only.
+    // Empty-string match in activeName.includes('') was causing ALL unlabelled
+    // listings to bleed through to Ghana and any future country.
+    if (!pCountry) return activeCode === 'ng';
+    return pCountry === activeName || pCountry === activeCode || pCountry.includes(activeName);
+  });
+  const featuredProperties = countryProperties.filter(function(p) {
+    return p.is_featured === true;
+  });
+  const rentProperties = countryProperties.filter(function(p) {
+    var pur = (p.purpose || '').toLowerCase().trim();
+    return pur === 'rent' || pur === 'for rent' || pur === '';
+  });
+  const saleProperties = countryProperties.filter(function(p) {
+    var pur = (p.purpose || '').toLowerCase().trim();
+    return pur === 'sale' || pur === 'for sale';
+  });
+  const shortletProperties = countryProperties.filter(function(p) {
+    var pur = (p.purpose || '').toLowerCase().trim();
+    return pur === 'shortlet' || pur === 'short let' || pur === 'shortlets';
+  });
+  const isMasterAdmin = user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
+  const isAgent    = user?.role === 'agent' || user?.role === 'admin' || isMasterAdmin;
+  const isApproved = user?.role === 'admin' || user?.status === 'approved' || isMasterAdmin;
+  const isAdmin    = user?.role === 'admin' || isMasterAdmin;
+  useEffect(function() {
+    if (currentTab === 'admin' && user && !isMasterAdmin && !isAdmin) {
+      navigateTab(isAgent ? 'upload' : 'rent');
+    }
+  }, [currentTab, user, isMasterAdmin, isAdmin]);
+  useEffect(function() {
+    if (!user?.id) return;
+    var saved = localStorage.getItem('gh_tier_' + user.id);
+    if (saved) setAgentTier(saved);
+    var savedRenewal = localStorage.getItem('gh_tier_renewed_' + user.email)
+      || localStorage.getItem('gh_tier_renewed_' + user.id);
+    if (savedRenewal) setRenewalDate(savedRenewal);
+  }, [user?.id]);
+  const searchFiltered = function(list) {
+    var result = list;
+    if (searchQuery.trim()) { var q = searchQuery.toLowerCase(); result = result.filter(function(p) { return String(p.title || '').toLowerCase().includes(q) || String(p.location || '').toLowerCase().includes(q); }); }
+    if (filterCity !== 'All') { result = result.filter(function(p) { return String(p.location || '').toLowerCase().includes(filterCity.toLowerCase()); }); }
+    return result;
+  };
+  const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
+  if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
+  if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
+  if (isLoading) return <LoadingScreen />;
+  if (isError) return <ErrorScreen onRetry={fetchData} />;
+  return (
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif !important; background: #f0f4f8 !important; color: #0f172a !important; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif !important; letter-spacing: -0.02em; }
+        .gh-auth-form-inner { background: #fff; border: 1.5px solid #e8edf5; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 56px rgba(10,34,64,0.10); width: 100%; display: block !important; }
+        .gh-auth-form-inner form { display: flex !important; flex-direction: column !important; gap: 12px !important; }
+        .gh-auth-form-inner input, .gh-auth-form-inner button[type="submit"] { width: 100% !important; display: block !important; pointer-events: all !important; font-size: 16px !important; }
+        .gh-auth-form-inner button[type="submit"] { min-height: 52px !important; touch-action: manipulation !important; }
+        .gh-card { animation: fadeUp 0.32s ease forwards; opacity: 0; }
+        .gh-card:nth-child(1) { animation-delay: 0.00s; }
+        .gh-card:nth-child(2) { animation-delay: 0.05s; }
+        .gh-card:nth-child(3) { animation-delay: 0.10s; }
+        .gh-card:nth-child(4) { animation-delay: 0.15s; }
+        .gh-card:nth-child(5) { animation-delay: 0.20s; }
+        .gh-card:nth-child(n+6) { animation-delay: 0.25s; }
+        .gh-nav-btn { transition: all 0.18s ease !important; }
+        .gh-nav-btn:hover { background: rgba(255,255,255,0.16) !important; transform: translateY(-1px); }
+        .gh-prop-card { transition: transform 0.22s cubic-bezier(0.34,1.4,0.64,1), box-shadow 0.22s ease !important; }
+        .gh-prop-card:hover { transform: translateY(-5px) !important; box-shadow: 0 20px 48px rgba(10,34,64,0.14) !important; }
+        input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.14) !important; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #f0f4f8; }
+        ::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 6px; }
+        .gh-close-btn:hover { background: #e2e8f0 !important; color: #0a2240 !important; transform: scale(1.08); }
+        .gh-logo:hover { opacity: 0.82; }
+        .gh-logout-btn:hover { border-color: rgba(255,255,255,0.45) !important; background: rgba(255,255,255,0.1) !important; }
+        .gh-signin-btn:hover { background: #16a34a !important; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(34,197,94,0.28) !important; }
+        .gh-social-btn:hover { opacity: 0.88; transform: translateY(-2px); }
+        .gh-footer-link:hover { color: #fff !important; }
+        .gh-footer-contact:hover { color: rgba(255,255,255,0.9) !important; }
+        .gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
+      `}</style>
+      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} />}
+      {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={function(){ setFooterModal(null); }} />}
+      {showResetPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
+            <h3 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 6px 0' }}>Set New Password</h3>
+            <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Enter your new password below.</p>
+            <input type="password" placeholder="New password (min 6 characters)" value={newPasswordValue}
+              onChange={function(e){ setNewPasswordValue(e.target.value); setResetPasswordError(''); }}
+              style={{ ...inputStyle, fontSize: '16px', marginBottom: '10px' }} minLength={6} />
+            {resetPasswordError && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{resetPasswordError}</p>}
+            <button onClick={async function(){
+              if (newPasswordValue.length < 6) { setResetPasswordError('Password must be at least 6 characters'); return; }
+              setResetPasswordLoading(true);
+              try {
+                const { error } = await supabase.auth.updateUser({ password: newPasswordValue });
+                if (error) throw error;
+                setShowResetPasswordModal(false);
+                setNewPasswordValue('');
+                alert('Password updated successfully! Please sign in with your new password.');
+              } catch(err) {
+                setResetPasswordError(err.message || 'Failed to update password');
+              } finally {
+                setResetPasswordLoading(false);
+              }
+            }} disabled={resetPasswordLoading}
+              style={{ width: '100%', padding: '13px', border: 'none', borderRadius: '10px', backgroundColor: resetPasswordLoading ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.92rem', cursor: 'pointer' }}>
+              {resetPasswordLoading ? 'Updating...' : 'Update Password'}
+            </button>
+          </div>
+        </div>
+      )}
+      {showNavAuth && !user && (
+        <div onClick={function(e){ if(e.target===e.currentTarget) setShowNavAuth(false); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6,21,40,0.72)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '22px', width: '100%', maxWidth: '440px', padding: '30px 26px', boxShadow: '0 32px 80px rgba(10,34,64,0.24)', position: 'relative', maxHeight: '92vh', overflowY: 'auto' }}>
+            <button onClick={function(){ setShowNavAuth(false); setEmailConfirmed(false); }} className="gh-close-btn" title="Close" style={{ position: 'absolute', top: '14px', right: '14px', background: '#f0f4f8', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '1.1rem', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>×</button>
+            {emailConfirmed && (
+              <div style={{ backgroundColor: '#f0fff4', border: '2px solid #27ae60', borderRadius: '12px', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>
+                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto', display: 'block' }}>
+                    <circle cx="16" cy="16" r="16" fill="#27ae60"/>
+                    <path d="M10 16L14 20L22 12" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#166534', fontSize: '1rem' }}>Email Verified Successfully!</p>
+                <p style={{ margin: 0, color: '#15803d', fontSize: '0.82rem', lineHeight: '1.5' }}>Your GetHome account is now active. Sign in below to continue.</p>
+              </div>
+            )}
+            <InlineAuthForm actionLabel="continue" onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); setShowNavAuth(false); setEmailConfirmed(false); if (u.role === 'agent' && u.status === 'approved') { navigateTab('upload'); } else if (u.role === 'admin') { navigateTab('admin'); } }} />
+          </div>
+        </div>
+      )}
+      <nav style={{ backgroundColor: '#0a2240', position: 'sticky', top: 0, zIndex: 999, boxShadow: '0 2px 16px rgba(10,34,64,0.25)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* ── Top bar ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '0 4%' : '0 5%', height: isMobile ? '56px' : '66px' }}>
+          {/* Logo */}
+          <div onClick={function(){ navigateTab('rent'); setMenuOpen(false); }} className="gh-logo" style={{ fontSize: isMobile ? '1.35rem' : '1.75rem', fontWeight: '800', color: '#fff', cursor: 'pointer', flexShrink: 0, fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", letterSpacing: '-0.8px', transition: 'opacity 0.18s', userSelect: 'none' }}>Get<span style={{ color: '#22c55e' }}>Home</span></div>
+
+          {/* Desktop tabs */}
+          {!isMobile && (
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flex: 1, justifyContent: 'center', padding: '0 8px' }}>
+              <button onClick={function(){ navigateTab('rent'); }} className="gh-nav-btn" style={navBtnStyle('rent')}>For Rent</button>
+              <button onClick={function(){ navigateTab('sale'); }} className="gh-nav-btn" style={navBtnStyle('sale')}>For Sale</button>
+              <button onClick={function(){ navigateTab('shortlet'); }} className="gh-nav-btn" style={navBtnStyle('shortlet')}>Shortlets</button>
+              <button onClick={function(){ navigateTab('services'); }} className="gh-nav-btn" style={navBtnStyle('services')}>Services</button>
+              {isAgent && <button onClick={function(){ navigateTab('upload'); }} className="gh-nav-btn" style={navBtnStyle('upload')}>Upload</button>}
+              <button onClick={function(){ navigateTab('agent'); }} className="gh-nav-btn" style={navBtnStyle('agent')}>Agents</button>
+              {user && user.email.toLowerCase() === MASTER_ADMIN.toLowerCase() && <button onClick={handleAdminClick} className="gh-nav-btn" style={{ ...navBtnStyle('admin'), display: 'inline-block' }}>Admin</button>}
+            </div>
+          )}
+
+          {/* Desktop: country + auth */}
+          {!isMobile && (
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={function() { var idx = COUNTRIES.findIndex(function(c){ return c.code === activeCountry.code; }); setCountryByCode(COUNTRIES[(idx + 1) % COUNTRIES.length].code); }}
+                onMouseEnter={function(e){ e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={function(e){ e.currentTarget.style.color = 'rgba(255,255,255,0.75)'; }}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.84rem', fontWeight: '600', color: 'rgba(255,255,255,0.75)', backgroundColor: 'transparent', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.2s' }}>
+                <span style={{ display: 'inline-block', transform: 'scale(0.9)', verticalAlign: 'middle' }}>{activeCountry.flag}</span>
+                <span style={{ verticalAlign: 'middle' }}>{activeCountry.name}</span>
+              </button>
+              {showInstallBtn && (
+                <button onClick={function(){ var p = window.deferredPrompt; if (!p) return; p.prompt(); p.userChoice.then(function(result){ if (result.outcome === 'accepted') setShowInstallBtn(false); window.deferredPrompt = null; }); }}
+                  style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.5)', backgroundColor: 'rgba(34,197,94,0.15)', color: '#86efac', fontSize: '0.78rem', cursor: 'pointer', fontWeight: '700', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", whiteSpace: 'nowrap' }}>Install App</button>
+              )}
+              {user ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.74rem' }}>{user.email?.split('@')[0]}</span>
+                  <button onClick={handleLogout} className="gh-logout-btn" style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.18)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontSize: '0.81rem', cursor: 'pointer', fontWeight: '600', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>Logout</button>
+                </div>
+              ) : (
+                <button onClick={function(){ fetch(`${API_URL}/`).catch(function(){}); setShowNavAuth(function(s){ return !s; }); }} className="gh-signin-btn" style={{ padding: '8px 18px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontSize: '0.83rem', cursor: 'pointer', fontWeight: '700', letterSpacing: '0.1px', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>Sign In</button>
+              )}
+            </div>
+          )}
+
+          {/* Mobile: country + hamburger */}
+          {isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                onClick={function() { var idx = COUNTRIES.findIndex(function(c){ return c.code === activeCountry.code; }); setCountryByCode(COUNTRIES[(idx + 1) % COUNTRIES.length].code); }}
+                onMouseEnter={function(e){ e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={function(e){ e.currentTarget.style.color = 'rgba(255,255,255,0.75)'; }}
+                title="Switch country"
+                style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.72rem', fontWeight: '600', color: 'rgba(255,255,255,0.75)', backgroundColor: 'transparent', border: 'none', padding: '4px 6px', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.2s' }}>
+                <span>{activeCountry.flag}</span>
+                <span>{activeCountry.name}</span>
+              </button>
+              <button onClick={function(){ setMenuOpen(function(v){ return !v; }); }} style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <div style={{ width: '22px', height: '2px', backgroundColor: '#fff', borderRadius: '2px', marginBottom: '5px' }} />
+                <div style={{ width: '22px', height: '2px', backgroundColor: '#fff', borderRadius: '2px', marginBottom: '5px' }} />
+                <div style={{ width: '22px', height: '2px', backgroundColor: '#fff', borderRadius: '2px' }} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ── Mobile dropdown ── */}
+        {isMobile && menuOpen && (
+          <div style={{ backgroundColor: '#0b2647', borderTop: '1px solid rgba(255,255,255,0.07)', padding: '14px 4% 18px', display: 'flex', flexDirection: 'column', gap: '6px', animation: 'slideDown 0.2s ease' }}>
+            {[
+              { tab: 'rent',     label: 'For Rent' },
+              { tab: 'sale',     label: 'For Sale' },
+              { tab: 'shortlet', label: 'Shortlets' },
+              { tab: 'services', label: 'Services' },
+              { tab: 'agent',    label: 'Agents' },
+              ...(isAgent ? [{ tab: 'upload', label: 'Upload Listing' }] : []),
+              ...(user && (user.role === 'admin' || user.email?.toLowerCase() === MASTER_ADMIN.toLowerCase()) ? [{ tab: 'admin', label: 'Admin Dashboard' }] : []),
+            ].map(function(item) {
+              var active = currentTab === item.tab;
+              return (
+                <button key={item.tab}
+                  onClick={function(){ navigateTab(item.tab); setMenuOpen(false); }}
+                  style={{ width: '100%', padding: '13px 16px', backgroundColor: active ? 'rgba(34,197,94,0.12)' : 'transparent', color: active ? '#22c55e' : 'rgba(255,255,255,0.85)', border: '1px solid ' + (active ? 'rgba(34,197,94,0.35)' : 'rgba(255,255,255,0.1)'), borderRadius: '10px', fontSize: '0.88rem', fontWeight: active ? '700' : '500', textAlign: 'left', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                  {item.label}
+                </button>
+              );
+            })}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: '6px', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {user ? (
+                <>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.74rem', paddingLeft: '4px', fontFamily: "'Inter', sans-serif" }}>{user.email}</span>
+                  <button onClick={function(){ handleLogout(); setMenuOpen(false); }}
+                    style={{ width: '100%', padding: '13px 16px', backgroundColor: 'rgba(239,68,68,0.08)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px', fontSize: '0.88rem', fontWeight: '600', textAlign: 'left', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <button onClick={function(){ fetch(`${API_URL}/`).catch(function(){}); setShowNavAuth(function(s){ return !s; }); setMenuOpen(false); }}
+                  style={{ width: '100%', padding: '14px 16px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.9rem', fontWeight: '700', textAlign: 'left', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 14px rgba(34,197,94,0.28)' }}>
+                  Sign In
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </nav>
+      <div style={{ padding: isMobile ? '20px 4% 48px' : '44px 5% 64px', maxWidth: '1440px', margin: '0 auto', width: '100%', flex: 1 }}>
+        {currentTab === 'rent' && (
+          <section>
+            <div style={{ background: 'linear-gradient(140deg, #061b36 0%, #0d2d4e 50%, #0a2240 100%)', margin: isMobile ? '-20px -4% 24px' : '-40px -5% 40px', padding: isMobile ? '30px 4% 26px' : '64px 5% 48px', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: '-60px', right: '-40px', width: '280px', height: '280px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,197,94,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', bottom: '-40px', left: '10%', width: '200px', height: '200px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%)', pointerEvents: 'none' }} />
+              <div style={{ position: 'relative' }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '20px', padding: '4px 12px', marginBottom: '14px' }}>
+                  <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                  <span style={{ color: '#4ade80', fontSize: '0.72rem', fontWeight: '600', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>VERIFIED LISTINGS</span>
+                </div>
+                <h1 style={{ color: '#fff', fontSize: isMobile ? '1.55rem' : '3rem', fontWeight: '800', margin: '0 0 12px 0', lineHeight: '1.12', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", letterSpacing: '-0.04em' }}>Find Your Next Home<br /><span style={{ color: '#22c55e' }}>with Confidence.</span></h1>
+                <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: isMobile ? '0.82rem' : '0.95rem', margin: '0 0 22px 0', lineHeight: '1.65', maxWidth: '520px', fontFamily: "'Inter', sans-serif" }}>Browse verified listings in {activeCountry.flag} {activeCountry.name} — full fee breakdown, escrow protection, and no hidden charges.</p>
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: isMobile ? '10px' : '12px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '140px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.88rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }} />
+                  <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
+                    <option value="All">All Cities</option>
+                    {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                  </select>
+                  {(searchQuery || filterCity !== 'All') && <button onClick={function(){ updateSearch(''); updateCity('All'); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>Clear</button>}
+                </div>
+                <div style={{ display: 'flex', gap: isMobile ? '20px' : '28px', marginTop: '22px', flexWrap: 'wrap' }}>
+                  {[{ value: countryProperties.length, label: 'Verified Listings' }, { value: '6+', label: 'Cities Covered' }, { value: '100%', label: 'Fee Transparent' }].map(function(s){ return <div key={s.label}><span style={{ fontSize: isMobile ? '1.15rem' : '1.4rem', fontWeight: '800', color: '#22c55e', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{s.value}</span><span style={{ fontSize: '0.72rem', display: 'block', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontFamily: "'Inter', sans-serif", letterSpacing: '0.02em' }}>{s.label}</span></div>; })}
+                </div>
+              </div>
+            </div>
+            {(searchQuery || filterCity !== 'All') ? (
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Search Results</h2>
+                  <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', fontSize: '0.68rem', fontWeight: '700', padding: '3px 10px', borderRadius: '20px', border: '1px solid #bfdbfe' }}>{searchFiltered(rentProperties).length} found</span>
+                  <button onClick={function(){ updateSearch(''); updateCity('All'); }} style={{ marginLeft: 'auto', padding: '5px 13px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#64748b', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>
+                </div>
+                {searchFiltered(rentProperties).length === 0
+                  ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ fontSize: '2.6rem', marginBottom: '12px' }}>🔍</div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
+                  : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                      {searchFiltered(rentProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                    </div>}
+              </div>
+            ) : (
+              <>
+                {featuredProperties.length > 0 && (
+                  <div style={{ marginBottom: '28px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                      <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Featured Listings</h2>
+                      <span style={{ backgroundColor: '#fef3c7', color: '#92400e', fontSize: '0.62rem', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', border: '1px solid #fcd34d', letterSpacing: '0.04em' }}>FEATURED</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                      {featuredProperties.map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                    </div>
+                  </div>
+                )}
+                <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d2d4e 100%)', borderRadius: isMobile ? '16px' : '20px', padding: isMobile ? '22px 18px' : '40px', marginBottom: isMobile ? '24px' : '36px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ textAlign: 'center', marginBottom: isMobile ? '18px' : '28px' }}>
+                    <h2 style={{ color: '#fff', fontSize: isMobile ? '1.05rem' : '1.4rem', fontWeight: '800', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Why Pay Through GetHome?</h2>
+                    <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: isMobile ? '0.76rem' : '0.85rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Zero risk of agent fraud — your money is always protected.</p>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: isMobile ? '10px' : '16px' }}>
+                    {[
+                      { icon: '🔒', title: 'Escrow Protection', body: 'Funds held until you verify and approve.' },
+                      { icon: '✅', title: 'Verified Agents', body: 'Every agent is screened before listing.' },
+                      { icon: '📊', title: 'Transparent Fees', body: 'Full fee breakdown before you pay.' },
+                      { icon: '🤝', title: 'Dispute Resolution', body: 'Our team mediates if anything goes wrong.' }
+                    ].map(function(item){ return (
+                      <div key={item.title} style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: isMobile ? '14px 12px' : '20px 18px', transition: 'background 0.2s' }}>
+                        <div style={{ fontSize: isMobile ? '1.3rem' : '1.5rem', marginBottom: '10px', lineHeight: 1 }}>{item.icon}</div>
+                        <h4 style={{ color: '#fff', fontSize: isMobile ? '0.78rem' : '0.87rem', fontWeight: '700', margin: '0 0 5px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.2px' }}>{item.title}</h4>
+                        <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: isMobile ? '0.70rem' : '0.77rem', lineHeight: '1.55', margin: 0, fontFamily: "'Inter', sans-serif" }}>{item.body}</p>
+                      </div>
+                    ); })}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: '0 0 3px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>All Rental Listings</h2>
+                    <p style={{ color: '#64748b', margin: 0, fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{rentProperties.length} verified listing{rentProperties.length !== 1 ? 's' : ''} available</p>
+                  </div>
+                </div>
+                {rentProperties.length === 0
+                  ? (
+                    <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
+                      <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>🏘️</div>
+                      <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
+                        No listings yet in {activeCountry.flag} {activeCountry.name}
+                      </h3>
+                      <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.65', margin: '0 auto 20px', maxWidth: '380px' }}>
+                        We haven't expanded our rental catalog to this region quite yet. Check back soon, or switch countries using the selector in the nav bar to explore available properties.
+                      </p>
+                      <div style={{ display: 'inline-flex', gap: '8px', padding: '8px 16px', backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px' }}>
+                        <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: '600' }}>Tip: Use the country selector in the navigation bar to switch markets.</span>
+                      </div>
+                    </div>
+                  )
+                  : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                      {rentProperties.map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                    </div>}
+              </>
+            )}
+          </section>
+        )}
+        {currentTab === 'sale' && (
+          <section>
+            <div style={{ marginBottom: '22px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.05rem' : '1.35rem', fontWeight: '700', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Properties For Sale</h2>
+              <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Verified properties available to buy in {activeCountry.flag} {activeCountry.name}</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
+                {searchQuery && <button onClick={function(){ updateSearch(''); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
+              </div>
+            </div>
+            {searchFiltered(saleProperties).length === 0
+              ? (
+                <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
+                  <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>{searchQuery ? '🔍' : '🏠'}</div>
+                  <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
+                    {searchQuery
+                      ? 'No results found'
+                      : `No properties for sale in ${activeCountry.flag} ${activeCountry.name}`}
+                  </h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.65', margin: '0 auto 20px', maxWidth: '380px' }}>
+                    {searchQuery
+                      ? 'Try different keywords or clear your search to browse all available properties.'
+                      : "We haven't listed any sale properties in this region yet. Check back soon or switch countries to explore available listings!"}
+                  </p>
+                  {!searchQuery && (
+                    <div style={{ display: 'inline-flex', gap: '8px', padding: '8px 16px', backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: '600' }}>Tip: Use the country selector in the navigation bar to switch markets.</span>
+                    </div>
+                  )}
+                </div>
+              )
+              : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                  {searchFiltered(saleProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                </div>}
+          </section>
+        )}
+        {currentTab === 'shortlet' && (
+          <section>
+            <div style={{ marginBottom: '22px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.05rem' : '1.35rem', fontWeight: '700', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Shortlet Properties</h2>
+              <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Furnished short-stay rentals — book by the night</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
+                {searchQuery && <button onClick={function(){ updateSearch(''); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
+              </div>
+            </div>
+            {searchFiltered(shortletProperties).length === 0
+              ? (
+                <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
+                  <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>{searchQuery ? '🔍' : '🏨'}</div>
+                  <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
+                    {searchQuery ? 'No results found' : `No shortlets in ${activeCountry.flag} ${activeCountry.name}`}
+                  </h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.65', margin: '0 auto 20px', maxWidth: '380px' }}>
+                    {searchQuery ? 'Try different keywords or clear your search to browse all available shortlets.' : "No shortlet listings in this region yet. Check back soon or switch countries to explore available listings!"}
+                  </p>
+                  {!searchQuery && (
+                    <div style={{ display: 'inline-flex', gap: '8px', padding: '8px 16px', backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#166534', fontWeight: '600' }}>Tip: Use the country selector in the navigation bar to switch markets.</span>
+                    </div>
+                  )}
+                </div>
+              )
+              : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                  {searchFiltered(shortletProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                </div>}
+          </section>
+        )}
+        {currentTab === 'services' && (
+          <section>
+            <div style={{ marginBottom: '26px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.1rem' : '1.5rem', fontWeight: '700', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Our Services</h2>
+              <p style={{ color: '#64748b', fontSize: '0.84rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Professional move-in services — get a custom quote via WhatsApp</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '16px' : '24px' }}>
+              {[
+                { key: 'cleaning', icon: '🧹', title: 'Professional Deep Cleaning', desc: 'Post-construction scrub, pre-move-in cleaning, and fumigation services', Form: CleaningQuoteForm },
+                { key: 'moving', icon: '🚛', title: 'Relocation and Haulage', desc: 'Packing crew, moving truck, and safe transport to your new home', Form: MovingQuoteForm }
+              ].map(function(svc){
+                return (
+                  <div key={svc.key} style={{ ...cardStyle, padding: isMobile ? '20px' : '28px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                      <div style={{ fontSize: '1.5rem', lineHeight: 1 }}>{svc.icon}</div>
+                      <h3 style={{ color: '#0a2240', fontSize: isMobile ? '0.95rem' : '1.05rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{svc.title}</h3>
+                    </div>
+                    <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 20px 0', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{svc.desc}</p>
+                    <svc.Form />
                   </div>
                 );
               })}
             </div>
           </section>
         )}
-        {/* TAB: AGENT UPLOAD PORTAL --- role-gated */}
-        {currentTab === 'upload' && isAgent && (
-          <AgentUploadPortal
-            user={user}
-            allProperties={properties}
-            onListingPublished={(saved)    => setProperties(prev => [saved, ...prev])}
-            onListingUpdated={(updated)    => setProperties(prev => prev.map(p => p.id === updated.id ? updated : p))}
-            onListingDeleted={(deletedId)  => setProperties(prev => prev.filter(p => p.id !== deletedId))}
-          />
-        )}
-        {/* Fallback if someone navigates to 'upload' without agent role */}
-        {currentTab === 'upload' && !isAgent && (
-          <div style={{ ...cardStyle, maxWidth: '480px', margin: '40px auto', padding: '48px 40px', textAlign: 'center' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}></div>
-            <h2 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.3rem', margin: '0 0 10px 0' }}>Agent Access Only</h2>
-            <p style={{ color: '#64748b', fontSize: '0.93rem', lineHeight: '1.6', margin: 0 }}>This section is restricted to verified agents and admins. Please contact GetHome support to request agent access for your account.</p>
-          </div>
-        )}
-        {/* TAB: AGENT PORTAL (subscription management) */}
-        {currentTab === 'agent' && (
-          <div>
-            {!isLoggedIn ? (
-              <div style={{ maxWidth: '500px', margin: '20px auto' }}>
-                <div style={{ marginBottom: '32px' }}>
-                  <h2 style={{ color: '#0a2240', fontSize: '1.9rem', fontWeight: '800', margin: '0 0 8px 0' }}>Agent Portal</h2>
-                  <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>List and manage properties on Nigeria verified real estate platform.</p>
-                </div>
-                <div style={{ ...cardStyle, padding: '40px' }}>
-                  <h3 style={{ color: '#0a2240', textAlign: 'center', fontSize: '1.4rem', fontWeight: '800', margin: '0 0 28px 0' }}>{isRegistering ? 'Register Agency Profile' : 'Partner Dashboard Login'}</h3>
-                  <form onSubmit={handleAgentAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {isRegistering && (<>
-                      <div><label style={labelStyle}>Representative Full Name</label><input type="text" placeholder="Your full name" required style={inputStyle} onChange={e => setAgentForm({ ...agentForm, name: e.target.value })} /></div>
-                      <div><label style={labelStyle}>Registered Company Name</label><input type="text" placeholder="Your agency name" required style={inputStyle} onChange={e => setAgentForm({ ...agentForm, agencyName: e.target.value })} /></div>
-                    </>)}
-                    <div><label style={labelStyle}>Corporate Email</label><input type="email" placeholder="email@agency.com" required style={inputStyle} onChange={e => setAgentForm({ ...agentForm, email: e.target.value })} /></div>
-                    <div><label style={labelStyle}>Password</label><input type="password" placeholder="Your dashboard password" required style={inputStyle} onChange={e => setAgentForm({ ...agentForm, password: e.target.value })} /></div>
-                    <button type="submit" style={{ padding: '14px', border: 'none', borderRadius: '10px', backgroundColor: '#0a2240', color: '#fff', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', marginTop: '4px' }}>{isRegistering ? 'Submit Application' : 'Authenticate Access'}</button>
-                  </form>
-                  <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '0.9rem', color: '#94a3b8', marginBottom: 0 }}>
-                    {isRegistering ? 'Already onboarding houses?' : 'Want to list properties?'}{' '}
-                    <span style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setIsRegistering(!isRegistering)}>{isRegistering ? 'Sign in here' : 'Register your agency'}</span>
+        {currentTab === 'upload' && (
+          <section>
+            {user && isAgent && isApproved && agentTier !== 'free' && (
+              <RenewalBanner user={user} agentTier={agentTier} isMobile={isMobile} onRenewed={function(d){ setRenewalDate(d); }} />
+            )}
+            {user && isAgent && !isApproved && (
+              <div style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #fef9e7 100%)', border: '1.5px solid #fde68a', borderRadius: '16px', padding: isMobile ? '16px' : '20px 24px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                <div style={{ width: '42px', height: '42px', backgroundColor: '#fef3c7', border: '2px solid #fbbf24', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1.2rem' }}>⏳</div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: '0 0 5px 0', fontWeight: '700', color: '#92400e', fontSize: '0.93rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Account Under Review</p>
+                  <p style={{ margin: '0 0 12px 0', color: '#b45309', fontSize: '0.82rem', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>
+                    Your agent account is awaiting admin approval. You can explore the portal but listing uploads are locked until approved.
                   </p>
-                </div>
-              </div>
-            ) : (
-              <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-                <div style={{ marginBottom: '32px' }}>
-                  <h2 style={{ color: '#0a2240', fontSize: '1.9rem', fontWeight: '800', margin: '0 0 8px 0' }}>Agent Dashboard</h2>
-                  <p style={{ color: '#64748b', margin: 0, fontSize: '0.95rem' }}>Manage your listings and upgrade your plan for more capacity.</p>
-                </div>
-                <div style={{ ...cardStyle, padding: '40px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '28px', paddingBottom: '20px', borderBottom: '1px solid #f1f5f9' }}>
-                    <div>
-                      <h3 style={{ color: '#0a2240', margin: '0 0 4px 0', fontSize: '1.25rem', fontWeight: '800' }}>Welcome Back, Partner Agent</h3>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        Tier: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[agentTier]?.label}</strong>
-                        <span style={{ color: '#cbd5e1' }}>.</span> {agentListingCount} / {AGENT_TIERS[agentTier]?.listingLimit} listings used
-                        {agentTier !== 'free' && <span style={{ backgroundColor: '#27ae60', color: '#fff', fontSize: '0.7rem', padding: '2px 8px', borderRadius: '12px', fontWeight: '700' }}>[star] Verified Agent</span>}
-                      </p>
-                    </div>
-                    <button onClick={() => setIsLoggedIn(false)} style={{ backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>Logout</button>
-                  </div>
-                  {agentListingCount >= AGENT_TIERS[agentTier]?.listingLimit && (
-                    <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px' }}>
-                      <p style={{ margin: 0, fontWeight: '700', color: '#92400e' }}>[!] Listing Limit Reached</p>
-                      <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#a16207' }}>Publish one extra for NGN1,000, or upgrade your tier below.</p>
-                    </div>
-                  )}
-                  <form onSubmit={handleAddProperty} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div><label style={labelStyle}>Property Listing Title</label><input type="text" placeholder="e.g., Luxury 4 Bedroom Duplex" required style={inputStyle} value={newProperty.title} onChange={e => setNewProperty({ ...newProperty, title: e.target.value })} /></div>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
-                      <div><label style={labelStyle}>Location City / Area</label><input type="text" placeholder="e.g., Lekki Phase 1" required style={inputStyle} value={newProperty.location} onChange={e => setNewProperty({ ...newProperty, location: e.target.value })} /></div>
-                      <div><label style={labelStyle}>Listing Purpose</label><select style={inputStyle} value={newProperty.purpose} onChange={e => setNewProperty({ ...newProperty, purpose: e.target.value })}><option value="rent">For Rent</option><option value="sale">For Sale</option></select></div>
-                    </div>
-                    <div><label style={labelStyle}>Price Value (NGN)</label><input type="number" placeholder="e.g., 4500000" required style={inputStyle} value={newProperty.price} onChange={e => setNewProperty({ ...newProperty, price: e.target.value })} /></div>
-                    <div><label style={labelStyle}>Property Image URL</label><input type="url" placeholder="https://images.unsplash.com/..." style={inputStyle} value={newProperty.image_url} onChange={e => setNewProperty({ ...newProperty, image_url: e.target.value })} /></div>
-                    <button type="submit" style={{ padding: '15px', border: 'none', borderRadius: '10px', background: 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(39,174,96,0.3)' }}>[*] Publish Listing Live</button>
-                  </form>
-                  <AgentUpgradePanel currentTier={agentTier} agentEmail={agentForm.email || user?.email} onUpgradeSuccess={(t) => setAgentTier(t)} />
+                  <a href={'https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I registered as an agent with email: ' + user.email + '. Please approve my account.')}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-block', padding: '8px 18px', backgroundColor: '#25D366', color: '#fff', borderRadius: '9px', fontWeight: '700', fontSize: '0.81rem', textDecoration: 'none', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(37,211,102,0.28)' }}>
+                    WhatsApp Us to Speed Up Approval
+                  </a>
                 </div>
               </div>
             )}
-          </div>
+            {user && isAgent
+              ? <AgentUploadPortal user={user} isApproved={isApproved} allProperties={properties} onListingPublished={function(p){ setProperties(prev => [p, ...prev]); }} onListingUpdated={function(p){ setProperties(prev => prev.map(x => x.id === p.id ? p : x)); }} onListingDeleted={function(id){ setProperties(prev => prev.filter(x => x.id !== id)); }} />
+              : <div style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '440px', margin: '0 auto' }}><h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Agent Access Required</h2><p style={{ color: '#64748b', margin: '0 0 24px 0', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>Sign in or create an agent account to upload listings.</p><InlineAuthForm actionLabel="access the upload portal" onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); navigateTab('upload'); }} /></div>
+            }
+          </section>
         )}
-      </div>{/* end container */}
-  {/* ---- FOOTER ---- */}
-  <footer style={{ backgroundColor: '#0a2240', color: 'rgba(255,255,255,0.7)', marginTop: 'auto' }}>
-    <div style={{ padding: '60px 5% 40px', maxWidth: '1400px', margin: '0 auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? '28px' : '40px', marginBottom: '48px' }}>
-        {/* Brand */}
-        <div>
-          <h3 style={{ color: '#fff', fontSize: '1.8rem', fontWeight: '900', margin: '0 0 12px 0' }}>
-            Get<span style={{ color: '#27ae60' }}>Home</span>
-          </h3>
-          <p style={{ fontSize: '0.88rem', lineHeight: '1.7', color: 'rgba(255,255,255,0.55)', margin: '0 0 20px 0' }}>
-            Nigeria verified real estate platform. Every naira paid through GetHome is held in escrow until you verify and approve --- zero risk of agent fraud.
-          </p>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'WhatsApp', href: 'https://wa.me/2349077246534', bg: '#25D366' },
-              { label: 'Instagram', href: 'https://instagram.com/REPLACE_INSTAGRAM', bg: '#E1306C' },
-              { label: 'Facebook', href: 'https://facebook.com/REPLACE_FACEBOOK', bg: '#1877F2' },
-              { label: 'Twitter/X', href: 'https://twitter.com/REPLACE_TWITTER', bg: '#1DA1F2' },
-            ].map(function(s) {
-              return (
-                <a key={s.label} href={s.href} target='_blank' rel='noopener noreferrer'
-                  style={{ display: 'inline-block', padding: '6px 12px', borderRadius: '8px', backgroundColor: s.bg, color: '#fff', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
-                  {s.label}
-                </a>
-              );
-            })}
-          </div>
-        </div>
-        {/* Quick Links */}
-        <div>
-          <h4 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Quick Links</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {[
-              { label: 'Properties For Rent', tab: 'rent' },
-              { label: 'Properties For Sale', tab: 'sale' },
-              { label: 'Services', tab: 'services' },
-              { label: 'Agent Portal', tab: 'agent' },
-            ].map(function(link) {
-              return (
-                <button key={link.label} onClick={function(){ setCurrentTab(link.tab); }}
-                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '0.88rem', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
-                  {link.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {/* Services */}
-        <div>
-          <h4 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Our Services</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {['Escrow Deposit Protection', 'Proxy Property Inspection', 'Professional Deep Cleaning', 'Relocation and Haulage', 'Property Loan Referral'].map(function(s) {
-              return <span key={s} style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.88rem' }}>{s}</span>;
-            })}
-          </div>
-        </div>
-        {/* Contact */}
-        <div>
-          <h4 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Contact Us</h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', margin: '0 0 2px 0', textTransform: 'uppercase' }}>Email</p>
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem' }}>REPLACE_WITH_CONTACT_EMAIL</span>
+        {currentTab === 'admin' && (user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase() || user?.role === 'admin') && (
+          <section>
+            
+            <AdminDashboard
+            user={user}
+            onListingUpdated={function(p){ setProperties(function(prev){ return prev.map(function(x){ return x.id === p.id ? p : x; }); }); }}
+            onListingDeleted={function(id){ setProperties(function(prev){ return prev.filter(function(x){ return x.id !== id; }); }); }}
+          />
+          </section>
+        )}
+        {currentTab === 'agent' && (
+          <section style={{ padding: isMobile ? '20px 0' : '40px 0' }}>
+            {user && isApproved && agentTier !== 'free' && (
+              <RenewalBanner user={user} agentTier={agentTier} isMobile={isMobile} onRenewed={function(d){ setRenewalDate(d); }} />
+            )}
+            <div style={{ textAlign: 'center', marginBottom: isMobile ? '24px' : '36px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '4px 14px', marginBottom: '14px' }}>
+                <span style={{ color: '#16a34a', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{user && isApproved ? 'YOUR PLAN' : 'FOR AGENTS'}</span>
+              </div>
+              <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.2rem' : '1.7rem', fontWeight: '800', margin: '0 0 12px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.6px', lineHeight: '1.15' }}>
+                {user && isApproved ? 'Manage Your Agent Plan' : 'List Your Properties on GetHome'}
+              </h2>
+              <p style={{ color: '#64748b', fontSize: isMobile ? '0.85rem' : '0.92rem', margin: '0 auto', maxWidth: '460px', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>
+                {user && isApproved
+                  ? `You're currently on the ${AGENT_TIERS[agentTier]?.label || 'Free'} plan. ${agentTier === 'free' ? 'Upgrade anytime to list more properties.' : 'Renew your plan to keep your listings active.'}`
+                  : `Join verified agents on GetHome's transparent platform — serving ${activeCountry.flag} ${activeCountry.name} and expanding across Africa.`}
+              </p>
             </div>
-            <div>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', margin: '0 0 2px 0', textTransform: 'uppercase' }}>WhatsApp</p>
-              <a href='https://wa.me/2349077246534' target='_blank' rel='noopener noreferrer' style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem', textDecoration: 'none' }}>+2349077246534</a>
-            </div>
-            <div>
-              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', margin: '0 0 2px 0', textTransform: 'uppercase' }}>Website</p>
-              <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.88rem' }}>REPLACE_WITH_YOUR_DOMAIN</span>
-            </div>
-          </div>
-        </div>
+            {user && isApproved ? (
+              agentTier === 'agency' ? (
+                <div style={{ maxWidth: '500px', margin: '0 auto', ...cardStyle, padding: isMobile ? '24px 20px' : '36px 32px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🏆</div>
+                  <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '1.1rem', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>You're on the Agency Plan</p>
+                  <p style={{ color: '#64748b', fontSize: '0.86rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>You're already on our highest tier with up to 100 listings. Manage your listings from the Upload tab.</p>
+                  <button onClick={function(){ navigateTab('upload'); }} style={{ padding: '12px 28px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 14px rgba(34,197,94,0.28)' }}>Go to Upload Tab</button>
+                </div>
+              ) : (
+                <div style={{ maxWidth: '780px', margin: '0 auto' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : agentTier === 'premium' ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '14px' : '20px' }}>
+                    {Object.entries(AGENT_TIERS).filter(function([k]){ return k !== agentTier && k !== 'free'; }).map(function([tierKey, tier]) {
+                      var isGhana = activeCountry && activeCountry.code === 'GH';
+                      var priceText = tierKey === 'premium' ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500') : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
+                      var isPrimary = tierKey === 'premium' || agentTier === 'premium';
+                      return (
+                        <div key={tierKey} style={{ ...cardStyle, padding: isMobile ? '22px 18px' : '28px 24px', textAlign: 'center', position: 'relative', border: isPrimary ? '2px solid #22c55e' : '1px solid #e8edf5', boxShadow: isPrimary ? '0 8px 32px rgba(34,197,94,0.12)' : cardStyle.boxShadow }}>
+                          {isPrimary && <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#22c55e', color: '#fff', fontSize: '0.65rem', fontWeight: '800', padding: '4px 14px', borderRadius: '20px', whiteSpace: 'nowrap', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>RECOMMENDED</div>}
+                          <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 6px 0', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{tier.label}</p>
+                          <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{priceText}</p>
+                          <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>Up to {tier.listingLimit} listings</p>
+                          <button onClick={function(){ var _tierKey = tierKey; openPaystack({ email: user.email, amountNaira: tier.price, ref: 'GH-AGENT-' + _tierKey.toUpperCase() + '-' + Date.now(), metadata: { agent_email: user.email, upgrade_tier: _tierKey }, onSuccess: function(response){ fetch(API_URL + '/api/agent/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, tier: _tierKey, reference: response.reference }) }).catch(console.error); var _now = new Date().toISOString(); localStorage.setItem('gh_tier_' + user.id, _tierKey); localStorage.setItem('gh_tier_renewed_' + user.email, _now); localStorage.setItem('gh_tier_renewed_' + user.id, _now); setAgentTier(_tierKey); setRenewalDate(_now); }, onClose: function(){} }); }} style={{ width: '100%', padding: '11px', backgroundColor: isPrimary ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: isPrimary ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>{agentTier === 'free' ? 'Upgrade to ' + tier.label : 'Renew ' + tier.label}</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{ textAlign: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>Payments are processed securely via Paystack</p>
+                </div>
+              )
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? '14px' : '20px', maxWidth: '780px', margin: '0 auto' }}>
+                {plans.map(function(plan){
+                  return (
+                    <div key={plan.key} style={{ ...cardStyle, padding: isMobile ? '22px 18px' : '28px 24px', textAlign: 'center', position: 'relative', border: plan.popular ? '2px solid #22c55e' : '1px solid #e8edf5', boxShadow: plan.popular ? '0 8px 32px rgba(34,197,94,0.12)' : cardStyle.boxShadow }}>
+                      {plan.popular && (
+                        <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#22c55e', color: '#fff', fontSize: '0.65rem', fontWeight: '800', padding: '4px 14px', borderRadius: '20px', whiteSpace: 'nowrap', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>MOST POPULAR</div>
+                      )}
+                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 6px 0', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{plan.label}</p>
+                      <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{plan.price}</p>
+                      <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>Up to {plan.listingLimit} listings</p>
+                      <button onClick={function(){ navigateTab('upload'); }} style={{ width: '100%', padding: '11px', backgroundColor: plan.popular ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: plan.popular ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>Get Started</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </div>
-      {/* Bottom bar */}
-      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '24px', display: 'flex', justifyContent: isMobile ? 'center' : 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
-        <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.4)', margin: 0 }}>
-          {new Date().getFullYear()} GetHome. All rights reserved.
-        </p>
-        <div style={{ display: 'flex', gap: '20px' }}>
-          {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map(function(link) {
-            return <span key={link} style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.35)', cursor: 'pointer' }}>{link}</span>;
-          })}
+      <footer style={{ background: 'linear-gradient(170deg, #0b1e35 0%, #060f1e 100%)', color: 'rgba(255,255,255,0.65)', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        <div style={{ padding: isMobile ? '36px 4% 28px' : '60px 5% 40px', maxWidth: '1400px', margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr 1fr 1.2fr', gap: isMobile ? '28px' : '40px', marginBottom: '40px' }}>
+            <div>
+              <h3 style={{ color: '#fff', fontSize: isMobile ? '1.5rem' : '1.7rem', fontWeight: '800', margin: '0 0 12px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.8px' }}>Get<span style={{ color: '#22c55e' }}>Home</span></h3>
+              <p style={{ fontSize: isMobile ? '0.78rem' : '0.82rem', lineHeight: '1.75', color: 'rgba(255,255,255,0.48)', margin: '0 0 18px 0', maxWidth: '300px', fontFamily: "'Inter', sans-serif" }}>Verified real estate marketplace across Africa. Every payment through GetHome is held in escrow until you verify and approve.</p>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[
+                  { label: 'WhatsApp', href: `https://wa.me/2349130649368`, bg: '#25D366' },
+                  { label: 'Instagram', href: 'https://www.instagram.com/gethome.realestate?igsh=MWxoams3MWpxbXJ1MQ==', bg: '#E1306C' },
+                  { label: 'Facebook', href: 'https://www.facebook.com/share/1ADV2PyMMe/', bg: '#1877F2' }
+                ].map(function(s){ return <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" className="gh-social-btn" style={{ display: 'inline-block', padding: '5px 13px', borderRadius: '8px', backgroundColor: s.bg, color: '#fff', fontSize: '0.72rem', fontWeight: '700', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>{s.label}</a>; })}
+              </div>
+            </div>
+            <div>
+              <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Quick Links</h4>
+              {[['rent','For Rent'],['sale','For Sale'],['shortlet','Shortlets'],['services','Services'],['agent','Agent Portal']].map(function([tab, label]){ return <button key={tab} onClick={function(){ navigateTab(tab); }} className="gh-footer-link" style={{ display: 'block', background: 'none', border: 'none', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', cursor: 'pointer', textAlign: 'left', padding: '4px 0', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{label}</button>; })}
+              <button onClick={function(){ setShowStaffLogin(true); }} className="gh-footer-link" style={{ display: 'block', background: 'none', border: 'none', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', cursor: 'pointer', textAlign: 'left', padding: '4px 0', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>Staff Login</button>
+            </div>
+            <div>
+              <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Services</h4>
+              {['Escrow Protection','Proxy Inspection','Deep Cleaning','Relocation & Haulage'].map(function(s){ return <p key={s} style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', margin: '0 0 6px 0', fontFamily: "'Inter', sans-serif" }}>{s}</p>; })}
+              <a href={footerLoanUrl} target="_blank" rel="noopener noreferrer" className="gh-footer-contact" style={{ display: 'block', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', margin: '0 0 5px 0', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>Property Loans</a>
+            </div>
+            <div>
+              <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Contact</h4>
+              <a href="mailto:gethome.realest@gmail.com" className="gh-footer-contact" style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', margin: '0 0 8px 0', display: 'block', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>gethome.realest@gmail.com</a>
+              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noopener noreferrer" className="gh-footer-contact" style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', textDecoration: 'none', display: 'block', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>+2349130649368</a>
+              <div style={{ marginTop: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', padding: '6px 12px' }}>
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                <span style={{ color: '#4ade80', fontSize: '0.72rem', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>All services online</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '22px', display: 'flex', justifyContent: isMobile ? 'center' : 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
+            <p style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.32)', margin: 0, fontFamily: "'Inter', sans-serif" }}>&copy; {new Date().getFullYear()} GetHome. All rights reserved.</p>
+            <div style={{ display: 'flex', gap: '20px' }}>
+              {[{ label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
+            </div>
+          </div>
         </div>
-      </div>
+      </footer>
+
+      {/* Staff Login Modal */}
+      {showStaffLogin && (
+        <div onClick={function(){ setShowStaffLogin(false); setStaffRole(null); setStaffError(''); }} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', backdropFilter: 'blur(6px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={function(e){ e.stopPropagation(); }} style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '32px 28px', maxWidth: '440px', width: '90%', boxShadow: '0 24px 64px rgba(10,34,64,0.25)', position: 'relative' }}>
+            {/* Close button */}
+            <button onClick={function(){ setShowStaffLogin(false); setStaffRole(null); setStaffError(''); }} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', fontSize: '1.25rem', color: '#94a3b8', cursor: 'pointer', lineHeight: 1, padding: '4px' }}>&times;</button>
+
+            <h2 style={{ fontWeight: 800, color: '#0a2240', fontSize: '1.2rem', textAlign: 'center', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Staff Portal</h2>
+            <p style={{ color: '#64748b', fontSize: '0.84rem', textAlign: 'center', margin: '0 0 24px 0', fontFamily: "'Inter', sans-serif" }}>Select your role to continue</p>
+
+            {/* Role cards */}
+            <div style={{ display: 'flex', gap: '14px', marginBottom: staffRole ? '24px' : '0', flexDirection: isMobile ? 'column' : 'row' }}>
+              {[
+                { code: 'SA', title: 'Service Agent', desc: 'Manage GHA teams and agent approvals' },
+                { code: 'GHA', title: 'GetHome Agent', desc: 'Source and manage property agents' }
+              ].map(function(card) {
+                var selected = staffRole === card.code;
+                return (
+                  <div
+                    key={card.code}
+                    onClick={function(){ setStaffRole(card.code); setStaffError(''); }}
+                    style={{
+                      flex: 1,
+                      border: selected ? '2px solid #22c55e' : '2px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '20px',
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                      transition: 'all 0.2s',
+                      background: selected ? '#f0fff4' : '#fff'
+                    }}
+                    onMouseEnter={function(e){ if (!selected) { e.currentTarget.style.border = '2px solid #22c55e'; e.currentTarget.style.background = '#f0fff4'; } }}
+                    onMouseLeave={function(e){ if (!selected) { e.currentTarget.style.border = '2px solid #e2e8f0'; e.currentTarget.style.background = '#fff'; } }}
+                  >
+                    <div style={{ color: '#0a2240', fontSize: '1.8rem', fontWeight: 900, fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1 }}>{card.code}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '6px', fontWeight: 600, fontFamily: "'Inter', sans-serif" }}>{card.title}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', fontFamily: "'Inter', sans-serif" }}>{card.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Login form — shown once role is selected */}
+            {staffRole && (
+              <form onSubmit={async function(e) {
+                e.preventDefault();
+                setStaffLoading(true);
+                setStaffError('');
+                try {
+                  var res = await fetch(API_URL + '/api/staff/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staffId: staffId, password: staffPassword, role: staffRole })
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.message || data.error || 'Login failed');
+                  localStorage.setItem('gh_staff_user', JSON.stringify(data.user));
+                  localStorage.setItem('gh_staff_token', data.token);
+                  setStaffUser(data.user);
+                  setShowStaffLogin(false);
+                  setStaffRole(null);
+                  setStaffId('');
+                  setStaffPassword('');
+                } catch(err) {
+                  setStaffError(err.message || 'Login failed. Please try again.');
+                } finally {
+                  setStaffLoading(false);
+                }
+              }} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <input
+                  type="text"
+                  value={staffId}
+                  onChange={function(e){ setStaffId(e.target.value); }}
+                  placeholder="Staff ID — e.g. SA0001 or GHA0001"
+                  required
+                  style={{ padding: '11px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif", outline: 'none', color: '#0a2240' }}
+                />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showStaffPass ? 'text' : 'password'}
+                    value={staffPassword}
+                    onChange={function(e){ setStaffPassword(e.target.value); }}
+                    placeholder="Password"
+                    required
+                    style={{ width: '100%', padding: '11px 44px 11px 14px', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif", outline: 'none', color: '#0a2240', boxSizing: 'border-box' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={function(){ setShowStaffPass(function(p){ return !p; }); }}
+                    style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '0.8rem', fontFamily: "'Inter', sans-serif", padding: 0 }}
+                  >{showStaffPass ? 'Hide' : 'Show'}</button>
+                </div>
+                {staffError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>{staffError}</p>}
+                <button
+                  type="submit"
+                  disabled={staffLoading}
+                  style={{ padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: staffLoading ? '#94a3b8' : '#0a2240', color: '#fff', fontWeight: 700, fontSize: '0.92rem', cursor: staffLoading ? 'not-allowed' : 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.2px', boxShadow: staffLoading ? 'none' : '0 4px 14px rgba(10,34,64,0.2)' }}
+                >{staffLoading ? 'Signing in…' : 'Sign In'}</button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
-  </footer>
+  );
+}
+function App() {
+  return (
+    <CountryProvider>
+      <AppContent />
+    </CountryProvider>
   );
 }
 export default App;

@@ -3,24 +3,159 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- Theme & PWA -->
     <meta name="theme-color" content="#0a2240" />
-    <meta name="description" content="GetHome - Nigeria verified real estate platform. Transparent pricing, secure escrow, verified listings." />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="apple-mobile-web-app-title" content="GetHome" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="GetHome" />
+
+    <!-- SEO -->
     <title>GetHome - Verified Nigerian Real Estate</title>
+    <meta name="description" content="Browse verified properties across Nigeria with full fee breakdown, secure escrow protection and transparent pricing. No hidden charges." />
+    <meta name="keywords" content="Nigeria real estate, Lagos rentals, Abuja properties, verified listings, property escrow" />
+    <meta name="author" content="GetHome" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://trygethome.online" />
+
+    <!-- Open Graph (WhatsApp, Facebook previews) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://trygethome.online" />
+    <meta property="og:title" content="GetHome - Verified Nigerian Real Estate" />
+    <meta property="og:description" content="Browse verified properties with full fee breakdown and secure escrow. Trusted Nigerian real estate platform." />
+    <meta property="og:image" content="https://trygethome.online/og-image.png" />
+    <meta property="og:site_name" content="GetHome" />
+    <meta property="og:locale" content="en_NG" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="GetHome - Verified Nigerian Real Estate" />
+    <meta name="twitter:description" content="Browse verified properties with full fee breakdown and secure escrow." />
+    <meta name="twitter:image" content="https://trygethome.online/og-image.png" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Favicon & App Icons -->
+    <link rel="icon" type="image/svg+xml" href="/gethome-icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://gethome-backend-7ocr.onrender.com" />
+    <link rel="dns-prefetch" href="https://js.paystack.co" />
+
+    <!-- Fonts: Plus Jakarta Sans (headings) + Inter (body) -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
     <style>
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 0; overflow-x: hidden; }
-      ::-webkit-scrollbar { width: 4px; }
+      /* Reset & base */
+      *, *::before, *::after { box-sizing: border-box; }
+      html { scroll-behavior: smooth; text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        background-color: #f1f5f9;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* Prevent iOS input zoom */
+      input, select, textarea {
+        font-size: 16px !important;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      button { -webkit-appearance: none; appearance: none; cursor: pointer; }
+      a { -webkit-tap-highlight-color: transparent; }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
       ::-webkit-scrollbar-track { background: #f1f5f9; }
       ::-webkit-scrollbar-thumb { background: #27ae60; border-radius: 4px; }
-      input, select, textarea, button { -webkit-appearance: none; appearance: none; }
-      a { -webkit-tap-highlight-color: transparent; }
+      ::-webkit-scrollbar-thumb:hover { background: #219a52; }
+
+      /* Loading splash - shows before React mounts */
+      #splash {
+        position: fixed;
+        inset: 0;
+        background: #0a2240;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.4s ease, visibility 0.4s ease;
+      }
+      #splash.hidden { opacity: 0; visibility: hidden; }
+      #splash-logo {
+        font-size: 2.6rem;
+        font-weight: 800;
+        color: #fff;
+        font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+        letter-spacing: -1.5px;
+        margin-bottom: 28px;
+      }
+      #splash-logo span { color: #27ae60; }
+      #splash-spinner {
+        width: 38px;
+        height: 38px;
+        border: 3px solid rgba(255,255,255,0.12);
+        border-top-color: #27ae60;
+        border-radius: 50%;
+        animation: splash-spin 0.75s linear infinite;
+      }
+      #splash-tagline {
+        margin-top: 18px;
+        color: rgba(255,255,255,0.38);
+        font-size: 0.78rem;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      @keyframes splash-spin { to { transform: rotate(360deg); } }
+
+      /* Selection color */
+      ::selection { background: #27ae60; color: #fff; }
+      ::-moz-selection { background: #27ae60; color: #fff; }
+
+      /* Focus visible for accessibility */
+      :focus-visible { outline: 2px solid #27ae60; outline-offset: 2px; }
+
+      /* Prevent content flash */
+      #root { min-height: 100vh; }
     </style>
   </head>
   <body>
+    <!-- Native loading splash before React boots -->
+    <div id="splash">
+      <div id="splash-logo">Get<span>Home</span></div>
+      <div id="splash-spinner"></div>
+      <div id="splash-tagline">Verified Real Estate</div>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+      // Hide splash when React mounts
+      window.__hideSplash = function() {
+        var splash = document.getElementById('splash');
+        if (splash) {
+          splash.classList.add('hidden');
+          setTimeout(function() { splash.remove(); }, 450);
+        }
+      };
+      // Fallback - hide after 8 seconds no matter what
+      setTimeout(function() {
+        window.__hideSplash && window.__hideSplash();
+      }, 8000);
+    </script>
   </body>
 </html>

@@ -1,0 +1,1 @@
+node -e "require('fs').writeFileSync('src/App.jsx', require('fs').readFileSync('fix_app.ps1', 'utf8'))"

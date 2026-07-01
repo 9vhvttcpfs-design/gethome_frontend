@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>GetHome Icon Generator</title>
+  <style>
+    body { font-family: sans-serif; background: #f1f5f9; display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 24px; }
+    h2 { color: #0a2240; margin: 0; }
+    p { color: #64748b; margin: 0; font-size: 0.9rem; }
+    canvas { border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+    .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    button { padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.9rem; }
+    button.secondary { background: #0a2240; }
+  </style>
+</head>
+<body>
+  <h2>GetHome App Icon Generator</h2>
+  <p>Open this file in Chrome, then download each size below.</p>
+  <canvas id="c" width="1024" height="1024"></canvas>
+  <div class="btns">
+    <button onclick="download(1024, 'icon-1024.png')">Download 1024×1024 (App Store / Capacitor master)</button>
+    <button class="secondary" onclick="download(512, 'icon-512.png')">Download 512×512 (Play Store)</button>
+    <button class="secondary" onclick="download(192, 'icon-192.png')">Download 192×192 (PWA)</button>
+  </div>
+  <p style="max-width:500px;text-align:center">
+    After downloading: copy <strong>icon-1024.png</strong> → <code>resources/icon.png</code>,
+    copy <strong>icon-192.png</strong> and <strong>icon-512.png</strong> → <code>public/icons/</code>
+  </p>
+  <script>
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#0a2240" rx="210"/>
+      <polygon points="512,192 172,516 852,516" fill="white"/>
+      <rect x="636" y="232" width="64" height="120" fill="white"/>
+      <rect x="244" y="492" width="536" height="340" fill="white"/>
+      <path d="M462,832 L462,642 Q462,572 512,572 Q562,572 562,642 L562,832 Z" fill="#0a2240"/>
+      <rect x="292" y="556" width="106" height="88" fill="#27ae60" rx="10"/>
+      <rect x="341" y="556" width="8" height="88" fill="white"/>
+      <rect x="292" y="596" width="106" height="8" fill="white"/>
+      <rect x="626" y="556" width="106" height="88" fill="#27ae60" rx="10"/>
+      <rect x="675" y="556" width="8" height="88" fill="white"/>
+      <rect x="626" y="596" width="106" height="8" fill="white"/>
+      <circle cx="562" cy="700" r="12" fill="#27ae60"/>
+    </svg>`;
+
+    const img = new Image();
+    img.onload = () => {
+      const ctx = document.getElementById('c').getContext('2d');
+      ctx.drawImage(img, 0, 0, 1024, 1024);
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(svg);
+
+    function download(size, filename) {
+      const src = document.getElementById('c');
+      const tmp = document.createElement('canvas');
+      tmp.width = size; tmp.height = size;
+      tmp.getContext('2d').drawImage(src, 0, 0, size, size);
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = tmp.toDataURL('image/png');
+      a.click();
+    }
+  </script>
+</body>
+</html>

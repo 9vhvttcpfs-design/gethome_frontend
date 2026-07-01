@@ -1,184 +1,323 @@
-.counter {
+/* =========================================================
+   GETHOME - App.css
+   Component styles & utility classes
+   ========================================================= */
+
+/* ── Reset & Base ─────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #f0f4f8;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  line-height: 1.55;
+}
+
+/* ── Typography ───────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+  font-weight: 700;
+  color: #0a2240;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+p { line-height: 1.65; }
+
+a {
+  color: #22c55e;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.14s ease;
+}
+
+a:hover { color: #16a34a; }
+
+/* ── Form Elements ────────────────────────────────────── */
+input, select, textarea, button {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
   font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #22c55e !important;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.14) !important;
 }
 
-#center {
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+textarea { resize: vertical; }
+
+/* ── Scrollbar ────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #f0f4f8; }
+::-webkit-scrollbar-thumb {
+  background: #22c55e;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+
+/* ── Selection ────────────────────────────────────────── */
+::selection { background: #22c55e; color: #fff; }
+::-moz-selection { background: #22c55e; color: #fff; }
+
+/* ── Focus Accessibility ──────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Root ─────────────────────────────────────────────── */
+#root {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
 }
 
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+/* ── Animations ───────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
 
-.ticks {
-  position: relative;
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utility Classes ──────────────────────────────────── */
+.gh-card {
+  animation: fadeUp 0.32s ease forwards;
+  opacity: 0;
+}
+.gh-card:nth-child(1)  { animation-delay: 0.00s; }
+.gh-card:nth-child(2)  { animation-delay: 0.04s; }
+.gh-card:nth-child(3)  { animation-delay: 0.08s; }
+.gh-card:nth-child(4)  { animation-delay: 0.12s; }
+.gh-card:nth-child(5)  { animation-delay: 0.16s; }
+.gh-card:nth-child(6)  { animation-delay: 0.20s; }
+.gh-card:nth-child(n+7){ animation-delay: 0.24s; }
+
+.gh-prop-card {
+  transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1),
+              box-shadow 0.22s ease !important;
+}
+.gh-prop-card:hover {
+  transform: translateY(-5px) !important;
+  box-shadow: 0 20px 48px rgba(10, 34, 64, 0.14) !important;
+}
+
+.gh-nav-btn {
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.gh-nav-btn:active { transform: scale(0.97); }
+
+.gh-auth-form-inner {
+  background: #fff;
+  border: 1.5px solid #e8edf5;
+  border-radius: 20px;
+  padding: 28px 24px;
+  box-shadow: 0 20px 56px rgba(10, 34, 64, 0.10);
   width: 100%;
+  display: block !important;
+  visibility: visible !important;
+  pointer-events: all !important;
+}
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
+.gh-auth-form-inner form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  width: 100% !important;
+}
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
+.gh-auth-form-inner input,
+.gh-auth-form-inner button[type="submit"] {
+  width: 100% !important;
+  display: block !important;
+  pointer-events: all !important;
+  font-size: 16px !important;
+}
+
+.gh-auth-form-inner button[type="submit"] {
+  min-height: 52px !important;
+  touch-action: manipulation !important;
+}
+
+@media (max-width: 768px) {
+  .gh-modal-bottom {
+    animation: slideUp 0.28s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
   }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
+}
+
+.gh-featured-badge {
+  animation: pulse-green 2.5s ease-in-out infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.35); }
+  50%       { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+}
+
+.gh-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #22c55e;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.gh-skeleton {
+  background: linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+.gh-whatsapp-btn {
+  background: #25D366;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.18s ease, transform 0.14s ease;
+  text-decoration: none;
+  display: block;
+  text-align: center;
+  font-family: 'Inter', sans-serif;
+}
+.gh-whatsapp-btn:hover {
+  background: #1fbd5a;
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.gh-btn-primary {
+  background: #22c55e;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 20px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.18s ease, transform 0.14s ease, box-shadow 0.18s ease;
+}
+.gh-btn-primary:hover {
+  background: #16a34a;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.28);
+}
+
+/* ── Nav enhancements ─────────────────────────────────── */
+.gh-logo { transition: opacity 0.18s ease; }
+.gh-logo:hover { opacity: 0.82; }
+
+.gh-signin-btn {
+  transition: all 0.18s ease !important;
+}
+.gh-signin-btn:hover {
+  background: #16a34a !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.28) !important;
+}
+
+.gh-logout-btn {
+  transition: all 0.18s ease !important;
+}
+.gh-logout-btn:hover {
+  border-color: rgba(255,255,255,0.45) !important;
+  background: rgba(255,255,255,0.1) !important;
+}
+
+.gh-nav-btn:hover {
+  background: rgba(255,255,255,0.16) !important;
+  transform: translateY(-1px);
+}
+
+/* ── Footer links ─────────────────────────────────────── */
+.gh-footer-link:hover { color: #fff !important; }
+.gh-footer-contact:hover { color: rgba(255,255,255,0.9) !important; }
+.gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
+
+/* ── Social buttons ───────────────────────────────────── */
+.gh-social-btn {
+  transition: all 0.18s ease !important;
+}
+.gh-social-btn:hover {
+  opacity: 0.88;
+  transform: translateY(-2px);
+}
+
+/* ── Close button ─────────────────────────────────────── */
+.gh-close-btn:hover {
+  background: #e2e8f0 !important;
+  color: #0a2240 !important;
+  transform: scale(1.08);
+}
+
+/* ── Mobile overflow guards ───────────────────────────── */
+.gh-card, .gh-prop-card {
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+@media (max-width: 480px) {
+  .gh-prop-card {
+    min-width: 100% !important;
   }
 }

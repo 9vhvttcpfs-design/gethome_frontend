@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GetHome</string>
+    <string name="title_activity_main">GetHome</string>
+    <string name="package_name">ng.gethome.app</string>
+    <string name="custom_url_scheme">ng.gethome.app</string>
+</resources>

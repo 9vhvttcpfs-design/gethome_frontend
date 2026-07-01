@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0a2240"/>
+
+  <!-- Chimney -->
+  <rect x="316" y="148" width="38" height="98" rx="5" fill="#12325a"/>
+
+  <!-- Roof -->
+  <polygon points="256,72 468,288 44,288" fill="#22c55e"/>
+  <!-- Roof sheen -->
+  <polygon points="256,72 468,288 256,288" fill="#1aad52" opacity="0.35"/>
+
+  <!-- Walls -->
+  <rect x="56" y="280" width="400" height="192" rx="4" fill="#f8fafc"/>
+
+  <!-- Door -->
+  <rect x="210" y="350" width="92" height="122" rx="10" fill="#0a2240"/>
+  <!-- Door arch -->
+  <ellipse cx="256" cy="350" rx="46" ry="22" fill="#0a2240"/>
+  <!-- Door knob -->
+  <circle cx="291" cy="418" r="7" fill="#22c55e"/>
+
+  <!-- Window left -->
+  <rect x="80" y="302" width="90" height="72" rx="8" fill="#bae6fd"/>
+  <rect x="80" y="336" width="90" height="3" fill="#0a2240" opacity="0.2"/>
+  <rect x="124" y="302" width="3" height="72" fill="#0a2240" opacity="0.2"/>
+
+  <!-- Window right -->
+  <rect x="342" y="302" width="90" height="72" rx="8" fill="#bae6fd"/>
+  <rect x="342" y="336" width="90" height="3" fill="#0a2240" opacity="0.2"/>
+  <rect x="386" y="302" width="3" height="72" fill="#0a2240" opacity="0.2"/>
+</svg>
