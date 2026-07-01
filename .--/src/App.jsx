@@ -5094,6 +5094,8 @@ function SADashboard({ staffUser, onLogout }) {
     property_address: '', notes: '', inspection_type: 'physical'
   });
   const [notifications, setNotifications]           = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown]   = useState(false);
+  const notifBellRef                                = useRef(null);
   const [assigningNotifId, setAssigningNotifId]     = useState(null);
   const [assignNotifGhaId, setAssignNotifGhaId]     = useState('');
   const [assignNotifDate, setAssignNotifDate]       = useState('');
@@ -5182,7 +5184,7 @@ function SADashboard({ staffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/sa/notifications', { headers: { Authorization: 'Bearer ' + token } });
       if (res.ok) {
         var data = await res.json();
-        setNotifications(Array.isArray(data) ? data : []);
+        setNotifications(Array.isArray(data.notifications) ? data.notifications : (Array.isArray(data) ? data : []));
       }
     } catch(e) { console.error(e); }
   }
@@ -5260,6 +5262,15 @@ function SADashboard({ staffUser, onLogout }) {
     return function() { clearInterval(notifInterval); };
   }, []);
   useEffect(function() {
+    function handleClickOutside(e) {
+      if (notifBellRef.current && !notifBellRef.current.contains(e.target)) {
+        setShowNotifDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return function() { document.removeEventListener('mousedown', handleClickOutside); };
+  }, []);
+  useEffect(function() {
     if (saTab === 'subscriptions') fetchSubscriptions();
     if (saTab === 'inspections') {
       fetchInspections();
@@ -5326,6 +5337,61 @@ function SADashboard({ staffUser, onLogout }) {
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button onClick={function(){ fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); if (saTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
+
+          <div ref={notifBellRef} style={{ position: 'relative', display: 'inline-block' }}>
+            <button
+              onClick={function() { setShowNotifDropdown(function(v) { return !v; }); }}
+              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', fontSize: '1.3rem', position: 'relative' }}>
+              {'🔔'}
+              {notifications.length > 0 && (
+                <span style={{ position: 'absolute', top: '2px', right: '2px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.62rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {notifications.length > 9 ? '9+' : notifications.length}
+                </span>
+              )}
+            </button>
+
+            {showNotifDropdown && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, width: '300px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                  <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
+                </div>
+
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>
+                    No notifications yet
+                  </div>
+                ) : (
+                  notifications.map(function(notif) {
+                    var notifTimeAgo = (function() {
+                      if (!notif.created_at) return '';
+                      var diff = Date.now() - new Date(notif.created_at).getTime();
+                      var mins = Math.floor(diff / 60000);
+                      if (mins < 1) return 'just now';
+                      if (mins < 60) return mins + ' minute' + (mins !== 1 ? 's' : '') + ' ago';
+                      var hrs = Math.floor(mins / 60);
+                      if (hrs < 24) return hrs + ' hour' + (hrs !== 1 ? 's' : '') + ' ago';
+                      var days = Math.floor(hrs / 24);
+                      return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+                    })();
+                    return (
+                      <div key={notif.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                        onClick={function() { setSaTab('inspections'); setShowNotifDropdown(false); }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0, marginTop: '5px' }} />
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.82rem' }}>{notif.customer_name || notif.user_name || 'Inspection request'}</p>
+                            <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.76rem', lineHeight: '1.4' }}>{notif.property_title || notif.property_location || notif.property_address || ''}</p>
+                            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{notifTimeAgo}</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
           <button onClick={onLogout} style={{ padding: '7px 16px', border: 'none', borderRadius: '8px', backgroundColor: '#ef4444', color: '#fff', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>Logout</button>
         </div>
       </div>
