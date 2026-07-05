@@ -14,6 +14,9 @@ const PAYSTACK_PUB_KEY   = import.meta.env.VITE_PAYSTACK_PUB_KEY;
 const LOAN_PARTNER_URL    = import.meta.env.VITE_LOAN_PARTNER_URL;
 const LOAN_PARTNER_URL_GH = import.meta.env.VITE_LOAN_PARTNER_URL_GH;
 const WHATSAPP_NUMBER    = import.meta.env.VITE_WHATSAPP_NUMBER;
+const GETHOME_BANK_NAME       = import.meta.env.VITE_GETHOME_BANK_NAME || 'Wema Bank';
+const GETHOME_ACCOUNT_NUMBER  = import.meta.env.VITE_GETHOME_ACCOUNT_NUMBER || '0000000000';
+const GETHOME_ACCOUNT_NAME    = import.meta.env.VITE_GETHOME_ACCOUNT_NAME || 'GetHome Properties Ltd';
 const ADDON_PRICES       = { cleaning: 92000, relocation: 230000 };
 const ESCROW_FEE_RATE    = 0.0075;
 const ESCROW_FEE_CAP     = 5000;
@@ -698,7 +701,9 @@ function PricingModal({ property, onClose, user, onUserChange }) {
   const [depositSubmitting, setDepositSubmitting] = useState(false);
   const [depositDone, setDepositDone]             = useState(false);
   const [depositRef, setDepositRef]               = useState('');
-  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); }, [property?.id]);
+  const [paymentMethod, setPaymentMethod]         = useState(null);
+  const [showBankDetails, setShowBankDetails]     = useState(false);
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
   // Shortlet calculations
@@ -801,6 +806,31 @@ function PricingModal({ property, onClose, user, onUserChange }) {
       if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
       window.location.href = data.checkout_url;
     } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setDepositSubmitting(false);
+    }
+  };
+  const handleCardPayment = async function() {
+    if (!user) { setAuthWall('escrow'); return; }
+    setDepositSubmitting(true);
+    try {
+      var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: grandTotal,
+          customer_email: user.email,
+          customer_name: user.email,
+          purpose: 'Property Deposit - ' + property.title,
+          property_id: property.id,
+          payment_method: 'card',
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
+    } catch(err) {
       alert('Error: ' + err.message);
     } finally {
       setDepositSubmitting(false);
@@ -969,9 +999,54 @@ function PricingModal({ property, onClose, user, onUserChange }) {
               </button>
             </div>
           ) : (
-            <button onClick={handleEscrowPayment} disabled={depositSubmitting} style={{ width: '100%', padding: '14px', marginBottom: '10px', border: 'none', borderRadius: '12px', backgroundColor: depositSubmitting ? '#94a3b8' : '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: depositSubmitting ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-              {depositSubmitting ? 'Preparing payment…' : 'Pay via Monnify — ' + fmtNGN(grandTotal)}
-            </button>
+            <div style={{ marginBottom: '10px' }}>
+              {[
+                { key: 'flutterwave', recommended: true,
+                  title: 'Pay with Flutterwave', sub: 'Card, bank transfer, USSD & more' },
+                { key: 'card', recommended: false,
+                  title: 'Debit / Credit Card', sub: 'Visa, Mastercard, Verve accepted' },
+                { key: 'bank', recommended: false,
+                  title: 'Direct Bank Transfer', sub: 'Transfer to our account and confirm via WhatsApp' },
+              ].map(function(m) {
+                var isSelected = paymentMethod === m.key;
+                return (
+                  <div key={m.key} onClick={function(){ setPaymentMethod(m.key); }}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1.5px solid ' + (isSelected ? '#27ae60' : '#e2e8f0'), borderRadius: '12px', padding: '14px 16px', cursor: 'pointer', marginBottom: '8px', transition: 'all 0.2s', backgroundColor: isSelected ? '#f0fff4' : '#fff' }}>
+                    <div>
+                      {m.recommended && (
+                        <span style={{ display: 'inline-block', backgroundColor: '#27ae60', color: '#fff', fontSize: '0.58rem', fontWeight: '800', letterSpacing: '0.4px', padding: '2px 6px', borderRadius: '5px', marginBottom: '4px' }}>RECOMMENDED</span>
+                      )}
+                      <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{m.title}</p>
+                      <p style={{ margin: '3px 0 0 0', color: '#64748b', fontSize: '0.76rem' }}>{m.sub}</p>
+                    </div>
+                    {m.key === 'flutterwave' && (
+                      <span style={{ backgroundColor: '#f5a623', color: '#0a2240', fontWeight: '800', fontSize: '0.68rem', padding: '4px 10px', borderRadius: '20px', flexShrink: 0, marginLeft: '10px' }}>Flutterwave</span>
+                    )}
+                    {m.key === 'card' && (
+                      <span style={{ color: '#94a3b8', fontWeight: '700', fontSize: '0.7rem', flexShrink: 0, marginLeft: '10px', whiteSpace: 'nowrap' }}>VISA · MC · Verve</span>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                onClick={function() {
+                  if (paymentMethod === 'flutterwave') handleEscrowPayment();
+                  else if (paymentMethod === 'card') handleCardPayment();
+                  else if (paymentMethod === 'bank') setShowBankDetails(true);
+                }}
+                disabled={!paymentMethod || depositSubmitting}
+                style={{ width: '100%', padding: '14px', marginTop: '4px', border: 'none', borderRadius: '12px', backgroundColor: (!paymentMethod || depositSubmitting) ? '#94a3b8' : '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: (!paymentMethod || depositSubmitting) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                {depositSubmitting
+                  ? 'Preparing payment…'
+                  : !paymentMethod
+                    ? 'Select a payment method'
+                    : paymentMethod === 'flutterwave'
+                      ? 'Continue with Flutterwave'
+                      : paymentMethod === 'card'
+                        ? 'Pay by Card'
+                        : 'View Bank Details'}
+              </button>
+            </div>
           )}
           <a href={loanUrl} onClick={e => { if (!requireAuth('loan')) e.preventDefault(); }} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textAlign: 'center', fontSize: '0.82rem', color: '#3b82f6', textDecoration: 'none', marginBottom: '16px' }}>Cannot afford upfront? <strong>Apply for a Property Loan</strong></a>
         </div>
@@ -992,6 +1067,37 @@ function PricingModal({ property, onClose, user, onUserChange }) {
                 style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', fontSize: '1.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#8250;</button>
             </>
           )}
+        </div>
+      )}
+      {showBankDetails && (
+        <div onClick={function() { setShowBankDetails(false); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1001, backgroundColor: 'rgba(10,34,64,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 24px 60px rgba(10,34,64,0.3)', position: 'relative' }}>
+            <button onClick={function() { setShowBankDetails(false); }}
+              style={{ position: 'absolute', top: '14px', right: '14px', background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
+            <p style={{ margin: '0 0 16px 0', fontWeight: '800', fontSize: '1rem', color: '#0a2240', textAlign: 'center' }}>Direct Bank Transfer</p>
+            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Bank Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_BANK_NAME}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Number</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_ACCOUNT_NUMBER}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_ACCOUNT_NAME}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Amount</span><span style={{ color: '#27ae60', fontWeight: '800', fontSize: '0.86rem' }}>{fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal)}</span></div>
+            </div>
+            <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem', lineHeight: '1.6', textAlign: 'center' }}>After transferring, notify us via WhatsApp with your payment receipt so we can confirm and process your booking.</p>
+            <button onClick={function() {
+              var waMsg = encodeURIComponent(
+                'Hello GetHome, I have made a direct bank transfer for a property.\n\n' +
+                'Property: ' + property.title + '\n' +
+                'Location: ' + property.location + '\n' +
+                'Amount: ' + fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal) + '\n' +
+                'My Email: ' + (user?.email || '') + '\n\n' +
+                'I have attached my payment receipt for confirmation. Thank you!'
+              );
+              window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + waMsg, '_blank');
+            }} style={{ width: '100%', padding: '12px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+              I've Made the Transfer — Notify via WhatsApp
+            </button>
+          </div>
         </div>
       )}
       {authWall && !user && (
@@ -1237,7 +1343,8 @@ function AgentVerificationForm({ user, onComplete }) {
     </div>
   );
 }
-function AgentUpgradePanel({ currentTier, agentEmail, onUpgradeSuccess }) {
+var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
+function AgentUpgradePanel({ currentTier, agentEmail, agentId }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
@@ -1245,16 +1352,32 @@ function AgentUpgradePanel({ currentTier, agentEmail, onUpgradeSuccess }) {
   var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ 35,000';
   var tierPriceDisplay = { premium: premiumPriceText, agency: agencyPriceText };
   const [upgrading, setUpgrading] = useState(null);
-  const handleUpgrade = (tierKey) => {
-    const tier = AGENT_TIERS[tierKey]; setUpgrading(tierKey);
-    openPaystack({ email: agentEmail, amountNaira: tier.price, ref: `GH-AGENT-${tierKey.toUpperCase()}-${Date.now()}`, metadata: { agent_email: agentEmail, upgrade_tier: tierKey },
-      onSuccess: (response) => {
-        fetch(`${API_URL}/api/agent/upgrade`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: agentEmail, tier: tierKey, reference: response.reference }) }).catch(console.error);
-        localStorage.setItem('gh_tier_renewed_' + agentEmail, new Date().toISOString());
-        onUpgradeSuccess && onUpgradeSuccess(tierKey);
-        setUpgrading(null);
-      },
-      onClose: () => setUpgrading(null) });
+  const handleUpgrade = async (tierKey) => {
+    const tier = AGENT_TIERS[tierKey];
+    setUpgrading(tierKey);
+    try {
+      const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: tier.price,
+          customer_email: agentEmail,
+          customer_name: agentEmail,
+          purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[tierKey],
+          meta: {
+            payment_type: 'subscription',
+            agent_id: agentId,
+            tier: tierKey,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      alert('Error: ' + err.message);
+      setUpgrading(null);
+    }
   };
   return (
     <div style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
@@ -1278,7 +1401,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, onUpgradeSuccess }) {
 // =========================================================
 // RENEWAL NOTIFICATION BANNER
 // =========================================================
-function RenewalBanner({ user, agentTier, isMobile, onRenewed }) {
+function RenewalBanner({ user, agentTier, isMobile }) {
   const [renewing, setRenewing] = useState(false);
   if (!user || agentTier === 'free') return null;
   var renewedAt = localStorage.getItem('gh_tier_renewed_' + user.email)
@@ -1295,23 +1418,31 @@ function RenewalBanner({ user, agentTier, isMobile, onRenewed }) {
   var priceDisplay = agentTier === 'premium'
     ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500')
     : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
-  function handleRenew() {
+  async function handleRenew() {
     setRenewing(true);
-    openPaystack({
-      email: user.email,
-      amountNaira: tier.price,
-      ref: 'GH-RENEW-' + agentTier.toUpperCase() + '-' + Date.now(),
-      metadata: { agent_email: user.email, renewal_tier: agentTier },
-      onSuccess: function(response) {
-        var now = new Date().toISOString();
-        localStorage.setItem('gh_tier_renewed_' + user.email, now);
-        if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now);
-        fetch(API_URL + '/api/agent/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, tier: agentTier, reference: response.reference }) }).catch(console.error);
-        setRenewing(false);
-        onRenewed && onRenewed(now);
-      },
-      onClose: function() { setRenewing(false); },
-    });
+    try {
+      var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: tier.price,
+          customer_email: user.email,
+          customer_name: user.email,
+          purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[agentTier],
+          meta: {
+            payment_type: 'subscription',
+            agent_id: user.id,
+            tier: agentTier,
+          },
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      window.location.href = data.checkout_url;
+    } catch (err) {
+      alert('Error: ' + err.message);
+      setRenewing(false);
+    }
   }
   if (isExpired) {
     return (
@@ -1785,35 +1916,39 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
             return (
               <button
                 disabled={subRenewing}
-                onClick={function() {
+                onClick={async function() {
                   setSubRenewing(true);
-                  openPaystack({
-                    email: user.email,
-                    amountNaira: tier.price,
-                    ref: 'GH-RENEW-' + agentTier.toUpperCase() + '-' + Date.now(),
-                    metadata: { agent_email: user.email, renewal_tier: agentTier },
-                    onSuccess: function(response) {
-                      var now = new Date().toISOString();
-                      localStorage.setItem('gh_tier_renewed_' + user.email, now);
-                      if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now);
-                      fetch(API_URL + '/api/agent/upgrade', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: user.email, tier: agentTier, reference: response.reference }),
-                      }).catch(console.error);
-                      setSubscriptionStatus('active');
-                      setSubRenewing(false);
-                    },
-                    onClose: function() { setSubRenewing(false); },
-                  });
+                  try {
+                    var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        amount: tier.price,
+                        customer_email: user.email,
+                        customer_name: user.email,
+                        purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[agentTier],
+                        meta: {
+                          payment_type: 'subscription',
+                          agent_id: user.id,
+                          tier: agentTier,
+                        },
+                      }),
+                    });
+                    var data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+                    window.location.href = data.checkout_url;
+                  } catch (err) {
+                    alert('Error: ' + err.message);
+                    setSubRenewing(false);
+                  }
                 }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 32px', backgroundColor: subRenewing ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: subRenewing ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: subRenewing ? 'none' : '0 6px 20px rgba(34,197,94,0.30)', transition: 'all 0.18s', marginBottom: '16px' }}>
-                {subRenewing ? 'Opening Paystack…' : ('Renew ' + tier.label + ' — ' + priceDisplay + '/mo')}
+                {subRenewing ? 'Redirecting…' : ('Renew ' + tier.label + ' — ' + priceDisplay + '/mo')}
               </button>
             );
           })()}
           <p style={{ color: '#94a3b8', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif", margin: 0 }}>
-            Payments are processed securely via Paystack
+            Payments are processed securely via Flutterwave
           </p>
         </div>
       ) : (
@@ -2197,7 +2332,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         </div>
         {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
         </form>
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} onUpgradeSuccess={function(t){ setAgentTier(t); localStorage.setItem('gh_tier_' + user.id, t); var now = new Date().toISOString(); localStorage.setItem('gh_tier_renewed_' + user.email, now); if (user.id) localStorage.setItem('gh_tier_renewed_' + user.id, now); }} />
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -2274,6 +2409,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [sessionUser, setSessionUser]             = useState(null);
   const [actionMsg, setActionMsg]                 = useState('');
   const [adminTab, setAdminTab]                   = useState('agents');
+  const [mobileNavOpen, setMobileNavOpen]         = useState(false);
+  const mobileNavRef                              = useRef(null);
   const [transactions, setTransactions]           = useState([]);
   const [txLoading, setTxLoading]                 = useState(false);
   const [allListings, setAllListings]             = useState([]);
@@ -2355,6 +2492,22 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaInspPerfStats, setGhaInspPerfStats]         = useState([]);
   const [ghaInspPerfMonth, setGhaInspPerfMonth]         = useState(new Date().toISOString().slice(0, 7));
   const [ghaInspPerfLoading, setGhaInspPerfLoading]     = useState(false);
+  // Monthly History panel state
+  const [historyMonth, setHistoryMonth]                 = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyHistory, setMonthlyHistory]             = useState(null);
+  const [historyLoading, setHistoryLoading]             = useState(false);
+  const [availableMonths, setAvailableMonths]           = useState([]);
+  const [historyAgentSearch, setHistoryAgentSearch]     = useState('');
+  const [takingSnapshot, setTakingSnapshot]             = useState(false);
+  const [snapshotMsg, setSnapshotMsg]                   = useState('');
+  // Unified Payments panel state
+  const [paymentsMonth, setPaymentsMonth]               = useState(new Date().toISOString().slice(0, 7));
+  const [allPayments, setAllPayments]                   = useState(null);
+  const [paymentsLoading, setPaymentsLoading]           = useState(false);
+  const [paymentsSubTab, setPaymentsSubTab]             = useState('subscriptions');
+  const [paymentsMsg, setPaymentsMsg]                   = useState('');
+  const [markingGhaPaidPayments, setMarkingGhaPaidPayments] = useState({});
+  const [confirmingDepositPayments, setConfirmingDepositPayments] = useState(null);
 
   const fetchListings = async function() {
     setListingsLoading(true);
@@ -2397,6 +2550,109 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       }
     } catch(e) { console.error('GHA inspection stats error:', e.message); }
     finally { setGhaInspPerfLoading(false); }
+  };
+
+  const fetchMonthlyHistory = async function(month) {
+    var m = month || historyMonth;
+    setHistoryLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/monthly-history?month=' + m, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      setMonthlyHistory(data);
+      setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
+    } catch(e) {
+      console.error('Monthly history fetch error:', e.message);
+      setMonthlyHistory(null);
+    } finally { setHistoryLoading(false); }
+  };
+
+  const handleTakeSnapshot = async function() {
+    setTakingSnapshot(true);
+    setSnapshotMsg('');
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/take-snapshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ month: historyMonth })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to take snapshot');
+      setSnapshotMsg('Snapshot captured for ' + historyMonth + '.');
+      fetchMonthlyHistory(historyMonth);
+    } catch(e) {
+      setSnapshotMsg('Error: ' + e.message);
+    } finally {
+      setTakingSnapshot(false);
+      setTimeout(function(){ setSnapshotMsg(''); }, 5000);
+    }
+  };
+
+  const fetchAllPayments = async function(month) {
+    var m = month || paymentsMonth;
+    setPaymentsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/all-payments?month=' + m, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load payments');
+      setAllPayments(data);
+    } catch(e) {
+      console.error('All payments fetch error:', e.message);
+      setAllPayments(null);
+    } finally { setPaymentsLoading(false); }
+  };
+
+  const handleMarkGhaCommissionPaid = async function(group) {
+    var key = group.gha_code || group.gha_id;
+    setMarkingGhaPaidPayments(function(prev){ return Object.assign({}, prev, { [key]: true }); });
+    try {
+      var token = localStorage.getItem('gh_token');
+      var body = { month_year: paymentsMonth };
+      if (group.gha_id) body.gha_id = group.gha_id;
+      var res = await fetch(API_URL + '/api/admin/mark-gha-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(body)
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark commission paid');
+      setPaymentsMsg('Commission marked paid for GHA ' + key + '.');
+      await fetchAllPayments(paymentsMonth);
+    } catch(e) {
+      setPaymentsMsg('Error: ' + e.message);
+    } finally {
+      setMarkingGhaPaidPayments(function(prev){ return Object.assign({}, prev, { [key]: false }); });
+      setTimeout(function(){ setPaymentsMsg(''); }, 5000);
+    }
+  };
+
+  const handleConfirmDepositPayments = async function(row) {
+    var key = row.id || row.property_id;
+    setConfirmingDepositPayments(key);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/confirm-deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ property_id: row.property_id || row.id })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to confirm deposit');
+      setPaymentsMsg('Deposit confirmed for ' + (row.property_title || 'property') + '.');
+      await fetchAllPayments(paymentsMonth);
+    } catch(e) {
+      setPaymentsMsg('Error: ' + e.message);
+    } finally {
+      setConfirmingDepositPayments(null);
+      setTimeout(function(){ setPaymentsMsg(''); }, 5000);
+    }
   };
 
   const handleConfirmDeposit = async function(deposit) {
@@ -2638,6 +2894,24 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (adminTab === 'gha-management') fetchGhaInspPerfStats(ghaInspPerfMonth);
   }, [ghaInspPerfMonth]);
 
+  useEffect(function() {
+    if (adminTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
+  }, [adminTab, historyMonth]);
+
+  useEffect(function() {
+    if (adminTab === 'payments') fetchAllPayments(paymentsMonth);
+  }, [adminTab, paymentsMonth]);
+
+  useEffect(function() {
+    function handleClickOutside(e) {
+      if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
+        setMobileNavOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return function() { document.removeEventListener('mousedown', handleClickOutside); };
+  }, []);
+
   const handleApprove = async function(agentId, agentEmail) {
     try {
       const { error } = await supabase.from('agents').update({ status: 'approved' }).eq('id', agentId);
@@ -2830,6 +3104,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
+    ['payments','Payments'],['monthly-history','Monthly History'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -2880,19 +3155,28 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
       {/* Mobile tab bar */}
       {isMobile && (
-        <div style={{ overflowX: 'auto', padding: '10px 14px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-          <div style={{ display: 'flex', gap: '7px', minWidth: 'max-content' }}>
-            {navItems.map(function([t, label]) {
-              var active = adminTab === t;
-              var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
-              return (
-                <button key={t} onClick={function(){ switchTab(t); }}
-                  style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.76rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {label}{badge > 0 ? ' (' + badge + ')' : ''}
-                </button>
-              );
-            })}
-          </div>
+        <div ref={mobileNavRef} style={{ position: 'relative', width: '100%', padding: '8px 16px', marginBottom: '8px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0' }}>
+          <button
+            onClick={function() { setMobileNavOpen(function(v) { return !v; }); }}
+            style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px', color: '#0a2240', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(10,34,64,0.08)' }}>
+            <span>{navItems.find(function([t]) { return t === adminTab; })?.[1] || 'Menu'}</span>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8', transform: mobileNavOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+          </button>
+          {mobileNavOpen && (
+            <div style={{ position: 'absolute', left: '16px', right: '16px', top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden' }}>
+              {navItems.map(function([t, label]) {
+                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
+                return (
+                  <button key={t}
+                    onClick={function() { switchTab(t); setMobileNavOpen(false); }}
+                    style={{ width: '100%', textAlign: 'left', padding: '13px 16px', border: 'none', borderBottom: '1px solid #f1f5f9', backgroundColor: adminTab === t ? '#f0fff4' : '#fff', color: adminTab === t ? '#27ae60' : '#374151', fontWeight: adminTab === t ? '700' : '500', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{label}</span>
+                    {badge > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{badge}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -4195,7 +4479,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     setMarkingStaffPaid(function(prev){ return Object.assign({}, prev, { [prefixedKey]: true }); });
                                     try {
                                       var token = localStorage.getItem('gh_token');
-                                      var body = { month: earningsMonth };
+                                      var body = { month_year: earningsMonth };
                                       body[idF] = s.id || key;
                                       var res = await fetch(API_URL + apiEP, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
                                       var data = await res.json();
@@ -4248,6 +4532,327 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               </div>
             )}
 
+            {/* ── PAYMENTS ── */}
+            {adminTab === 'payments' && (function() {
+              var totals = (allPayments && allPayments.totals) || {};
+              var subs = (allPayments && allPayments.agent_subscriptions) || [];
+              var deposits = (allPayments && allPayments.customer_deposits) || [];
+
+              function tierBadgePayments(tier) {
+                var t = (tier || '').toLowerCase();
+                var cfg = { premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
+                var c = cfg[t] || { bg: '#f1f5f9', color: '#64748b' };
+                return <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid currentColor', whiteSpace: 'nowrap' }}>{(tier || '—').toUpperCase()}</span>;
+              }
+              function subStatusBadge(row) {
+                var isPaid = !!(row.commission_paid || row.gha_commission_paid || row.status === 'paid');
+                return isPaid
+                  ? <span style={{ fontSize: '0.62rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', whiteSpace: 'nowrap' }}>PAID</span>
+                  : <span style={{ fontSize: '0.62rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', whiteSpace: 'nowrap' }}>UNPAID</span>;
+              }
+              function depositStatusBadge(row) {
+                var s = row.deposit_confirmed ? 'confirmed' : (row.status || 'unconfirmed');
+                var cfg = {
+                  confirmed:   { bg: '#f0fff4', color: '#166534', border: '#86efac', label: 'CONFIRMED' },
+                  pending:     { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'PENDING' },
+                  unconfirmed: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'UNCONFIRMED' },
+                };
+                var c = cfg[s] || cfg.unconfirmed;
+                return <span style={{ fontSize: '0.62rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid ' + c.border, whiteSpace: 'nowrap' }}>{c.label}</span>;
+              }
+
+              // Group agent subscriptions by GHA for the "Mark Commission Paid" action
+              var subGroups = [];
+              var subGroupIndex = {};
+              subs.forEach(function(row) {
+                var key = row.gha_code || 'UNASSIGNED';
+                if (!subGroupIndex[key]) {
+                  subGroupIndex[key] = { gha_code: row.gha_code, gha_id: row.gha_id, rows: [], allPaid: true };
+                  subGroups.push(subGroupIndex[key]);
+                }
+                subGroupIndex[key].rows.push(row);
+                var rowPaid = !!(row.commission_paid || row.gha_commission_paid || row.status === 'paid');
+                if (!rowPaid) subGroupIndex[key].allPaid = false;
+              });
+
+              return (
+                <div>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 16px 0' }}>Payments</h2>
+
+                  {/* Month picker */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240' }}>Month:</span>
+                    <input type="month" value={paymentsMonth} onChange={function(e){ setPaymentsMonth(e.target.value); }}
+                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                    <button onClick={function(){ fetchAllPayments(paymentsMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Load</button>
+                  </div>
+
+                  {paymentsMsg && (
+                    <div style={{ backgroundColor: paymentsMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (paymentsMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '10px 14px', marginBottom: '16px' }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.82rem', color: paymentsMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{paymentsMsg}</p>
+                    </div>
+                  )}
+
+                  {/* Summary row */}
+                  <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                    {[
+                      { label: 'Agent Revenue',                value: totals.agent_subscription_revenue, borderColor: '#0a2240' },
+                      { label: 'Customer Deposits',             value: totals.customer_deposit_revenue,   borderColor: '#0a2240' },
+                      { label: 'Total GHA Commission (5%)',     value: totals.total_gha_commission,       borderColor: '#27ae60' },
+                      { label: 'Total SA Commission (5%)',      value: totals.total_sa_commission,        borderColor: '#27ae60' },
+                    ].map(function(s) {
+                      return (
+                        <div key={s.label} style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid ' + s.borderColor, padding: '16px 18px', flex: '1 1 180px' }}>
+                          <p style={{ fontSize: '1.3rem', fontWeight: '900', color: '#0a2240', margin: '0 0 4px 0' }}>₦{Number(s.value || 0).toLocaleString()}</p>
+                          <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>{s.label}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Sub-tabs */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                    {[['subscriptions','Agent Subscriptions'],['deposits','Customer Deposits']].map(function([t, label]) {
+                      var isActive = paymentsSubTab === t;
+                      return (
+                        <button key={t} onClick={function(){ setPaymentsSubTab(t); }}
+                          style={{ padding: '7px 18px', borderRadius: '8px', border: 'none', backgroundColor: isActive ? '#0a2240' : '#f1f5f9', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {paymentsLoading ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading payments…</p></div>
+                  ) : paymentsSubTab === 'subscriptions' ? (
+                    subGroups.length === 0 ? (
+                      <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0' }}>No agent subscription payments for this month.</p>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <div style={{ minWidth: '900px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 0.9fr 0.8fr 1fr 1fr 0.7fr 0.8fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
+                            <span>AGENT EMAIL</span><span>TIER</span><span>AMOUNT</span><span>GHA CODE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span><span>MONTH</span><span>STATUS</span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {subGroups.map(function(group) {
+                              var groupKey = group.gha_code || group.gha_id || 'UNASSIGNED';
+                              var isMarking = !!markingGhaPaidPayments[groupKey];
+                              return (
+                                <div key={groupKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '8px', backgroundColor: '#fff' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    {group.rows.map(function(row, idx) {
+                                      var amount = Number(row.amount || 0);
+                                      var ghaCommission = amount * 0.05;
+                                      var saCommission = amount * 0.05;
+                                      return (
+                                        <div key={row.id || row.agent_email + idx} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 0.9fr 0.8fr 1fr 1fr 0.7fr 0.8fr', gap: '0 10px', padding: '8px 10px', backgroundColor: '#f8fafc', borderRadius: '8px', alignItems: 'center' }}>
+                                          <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.agent_email}</span>
+                                          <span>{tierBadgePayments(row.tier)}</span>
+                                          <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.78rem' }}>₦{amount.toLocaleString()}</span>
+                                          <span style={{ color: '#0a2240', fontSize: '0.76rem' }}>{row.gha_code || '—'}</span>
+                                          <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.78rem' }}>₦{ghaCommission.toLocaleString()} <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '0.66rem' }}>(5%)</span></span>
+                                          <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.78rem' }}>₦{saCommission.toLocaleString()} <span style={{ color: '#94a3b8', fontWeight: '600', fontSize: '0.66rem' }}>(5%)</span></span>
+                                          <span style={{ color: '#64748b', fontSize: '0.74rem' }}>{row.month || paymentsMonth}</span>
+                                          <span>{subStatusBadge(row)}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px 2px' }}>
+                                    <span style={{ fontSize: '0.72rem', fontWeight: '800', color: '#0a2240' }}>GHA {group.gha_code || 'Unassigned'}</span>
+                                    {group.allPaid ? (
+                                      <span style={{ fontSize: '0.62rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac' }}>COMMISSION PAID</span>
+                                    ) : (
+                                      <button onClick={function(){ handleMarkGhaCommissionPaid(group); }} disabled={isMarking}
+                                        style={{ padding: '6px 14px', backgroundColor: isMarking ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.70rem', fontWeight: '700', cursor: isMarking ? 'not-allowed' : 'pointer' }}>
+                                        {isMarking ? 'Marking…' : 'Mark Commission Paid'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    deposits.length === 0 ? (
+                      <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0' }}>No customer deposits for this month.</p>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <div style={{ minWidth: '760px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 0.9fr 1fr 0.8fr 0.9fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
+                            <span>PROPERTY TITLE</span><span>LOCATION</span><span>AMOUNT</span><span>REFERENCE</span><span>STATUS</span><span></span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {deposits.map(function(row, idx) {
+                              var key = row.id || row.property_id || idx;
+                              var isUnconfirmed = !row.deposit_confirmed && (row.status || 'unconfirmed') !== 'confirmed';
+                              var isConfirming = confirmingDepositPayments === key;
+                              return (
+                                <div key={key} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 0.9fr 1fr 0.8fr 0.9fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                  <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.78rem' }}>{row.property_title || '—'}</span>
+                                  <span style={{ color: '#64748b', fontSize: '0.76rem' }}>{row.location || '—'}</span>
+                                  <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.78rem' }}>₦{Number(row.amount || 0).toLocaleString()}</span>
+                                  <span style={{ color: '#64748b', fontSize: '0.72rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.reference || '—'}</span>
+                                  <span>{depositStatusBadge(row)}</span>
+                                  <div>
+                                    {isUnconfirmed && (
+                                      <button onClick={function(){ handleConfirmDepositPayments(row); }} disabled={isConfirming}
+                                        style={{ padding: '5px 12px', backgroundColor: isConfirming ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                                        {isConfirming ? 'Confirming…' : 'Confirm Deposit'}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ── MONTHLY HISTORY ── */}
+            {adminTab === 'monthly-history' && (function() {
+              var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
+              var ghaSummary = (monthlyHistory && monthlyHistory.gha_summaries) || [];
+              var agentSnapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
+              var mhTotals = (monthlyHistory && monthlyHistory.totals) || {};
+              var filteredSnapshots = agentSnapshots.filter(function(a) {
+                if (!historyAgentSearch.trim()) return true;
+                var q = historyAgentSearch.toLowerCase();
+                return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
+              });
+              function tierBadgeSm(tier) {
+                var cfg = { free: { bg: '#f1f5f9', color: '#64748b' }, premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
+                var c = cfg[(tier || 'free').toLowerCase()] || cfg.free;
+                return <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid currentColor', whiteSpace: 'nowrap' }}>{(tier || 'free').toUpperCase()}</span>;
+              }
+              var ghaTotals = ghaSummary.reduce(function(acc, g) {
+                acc.total_agents += g.total_agents || 0;
+                acc.active_subscriptions += g.active_subscriptions || 0;
+                acc.revenue += g.revenue || 0;
+                acc.inspections_done += g.inspections_done || 0;
+                return acc;
+              }, { total_agents: 0, active_subscriptions: 0, revenue: 0, inspections_done: 0 });
+
+              return (
+                <div>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 16px 0' }}>Monthly History</h2>
+
+                  {/* Month selector row */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240' }}>Viewing Month:</span>
+                    <select value={historyMonth} onChange={function(e){ setHistoryMonth(e.target.value); }}
+                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600' }}>
+                      {months.map(function(m) {
+                        return <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>;
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Take Snapshot Now (admin only) */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <button onClick={handleTakeSnapshot} disabled={takingSnapshot}
+                      style={{ padding: '9px 18px', backgroundColor: takingSnapshot ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: takingSnapshot ? 'not-allowed' : 'pointer' }}>
+                      {takingSnapshot ? 'Capturing…' : 'Take Snapshot Now'}
+                    </button>
+                    {snapshotMsg && (
+                      <p style={{ margin: '8px 0 0 0', fontSize: '0.78rem', fontWeight: '600', color: snapshotMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{snapshotMsg}</p>
+                    )}
+                  </div>
+
+                  {historyLoading ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading monthly history…</p></div>
+                  ) : !monthlyHistory ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>No history data for this month yet.</p></div>
+                  ) : (
+                    <div>
+                      {/* GHA Summary */}
+                      <h3 style={{ color: '#0a2240', fontSize: '0.9rem', fontWeight: '800', margin: '0 0 10px 0' }}>GHA Summary</h3>
+                      {ghaSummary.length === 0 ? (
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '20px' }}>No GHA data for this month.</p>
+                      ) : (
+                        <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                          <div style={{ minWidth: '860px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
+                              <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span><span>INSPECTIONS</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {ghaSummary.map(function(g) {
+                                return (
+                                  <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code}</span>
+                                    <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_name || g.full_name || '—'}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.total_agents || 0}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.active_subscriptions || 0}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.revenue || 0).toLocaleString()}</span>
+                                    <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.gha_commission || 0).toLocaleString()}</span>
+                                    <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.sa_commission || 0).toLocaleString()}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_done || 0}</span>
+                                  </div>
+                                );
+                              })}
+                              {/* Totals row */}
+                              <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', borderRadius: '8px', alignItems: 'center', marginTop: '4px' }}>
+                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem', gridColumn: 'span 2' }}>TOTALS</span>
+                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.total_agents}</span>
+                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.active_subscriptions}</span>
+                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>₦{Number(ghaTotals.revenue).toLocaleString()}</span>
+                                <span style={{ fontWeight: '900', color: '#22c55e', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_gha_commission || 0).toLocaleString()}</span>
+                                <span style={{ fontWeight: '900', color: '#60a5fa', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_sa_commission || 0).toLocaleString()}</span>
+                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.inspections_done}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Agent Details */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                        <h3 style={{ color: '#0a2240', fontSize: '0.9rem', fontWeight: '800', margin: 0 }}>Agent Details</h3>
+                        <input type="text" value={historyAgentSearch} onChange={function(e){ setHistoryAgentSearch(e.target.value); }}
+                          placeholder="Search by agent name or email…"
+                          style={{ padding: '7px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.80rem', color: '#0a2240', minWidth: '220px' }} />
+                      </div>
+                      {filteredSnapshots.length === 0 ? (
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0' }}>No agent snapshots found.</p>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <div style={{ minWidth: '760px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
+                              <span>AGENT NAME</span><span>EMAIL</span><span>TIER</span><span>SUB AMOUNT</span><span>LISTINGS</span><span>GHA CODE</span><span>COMMISSION</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {filteredSnapshots.map(function(a, idx) {
+                                return (
+                                  <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
+                                    <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                    <span>{tierBadgeSm(a.tier || a.subscription_tier)}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
+                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
+                                    <span style={{ color: '#0a2240', fontSize: '0.78rem' }}>{a.gha_code || '—'}</span>
+                                    <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(a.commission_generated || 0).toLocaleString()}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       </div>
@@ -4268,6 +4873,8 @@ function GHADashboard({ staffUser, onLogout }) {
 
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
   const [ghaTab, setGhaTab]                         = useState('overview');
+  const [mobileNavOpen, setMobileNavOpen]           = useState(false);
+  const mobileNavRef                                = useRef(null);
   const [agents, setAgents]                         = useState([]);
   const [agentsLoading, setAgentsLoading]           = useState(false);
   const [listings, setListings]                     = useState([]);
@@ -4294,6 +4901,15 @@ function GHADashboard({ staffUser, onLogout }) {
   const [showNotifDropdown, setShowNotifDropdown]   = useState(false);
   const [notifLoading, setNotifLoading]             = useState(false);
   const notifBellRef                                = useRef(null);
+  // Monthly History tab state
+  const [historyMonth, setHistoryMonth]             = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyHistory, setMonthlyHistory]         = useState(null);
+  const [historyLoading, setHistoryLoading]         = useState(false);
+  const [availableMonths, setAvailableMonths]       = useState([]);
+  // Earnings tab state
+  const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
+  const [earningsData, setEarningsData]             = useState(null);
+  const [earningsLoading, setEarningsLoading]       = useState(false);
 
   function showMsg(msg) { setActionMsg(msg); setTimeout(function(){ setActionMsg(''); }, 4000); }
 
@@ -4343,6 +4959,35 @@ function GHADashboard({ staffUser, onLogout }) {
       pendingIds.forEach(function(id){ knownInspIdsRef.current.add(id); });
     } catch(e) { console.error(e); }
     finally { if (!silent) setInspLoading(false); }
+  }
+
+  async function fetchMonthlyHistory(month) {
+    var m = month || historyMonth;
+    setHistoryLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      setMonthlyHistory(data);
+      setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
+    } catch(e) {
+      console.error('Monthly history fetch error:', e.message);
+      setMonthlyHistory(null);
+    } finally { setHistoryLoading(false); }
+  }
+
+  async function fetchGHAEarnings(month) {
+    var m = month || selectedMonth;
+    setEarningsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
+      setEarningsData(data);
+    } catch(e) {
+      console.error('Earnings fetch error:', e.message);
+      setEarningsData(null);
+    } finally { setEarningsLoading(false); }
   }
 
   const fetchGHANotifications = async function() {
@@ -4408,9 +5053,18 @@ function GHADashboard({ staffUser, onLogout }) {
     }
   }, [ghaTab]);
   useEffect(function() {
+    if (ghaTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
+  }, [ghaTab, historyMonth]);
+  useEffect(function() {
+    if (ghaTab === 'earnings') fetchGHAEarnings(selectedMonth);
+  }, [ghaTab, selectedMonth]);
+  useEffect(function() {
     function handleClickOutside(e) {
       if (notifBellRef.current && !notifBellRef.current.contains(e.target)) {
         setShowNotifDropdown(false);
+      }
+      if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
+        setMobileNavOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -4436,6 +5090,14 @@ function GHADashboard({ staffUser, onLogout }) {
     var c = cfg[status] || cfg.pending;
     return <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid ' + c.border, fontFamily: "'Inter', sans-serif" }}>{(status || 'pending').toUpperCase()}</span>;
   }
+  var ghaTabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'agents', label: 'My Agents' },
+    { id: 'listings', label: 'Listings' },
+    { id: 'inspections', label: 'Inspections' },
+    { id: 'monthly-history', label: 'Monthly History' },
+    { id: 'earnings', label: 'Earnings' },
+  ];
 
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
@@ -4466,7 +5128,7 @@ function GHADashboard({ staffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, width: isMobile ? '280px' : '320px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: '420px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 {/* Dropdown header */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                   <span style={{ fontWeight: 700, color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Notifications</span>
@@ -4540,24 +5202,56 @@ function GHADashboard({ staffUser, onLogout }) {
         )}
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? '4px' : undefined }}>
-          {[['overview','Overview'],['agents','My Agents'],['listings','Listings'],['inspections','Inspections']].map(function([t, label]) {
-            var active = ghaTab === t;
-            var tabBadge = t === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
-            return (
-              <button key={t} onClick={function(){
-                setGhaTab(t);
-                if (t === 'listings' && listings.length === 0) fetchListings();
-                if (t === 'inspections' && inspections.length === 0) fetchInspections();
-              }} style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {label}
-                {tabBadge > 0 && (
-                  <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4', animation: 'newAssignFlash 1s ease-in-out infinite' }}>{tabBadge}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        {isMobile ? (
+          <div ref={mobileNavRef} style={{ position: 'relative', width: '100%', marginBottom: '24px' }}>
+            <button
+              onClick={function() { setMobileNavOpen(function(v) { return !v; }); }}
+              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px', color: '#0a2240', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(10,34,64,0.08)' }}>
+              <span>{ghaTabs.find(function(t) { return t.id === ghaTab; })?.label || 'Menu'}</span>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8', transform: mobileNavOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+            </button>
+            {mobileNavOpen && (
+              <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
+                {ghaTabs.map(function(tab) {
+                  var tabBadge = tab.id === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
+                  return (
+                    <button key={tab.id}
+                      onClick={function() {
+                        setGhaTab(tab.id);
+                        setMobileNavOpen(false);
+                        if (tab.id === 'listings' && listings.length === 0) fetchListings();
+                        if (tab.id === 'inspections' && inspections.length === 0) fetchInspections();
+                      }}
+                      style={{ width: '100%', textAlign: 'left', padding: '13px 16px', border: 'none', borderBottom: '1px solid #f1f5f9', backgroundColor: ghaTab === tab.id ? '#f0fff4' : '#fff', color: ghaTab === tab.id ? '#27ae60' : '#374151', fontWeight: ghaTab === tab.id ? '700' : '500', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{tab.label}</span>
+                      {tabBadge > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{tabBadge}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: 'wrap' }}>
+            {ghaTabs.map(function(tab) {
+              var t = tab.id, label = tab.label;
+              var active = ghaTab === t;
+              var tabBadge = t === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
+              return (
+                <button key={t} onClick={function(){
+                  setGhaTab(t);
+                  if (t === 'listings' && listings.length === 0) fetchListings();
+                  if (t === 'inspections' && inspections.length === 0) fetchInspections();
+                }} style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {label}
+                  {tabBadge > 0 && (
+                    <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4', animation: 'newAssignFlash 1s ease-in-out infinite' }}>{tabBadge}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {ghaTab === 'overview' && (
@@ -5044,6 +5738,169 @@ function GHADashboard({ staffUser, onLogout }) {
           </div>
         )}
 
+        {/* ── MONTHLY HISTORY ── */}
+        {ghaTab === 'monthly-history' && (function() {
+          var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
+          var snapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
+          var totalAgentsActive = (snapshots || []).length;
+          var totalRevenue = monthlyHistory ? (monthlyHistory.total_revenue || 0) : 0;
+          var yourCommission = monthlyHistory ? (monthlyHistory.total_commission || 0) : 0;
+
+          return (
+            <div>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Monthly History</h2>
+
+              {/* Month selector row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Viewing Month:</span>
+                <select value={historyMonth} onChange={function(e){ setHistoryMonth(e.target.value); }}
+                  style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
+                  {months.map(function(m) {
+                    return <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>;
+                  })}
+                </select>
+              </div>
+
+              {historyLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading monthly history…</p></div>
+              ) : !monthlyHistory ? (
+                <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No history data for this month yet.</p></div>
+              ) : (
+                <div>
+                  {/* Summary box */}
+                  <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
+                    {[
+                      { label: 'TOTAL AGENTS ACTIVE', value: totalAgentsActive, borderColor: '#0a2240' },
+                      { label: 'TOTAL REVENUE GENERATED', value: fmtMoney(totalRevenue), borderColor: '#27ae60' },
+                      { label: 'YOUR COMMISSION (5%)', value: fmtMoney(yourCommission), borderColor: '#27ae60' },
+                    ].map(function(s) {
+                      return (
+                        <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 160px' }}>
+                          <p style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
+                          <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Agent snapshots */}
+                  <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                  {snapshots.length === 0 ? (
+                    <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
+                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No agent snapshots for this month.</p>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <div style={{ minWidth: '620px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
+                          <span>AGENT NAME</span><span>EMAIL</span><span>TIER</span><span>SUB AMOUNT</span><span>LISTINGS</span><span>COMMISSION</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {snapshots.map(function(a, idx) {
+                            return (
+                              <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
+                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                <span>{tierBadge(a.tier || a.subscription_tier)}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{fmtMoney(a.subscription_amount)}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>{fmtMoney(a.commission_generated)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── EARNINGS ── */}
+        {ghaTab === 'earnings' && (function() {
+          var rows = (earningsData && earningsData.earnings) || [];
+          return (
+            <div>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Earnings</h2>
+
+              {/* Month selector row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Viewing Month:</span>
+                <input type="month" value={selectedMonth} onChange={function(e){ setSelectedMonth(e.target.value); fetchGHAEarnings(e.target.value); }}
+                  style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600', fontFamily: "'Inter', sans-serif" }} />
+                <button onClick={function(){ fetchGHAEarnings(selectedMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+              </div>
+
+              {earningsLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading earnings…</p></div>
+              ) : !earningsData ? (
+                <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No earnings data for this month yet.</p></div>
+              ) : (
+                <div>
+                  {/* Paid / Pending status banner */}
+                  {earningsData?.is_paid === true ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#f0fff4', border: '2px solid #22c55e', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '1.8rem' }}>✅</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Paid</p>
+                        {earningsData.paid_at && (
+                          <p style={{ margin: '2px 0 0 0', color: '#166534', fontSize: '0.8rem', fontFamily: "'Inter', sans-serif" }}>
+                            Paid on {new Date(earningsData.paid_at).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#fffbeb', border: '2px solid #f59e0b', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '1.8rem' }}>⏳</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: '900', color: '#92400e', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Pending</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary card */}
+                  <div style={{ ...cardSt, padding: '22px 24px', marginBottom: '24px' }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
+                    <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
+                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>5% of total agent subscriptions</p>
+                  </div>
+
+                  {/* Individual earnings rows */}
+                  <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agent Subscriptions — {new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                  {rows.length === 0 ? (
+                    <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
+                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No contributing subscriptions for this month.</p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {rows.map(function(r, idx) {
+                        return (
+                          <div key={r.agent_email || idx} style={{ ...cardSt, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                              <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>{r.agent_email}</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>SUBSCRIPTION</p>
+                              <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(r.subscription_amount)}</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>COMMISSION (5%)</p>
+                              <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(r.commission_amount)}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
       </div>
     </div>
   );
@@ -5057,6 +5914,8 @@ function SADashboard({ staffUser, onLogout }) {
   var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
 
   const [saTab, setSaTab]                     = useState('overview');
+  const [mobileNavOpen, setMobileNavOpen]     = useState(false);
+  const mobileNavRef                          = useRef(null);
   const [ghas, setGhas]                       = useState([]);
   const [ghasLoading, setGhasLoading]         = useState(false);
   const [agents, setAgents]                   = useState([]);
@@ -5126,6 +5985,16 @@ function SADashboard({ staffUser, onLogout }) {
   const [expandedGhaId, setExpandedGhaId]           = useState(null);
   const [inspectionStats, setInspectionStats]       = useState([]);
   const [statsMonth, setStatsMonth]                 = useState(new Date().toISOString().slice(0, 7));
+  // Monthly History tab state
+  const [historyMonth, setHistoryMonth]             = useState(new Date().toISOString().slice(0, 7));
+  const [monthlyHistory, setMonthlyHistory]         = useState(null);
+  const [historyLoading, setHistoryLoading]         = useState(false);
+  const [availableMonths, setAvailableMonths]       = useState([]);
+  const [historyAgentSearch, setHistoryAgentSearch] = useState('');
+  // Earnings tab state
+  const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
+  const [earningsData, setEarningsData]             = useState(null);
+  const [earningsLoading, setEarningsLoading]       = useState(false);
 
   async function fetchGhas() {
     setGhasLoading(true);
@@ -5235,6 +6104,36 @@ function SADashboard({ staffUser, onLogout }) {
     } catch(e) { console.error(e); }
   }
 
+  async function fetchMonthlyHistory(month) {
+    var m = month || historyMonth;
+    setHistoryLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      setMonthlyHistory(data);
+      setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
+    } catch(e) {
+      console.error('Monthly history fetch error:', e.message);
+      setMonthlyHistory(null);
+    } finally { setHistoryLoading(false); }
+  }
+
+  async function fetchSAEarnings(month, silent) {
+    var m = month || selectedMonth;
+    var authToken = localStorage.getItem('gh_staff_token');
+    if (!silent) setEarningsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/sa/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + authToken } });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
+      setEarningsData(data);
+    } catch(e) {
+      console.error('Earnings fetch error:', e.message);
+      if (!silent) setEarningsData(null);
+    } finally { if (!silent) setEarningsLoading(false); }
+  }
+
   async function syncProfile() {
     try {
       var res = await fetch(API_URL + '/api/sa/profile', { headers: { Authorization: 'Bearer ' + token } });
@@ -5267,6 +6166,9 @@ function SADashboard({ staffUser, onLogout }) {
       if (notifBellRef.current && !notifBellRef.current.contains(e.target)) {
         setShowNotifDropdown(false);
       }
+      if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
+        setMobileNavOpen(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return function() { document.removeEventListener('mousedown', handleClickOutside); };
@@ -5285,6 +6187,17 @@ function SADashboard({ staffUser, onLogout }) {
   useEffect(function() {
     if (saTab === 'ghas') fetchInspectionStats();
   }, [statsMonth]);
+
+  useEffect(function() {
+    if (saTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
+  }, [saTab, historyMonth]);
+
+  useEffect(function() {
+    if (saTab !== 'earnings') return;
+    fetchSAEarnings(selectedMonth);
+    var earningsInterval = setInterval(function() { fetchSAEarnings(selectedMonth, true); }, 30000);
+    return function() { clearInterval(earningsInterval); };
+  }, [saTab, selectedMonth]);
 
   useEffect(function() {
     if (saGhas.length === 0 || pendingAgents.length === 0) return;
@@ -5316,6 +6229,17 @@ function SADashboard({ staffUser, onLogout }) {
     var q = agentSearch.toLowerCase();
     return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
   });
+  var saTabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'ghas', label: 'My GHAs' },
+    { id: 'agents', label: 'Agents' },
+    { id: 'subscriptions', label: 'Subscriptions' },
+    { id: 'payments', label: 'Customer Payments' },
+    { id: 'inspections', label: 'Inspections' },
+    { id: 'monthly-history', label: 'Monthly History' },
+    { id: 'earnings', label: 'Earnings' },
+    { id: 'profile', label: 'Profile' },
+  ];
 
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
@@ -5352,7 +6276,7 @@ function SADashboard({ staffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, width: '300px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
                 </div>
@@ -5428,19 +6352,51 @@ function SADashboard({ staffUser, onLogout }) {
         )}
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: isMobile ? 'nowrap' : 'wrap', overflowX: isMobile ? 'auto' : undefined, paddingBottom: isMobile ? '4px' : undefined }}>
-          {[['overview','Overview'],['ghas','My GHAs'],['agents','Agents'],['subscriptions','Subscriptions'],['payments','Customer Payments'],['inspections','Inspections'],['profile','Profile']].map(function([t, label]) {
-            var active = saTab === t;
-            return (
-              <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); }}
-                style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
-                {label}
-                {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
-                {t === 'inspections' && notifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{notifications.filter(function(n){ return !n.read; }).length}</span>}
-              </button>
-            );
-          })}
-        </div>
+        {isMobile ? (
+          <div ref={mobileNavRef} style={{ position: 'relative', width: '100%', marginBottom: '24px' }}>
+            <button
+              onClick={function() { setMobileNavOpen(function(v) { return !v; }); }}
+              style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 16px', color: '#0a2240', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', boxShadow: '0 1px 4px rgba(10,34,64,0.08)' }}>
+              <span>{saTabs.find(function(t) { return t.id === saTab; })?.label || 'Menu'}</span>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8', transform: mobileNavOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+            </button>
+            {mobileNavOpen && (
+              <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
+                {saTabs.map(function(tab) {
+                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? notifications.filter(function(n){ return !n.read; }).length : 0;
+                  return (
+                    <button key={tab.id}
+                      onClick={function() {
+                        setSaTab(tab.id);
+                        setMobileNavOpen(false);
+                        if (tab.id === 'payments') fetchDeposits();
+                        if (tab.id === 'inspections' && inspections.length === 0) fetchInspections();
+                      }}
+                      style={{ width: '100%', textAlign: 'left', padding: '13px 16px', border: 'none', borderBottom: '1px solid #f1f5f9', backgroundColor: saTab === tab.id ? '#f0fff4' : '#fff', color: saTab === tab.id ? '#27ae60' : '#374151', fontWeight: saTab === tab.id ? '700' : '500', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{tab.label}</span>
+                      {badge > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{badge}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', flexWrap: 'wrap' }}>
+            {saTabs.map(function(tab) {
+              var t = tab.id, label = tab.label;
+              var active = saTab === t;
+              return (
+                <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); }}
+                  style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {label}
+                  {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
+                  {t === 'inspections' && notifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{notifications.filter(function(n){ return !n.read; }).length}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {saTab === 'overview' && (
@@ -6638,6 +7594,211 @@ function SADashboard({ staffUser, onLogout }) {
           </div>
         )}
 
+        {/* ── MONTHLY HISTORY ── */}
+        {saTab === 'monthly-history' && (function() {
+          var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
+          var ghaSummary = (monthlyHistory && monthlyHistory.gha_summaries) || [];
+          var agentSnapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
+          var mhTotals = (monthlyHistory && monthlyHistory.totals) || {};
+          var filteredSnapshots = agentSnapshots.filter(function(a) {
+            if (!historyAgentSearch.trim()) return true;
+            var q = historyAgentSearch.toLowerCase();
+            return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
+          });
+          function tierBadgeSm(tier) {
+            var cfg = { free: { bg: '#f1f5f9', color: '#64748b' }, premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
+            var c = cfg[(tier || 'free').toLowerCase()] || cfg.free;
+            return <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid currentColor', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>{(tier || 'free').toUpperCase()}</span>;
+          }
+          var ghaTotals = ghaSummary.reduce(function(acc, g) {
+            acc.total_agents += g.total_agents || 0;
+            acc.active_subscriptions += g.active_subscriptions || 0;
+            acc.revenue += g.revenue || 0;
+            acc.inspections_done += g.inspections_done || 0;
+            return acc;
+          }, { total_agents: 0, active_subscriptions: 0, revenue: 0, inspections_done: 0 });
+
+          return (
+            <div>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Monthly History</h2>
+
+              {/* Month selector row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Viewing Month:</span>
+                <select value={historyMonth} onChange={function(e){ setHistoryMonth(e.target.value); }}
+                  style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
+                  {months.map(function(m) {
+                    return <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>;
+                  })}
+                </select>
+              </div>
+
+              {historyLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading monthly history…</p></div>
+              ) : !monthlyHistory ? (
+                <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No history data for this month yet.</p></div>
+              ) : (
+                <div>
+                  {/* GHA Summary */}
+                  <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Summary</h3>
+                  {ghaSummary.length === 0 ? (
+                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '20px', fontFamily: "'Inter', sans-serif" }}>No GHA data for this month.</p>
+                  ) : (
+                    <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+                      <div style={{ minWidth: '860px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
+                          <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span><span>INSPECTIONS</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {ghaSummary.map(function(g) {
+                            return (
+                              <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                                <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code}</span>
+                                <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_name || g.full_name || '—'}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.total_agents || 0}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.active_subscriptions || 0}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.revenue || 0).toLocaleString()}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.gha_commission || 0).toLocaleString()}</span>
+                                <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.sa_commission || 0).toLocaleString()}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_done || 0}</span>
+                              </div>
+                            );
+                          })}
+                          {/* Totals row */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', borderRadius: '8px', alignItems: 'center', marginTop: '4px', fontFamily: "'Inter', sans-serif" }}>
+                            <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem', gridColumn: 'span 2' }}>TOTALS</span>
+                            <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.total_agents}</span>
+                            <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.active_subscriptions}</span>
+                            <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>₦{Number(ghaTotals.revenue).toLocaleString()}</span>
+                            <span style={{ fontWeight: '900', color: '#22c55e', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_gha_commission || 0).toLocaleString()}</span>
+                            <span style={{ fontWeight: '900', color: '#60a5fa', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_sa_commission || 0).toLocaleString()}</span>
+                            <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.inspections_done}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Agent Details */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agent Details</h3>
+                    <input type="text" value={historyAgentSearch} onChange={function(e){ setHistoryAgentSearch(e.target.value); }}
+                      placeholder="Search by agent name or email…"
+                      style={{ padding: '7px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.80rem', color: '#0a2240', minWidth: '220px', fontFamily: "'Inter', sans-serif" }} />
+                  </div>
+                  {filteredSnapshots.length === 0 ? (
+                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0', fontFamily: "'Inter', sans-serif" }}>No agent snapshots found.</p>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <div style={{ minWidth: '760px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
+                          <span>AGENT NAME</span><span>EMAIL</span><span>TIER</span><span>SUB AMOUNT</span><span>LISTINGS</span><span>GHA CODE</span><span>COMMISSION</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {filteredSnapshots.map(function(a, idx) {
+                            return (
+                              <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
+                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                <span>{tierBadgeSm(a.tier || a.subscription_tier)}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
+                                <span style={{ color: '#0a2240', fontSize: '0.78rem' }}>{a.gha_code || '—'}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(a.commission_generated || 0).toLocaleString()}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── EARNINGS ── */}
+        {saTab === 'earnings' && (function() {
+          var ghaRows = (earningsData && earningsData.gha_breakdown) || [];
+          return (
+            <div>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Earnings</h2>
+
+              {/* Month selector row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Viewing Month:</span>
+                <input type="month" value={selectedMonth} onChange={function(e){ setSelectedMonth(e.target.value); fetchSAEarnings(e.target.value); }}
+                  style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600', fontFamily: "'Inter', sans-serif" }} />
+                <button onClick={function(){ fetchSAEarnings(selectedMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+              </div>
+
+              {earningsLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading earnings…</p></div>
+              ) : !earningsData ? (
+                <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No earnings data for this month yet.</p></div>
+              ) : (
+                <div>
+                  {/* Paid / Pending status banner */}
+                  {earningsData?.is_paid === true ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#f0fff4', border: '2px solid #22c55e', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '1.8rem' }}>✅</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Paid</p>
+                        {earningsData.paid_at && (
+                          <p style={{ margin: '2px 0 0 0', color: '#166534', fontSize: '0.8rem', fontFamily: "'Inter', sans-serif" }}>
+                            Paid on {new Date(earningsData.paid_at).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#fffbeb', border: '2px solid #f59e0b', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
+                      <span style={{ fontSize: '1.8rem' }}>⏳</span>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: '900', color: '#92400e', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Pending</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary card */}
+                  <div style={{ ...cardSt, padding: '22px 24px', marginBottom: '24px' }}>
+                    <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
+                    <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
+                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>5% of total agent subscriptions</p>
+                  </div>
+
+                  {/* GHA breakdown table */}
+                  <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Breakdown — {new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+                  {ghaRows.length === 0 ? (
+                    <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
+                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No contributing GHAs for this month.</p>
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <div style={{ minWidth: '360px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
+                          <span>GHA</span><span>COMMISSION CONTRIBUTED</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          {ghaRows.map(function(g, idx) {
+                            return (
+                              <div key={g.gha_id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code ? (g.gha_code + ' - ' + g.gha_name) : g.gha_id}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>{fmtMoney(g.commission_amount)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── PROFILE / SETTINGS ── */}
         {saTab === 'profile' && (
           <div>
@@ -7544,12 +8705,36 @@ function AppContent() {
                           <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 6px 0', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{tier.label}</p>
                           <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{priceText}</p>
                           <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>Up to {tier.listingLimit} listings</p>
-                          <button onClick={function(){ var _tierKey = tierKey; openPaystack({ email: user.email, amountNaira: tier.price, ref: 'GH-AGENT-' + _tierKey.toUpperCase() + '-' + Date.now(), metadata: { agent_email: user.email, upgrade_tier: _tierKey }, onSuccess: function(response){ fetch(API_URL + '/api/agent/upgrade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, tier: _tierKey, reference: response.reference }) }).catch(console.error); var _now = new Date().toISOString(); localStorage.setItem('gh_tier_' + user.id, _tierKey); localStorage.setItem('gh_tier_renewed_' + user.email, _now); localStorage.setItem('gh_tier_renewed_' + user.id, _now); setAgentTier(_tierKey); setRenewalDate(_now); }, onClose: function(){} }); }} style={{ width: '100%', padding: '11px', backgroundColor: isPrimary ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: isPrimary ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>{agentTier === 'free' ? 'Upgrade to ' + tier.label : 'Renew ' + tier.label}</button>
+                          <button onClick={async function(){
+                            var _tierKey = tierKey;
+                            try {
+                              var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  amount: tier.price,
+                                  customer_email: user.email,
+                                  customer_name: user.email,
+                                  purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[_tierKey],
+                                  meta: {
+                                    payment_type: 'subscription',
+                                    agent_id: user.id,
+                                    tier: _tierKey,
+                                  },
+                                }),
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+                              window.location.href = data.checkout_url;
+                            } catch (err) {
+                              alert('Error: ' + err.message);
+                            }
+                          }} style={{ width: '100%', padding: '11px', backgroundColor: isPrimary ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: isPrimary ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>{agentTier === 'free' ? 'Upgrade to ' + tier.label : 'Renew ' + tier.label}</button>
                         </div>
                       );
                     })}
                   </div>
-                  <p style={{ textAlign: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>Payments are processed securely via Paystack</p>
+                  <p style={{ textAlign: 'center', marginTop: '16px', color: '#94a3b8', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>Payments are processed securely via Flutterwave</p>
                 </div>
               )
             ) : (
