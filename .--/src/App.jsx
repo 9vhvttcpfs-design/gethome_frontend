@@ -1660,7 +1660,14 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           localStorage.setItem('gh_tier_' + user.id, payload.new.tier);
         }
       })
-      .subscribe();
+      .subscribe(function(status, err) {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime connected successfully (agent-sub-' + user.id + ')');
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.log('Realtime connection issue (non-fatal):', status, err?.message);
+        }
+      });
     return function() { supabase.removeChannel(channel); };
   }, [user?.id]);
   useEffect(function() {
@@ -2486,6 +2493,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [pendingAgents, setPendingAgents]         = useState([]);
   const [approvedAgents, setApprovedAgents]       = useState([]);
   const [disapprovedAgents, setDisapprovedAgents] = useState([]);
+  const [rejectedAgents, setRejectedAgents]       = useState([]);
   const [loading, setLoading]                     = useState(false);
   const [checkingAuth, setCheckingAuth]           = useState(true);
   const [sessionUser, setSessionUser]             = useState(null);
@@ -2890,9 +2898,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       var data = await res.json();
       setVerifiedPendingAgents(Array.isArray(data) ? data : []);
       var all = Array.isArray(data) ? data : [];
-      setPendingAgents(all.filter(function(a) { return a.status === 'pending'; }));
+      var pendingStatuses = ['pending', 'pending_sa_review', 'pending_gha_inspection'];
+      setPendingAgents(all.filter(function(a) { return pendingStatuses.includes(a.status); }));
       setApprovedAgents(all.filter(function(a) { return a.status === 'approved'; }));
       setDisapprovedAgents(all.filter(function(a) { return a.status === 'disapproved'; }));
+      setRejectedAgents(all.filter(function(a) { return a.status === 'rejected'; }));
     } catch(e) { console.error('Fetch verified pending agents error:', e.message); }
   };
 
@@ -3154,10 +3164,35 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     try {
       const { error } = await supabase.from('agents').update({ status: 'rejected' }).eq('id', agentId);
       if (error) throw error;
-      setPendingAgents(function(prev) { return prev.filter(function(a) { return a.id !== agentId; }); });
+      setPendingAgents(function(prev) {
+        const agent = prev.find(function(a) { return a.id === agentId; });
+        if (agent) setRejectedAgents(function(r) { return [Object.assign({}, agent, { status: 'rejected' }), ...r]; });
+        return prev.filter(function(a) { return a.id !== agentId; });
+      });
       setActionMsg('Rejected: ' + agentEmail);
     } catch (e) { setActionMsg('Error: ' + e.message); }
     setTimeout(function(){ setActionMsg(''); }, 4000);
+  };
+
+  const handleReinstate = async function(agentId, agentEmail) {
+    if (!window.confirm('Reinstate ' + agentEmail + '? They will be sent back to SA review.')) return;
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/reinstate-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ agent_id: agentId }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reinstate agent');
+      setRejectedAgents(function(prev) {
+        const agent = prev.find(function(a) { return a.id === agentId; });
+        if (agent) setPendingAgents(function(p) { return [Object.assign({}, agent, { status: 'pending_sa_review' }), ...p]; });
+        return prev.filter(function(a) { return a.id !== agentId; });
+      });
+      setActionMsg('Reinstated: ' + agentEmail + ' sent back to SA review.');
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 5000);
   };
 
   const handleDisapprove = async function(agentId, agentEmail) {
@@ -3463,7 +3498,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 ...approvedAgents.map(function(a){ return Object.assign({}, a, { _status: 'approved' }); }),
                 ...disapprovedAgents.map(function(a){ return Object.assign({}, a, { _status: 'disapproved' }); }),
               ].filter(matchesSearch);
-              var filtered = agentSubTab === 'pending' ? pendingList : approvedList;
+              var rejectedList = rejectedAgents.filter(matchesSearch);
+              var filtered = agentSubTab === 'pending' ? pendingList : agentSubTab === 'approved' ? approvedList : rejectedList;
               return (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
@@ -3481,8 +3517,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </button>
                     <button onClick={function(){ setAgentSubTab('approved'); }}
                       style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px', borderRadius: '9px', border: '1.5px solid ' + (agentSubTab === 'approved' ? '#0a2240' : '#e2e8f0'), backgroundColor: agentSubTab === 'approved' ? '#0a2240' : '#fff', color: agentSubTab === 'approved' ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                      Approved Agents
+                      Approved
                       <span style={{ backgroundColor: '#22c55e', color: '#fff', borderRadius: '20px', padding: '1px 8px', fontSize: '0.7rem', fontWeight: '800' }}>{approvedAgents.length}</span>
+                    </button>
+                    <button onClick={function(){ setAgentSubTab('rejected'); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px', borderRadius: '9px', border: '1.5px solid ' + (agentSubTab === 'rejected' ? '#0a2240' : '#e2e8f0'), backgroundColor: agentSubTab === 'rejected' ? '#0a2240' : '#fff', color: agentSubTab === 'rejected' ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                      Rejected
+                      <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '20px', padding: '1px 8px', fontSize: '0.7rem', fontWeight: '800' }}>{rejectedAgents.length}</span>
                     </button>
                   </div>
                   {loading ? (
@@ -3494,12 +3535,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       {filtered.map(function(agent) {
                         var isExpanded = expandedAgent === agent.id;
                         var isPending = agentSubTab === 'pending';
+                        var isRejectedTab = agentSubTab === 'rejected';
                         var isDisapproved = agent._status === 'disapproved';
                         var approvalDate = agent.updated_at || agent.created_at;
                         return (
                           <div key={agent.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '12px 14px' }}>
                             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
-                              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isPending ? '#f59e0b' : isDisapproved ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>
+                              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isPending ? '#f59e0b' : (isRejectedTab || isDisapproved) ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: '800', fontSize: '0.88rem', flexShrink: 0 }}>
                                 {(agent.email || 'A')[0].toUpperCase()}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3507,13 +3549,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{agent.email || 'No email'}</p>
                                 {!isPending && (
                                   <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem' }}>
-                                    {agent.city ? '📍 ' + agent.city + ' · ' : ''}Approved: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
+                                    {agent.city ? '📍 ' + agent.city + ' · ' : ''}{isRejectedTab ? 'Rejected' : 'Approved'}: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
                                   </p>
                                 )}
                               </div>
                               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginBottom: isMobile ? '2px' : 0 }}>
-                                <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: isPending ? '#fffbeb' : isDisapproved ? '#fef2f2' : '#f0fff4', color: isPending ? '#92400e' : isDisapproved ? '#b91c1c' : '#166534', border: '1px solid ' + (isPending ? '#fde68a' : isDisapproved ? '#fecaca' : '#86efac') }}>
-                                  {isPending ? 'PENDING' : isDisapproved ? 'DISAPPROVED' : 'APPROVED'}
+                                <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: isPending ? '#fffbeb' : (isRejectedTab || isDisapproved) ? '#fef2f2' : '#f0fff4', color: isPending ? '#92400e' : (isRejectedTab || isDisapproved) ? '#b91c1c' : '#166534', border: '1px solid ' + (isPending ? '#fde68a' : (isRejectedTab || isDisapproved) ? '#fecaca' : '#86efac') }}>
+                                  {isPending ? 'PENDING' : isRejectedTab ? 'REJECTED' : isDisapproved ? 'DISAPPROVED' : 'APPROVED'}
                                 </span>
                                 {agent.subscription_tier && agent.subscription_tier !== 'free' && (
                                   <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{(agent.subscription_tier || '').toUpperCase()}</span>
@@ -3534,17 +3576,21 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       style={{ padding: '5px 10px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reject</button>
                                   </>
                                 )}
-                                {!isPending && !isDisapproved && (
+                                {agentSubTab === 'approved' && !isDisapproved && (
                                   <button onClick={function(){ handleDisapprove(agent.id, agent.email); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Disapprove</button>
                                 )}
-                                {isDisapproved && (
+                                {agentSubTab === 'approved' && isDisapproved && (
                                   <button onClick={function(){ handleReapprove(agent.id, agent.email); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reapprove</button>
                                 )}
-                                {!isPending && (
+                                {agentSubTab === 'approved' && (
                                   <button onClick={function(){ handleRevoke(agent.id, agent.email); }}
-                                    style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Revoke Approval</button>
+                                    style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Revoke</button>
+                                )}
+                                {isRejectedTab && (
+                                  <button onClick={function(){ handleReinstate(agent.id, agent.email); }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reinstate</button>
                                 )}
                               </div>
                             </div>
@@ -8893,7 +8939,14 @@ function AppContent() {
           setProperties(function(prev) { return prev.map(function(item) { return item.id === payload.new.id ? payload.new : item; }); });
         }
       })
-      .subscribe();
+      .subscribe(function(status, err) {
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime connected successfully (public:properties)');
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.log('Realtime connection issue (non-fatal):', status, err?.message);
+        }
+      });
     return function() { supabase.removeChannel(channel); };
   }, []);
 
