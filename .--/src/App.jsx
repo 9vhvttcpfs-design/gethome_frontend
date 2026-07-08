@@ -5250,7 +5250,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
               function displayScore(value, suffix) {
                 if (value === null || value === undefined) return '—';
-                return value + (suffix || '');
+                return Number(value).toFixed(1) + (suffix || '');
               }
 
               function kpiRows(s) {
