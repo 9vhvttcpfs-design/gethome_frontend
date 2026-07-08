@@ -926,31 +926,6 @@ function PricingModal({ property, onClose, user, onUserChange }) {
       setDepositSubmitting(false);
     }
   };
-  const handleCardPayment = async function() {
-    if (!user) { setAuthWall('escrow'); return; }
-    setDepositSubmitting(true);
-    try {
-      var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: grandTotal,
-          customer_email: user.email,
-          customer_name: user.email,
-          purpose: 'Property Deposit - ' + property.title,
-          property_id: property.id,
-          payment_method: 'card',
-        }),
-      });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
-      window.location.href = data.checkout_url;
-    } catch(err) {
-      alert('Error: ' + err.message);
-    } finally {
-      setDepositSubmitting(false);
-    }
-  };
   const handleProxyInspection = () => { if (!requireAuth('proxy')) return; triggerProxyInspection(user); };
   const isPaid = paymentStatus === 'success';
   const imageList = (property.image_urls && Array.isArray(property.image_urls) && property.image_urls.filter(function(u){ return u && u.trim(); }).length > 0)
@@ -1118,8 +1093,6 @@ function PricingModal({ property, onClose, user, onUserChange }) {
               {[
                 { key: 'flutterwave', recommended: true,
                   title: 'Pay with Flutterwave', sub: 'Card, bank transfer, USSD & more' },
-                { key: 'card', recommended: false,
-                  title: 'Debit / Credit Card', sub: 'Visa, Mastercard, Verve accepted' },
                 { key: 'bank', recommended: false,
                   title: 'Direct Bank Transfer', sub: 'Transfer to our account and confirm via WhatsApp' },
               ].map(function(m) {
@@ -1137,29 +1110,23 @@ function PricingModal({ property, onClose, user, onUserChange }) {
                     {m.key === 'flutterwave' && (
                       <span style={{ backgroundColor: '#f5a623', color: '#0a2240', fontWeight: '800', fontSize: '0.68rem', padding: '4px 10px', borderRadius: '20px', flexShrink: 0, marginLeft: '10px' }}>Flutterwave</span>
                     )}
-                    {m.key === 'card' && (
-                      <span style={{ color: '#94a3b8', fontWeight: '700', fontSize: '0.7rem', flexShrink: 0, marginLeft: '10px', whiteSpace: 'nowrap' }}>VISA · MC · Verve</span>
-                    )}
                   </div>
                 );
               })}
               <button
                 onClick={function() {
                   if (paymentMethod === 'flutterwave') handleEscrowPayment();
-                  else if (paymentMethod === 'card') handleCardPayment();
                   else if (paymentMethod === 'bank') setShowBankDetails(true);
                 }}
-                disabled={!paymentMethod || depositSubmitting}
-                style={{ width: '100%', padding: '14px', marginTop: '4px', border: 'none', borderRadius: '12px', backgroundColor: (!paymentMethod || depositSubmitting) ? '#94a3b8' : '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: (!paymentMethod || depositSubmitting) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                disabled={paymentMethod === null || depositSubmitting}
+                style={{ width: '100%', padding: '14px', marginTop: '4px', border: 'none', borderRadius: '12px', backgroundColor: (paymentMethod === null || depositSubmitting) ? '#94a3b8' : '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: (paymentMethod === null || depositSubmitting) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
                 {depositSubmitting
                   ? 'Preparing payment…'
-                  : !paymentMethod
+                  : paymentMethod === null
                     ? 'Select a payment method'
                     : paymentMethod === 'flutterwave'
                       ? 'Continue with Flutterwave'
-                      : paymentMethod === 'card'
-                        ? 'Pay by Card'
-                        : 'View Bank Details'}
+                      : 'View Bank Details'}
               </button>
             </div>
           )}
@@ -2574,8 +2541,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffEarnings, setStaffEarnings]               = useState(null);
   const [earningsLoading, setEarningsLoading]           = useState(false);
   const [markingStaffPaid, setMarkingStaffPaid]         = useState({});
-  const [agentFilter, setAgentFilter]                   = useState('all');
   const [agentSearch, setAgentSearch]                   = useState('');
+  const [agentSubTab, setAgentSubTab]                   = useState('pending');
   const [earningsSubTab, setEarningsSubTab]             = useState('gha');
   const [inspectionSearch, setInspectionSearch]         = useState('');
   const [inspectionFilter, setInspectionFilter]         = useState('all');
@@ -2931,6 +2898,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
   const fetchAgents = fetchVerifiedPendingAgents;
 
+  const fetchApprovedAgents = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/approved-agents', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      setApprovedAgents(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Fetch approved agents error:', e.message); }
+  };
+
   const fetchTransactions = async function() {
     setTxLoading(true);
     try {
@@ -3117,6 +3095,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [checkingAuth, sessionUser]);
 
   useEffect(function() {
+    if (adminTab === 'agents' && !checkingAuth && sessionUser) {
+      fetchAgents();
+      fetchApprovedAgents();
+    }
+  }, [adminTab]);
+
+  useEffect(function() {
     if (adminTab === 'inspections') {
       fetchAdminInspections();
       var inspPollInterval = setInterval(fetchAdminInspections, 30000);
@@ -3200,6 +3185,25 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         return prev.filter(function(a) { return a.id !== agentId; });
       });
       setActionMsg('Reapproved: ' + agentEmail + ' can now upload listings again.');
+    } catch (e) { setActionMsg('Error: ' + e.message); }
+    setTimeout(function(){ setActionMsg(''); }, 5000);
+  };
+
+  const handleRevoke = async function(agentId, agentEmail) {
+    if (!window.confirm('Revoke approval for ' + agentEmail + '? They will be sent back to SA review.')) return;
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/revoke-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ agent_id: agentId }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to revoke approval');
+      setApprovedAgents(function(prev) { return prev.filter(function(a) { return a.id !== agentId; }); });
+      setDisapprovedAgents(function(prev) { return prev.filter(function(a) { return a.id !== agentId; }); });
+      fetchAgents();
+      setActionMsg('Approval revoked: ' + agentEmail + ' sent back to SA review.');
     } catch (e) { setActionMsg('Error: ' + e.message); }
     setTimeout(function(){ setActionMsg(''); }, 5000);
   };
@@ -3449,38 +3453,37 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
             {/* ── AGENTS ── */}
             {adminTab === 'agents' && (function() {
-              var allAgents = [
-                ...pendingAgents.map(function(a){ return Object.assign({}, a, { _status: 'pending' }); }),
+              var q = agentSearch.trim().toLowerCase();
+              var matchesSearch = function(a) {
+                if (!q) return true;
+                return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
+              };
+              var pendingList = pendingAgents.filter(matchesSearch);
+              var approvedList = [
                 ...approvedAgents.map(function(a){ return Object.assign({}, a, { _status: 'approved' }); }),
                 ...disapprovedAgents.map(function(a){ return Object.assign({}, a, { _status: 'disapproved' }); }),
-              ];
-              var q = agentSearch.trim().toLowerCase();
-              var filtered = allAgents.filter(function(a) {
-                if (agentFilter === 'pending') return a._status === 'pending';
-                if (agentFilter === 'approved') return a._status === 'approved';
-                if (agentFilter === 'disapproved') return a._status === 'disapproved';
-                if (q) return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
-                return true;
-              });
+              ].filter(matchesSearch);
+              var filtered = agentSubTab === 'pending' ? pendingList : approvedList;
               return (
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                     <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agents</h2>
-                    <button onClick={fetchAgents} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                    <button onClick={function(){ fetchAgents(); fetchApprovedAgents(); }} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
                   </div>
                   <input type="text" value={agentSearch} onChange={function(e){ setAgentSearch(e.target.value); }}
                     placeholder="Search by name, email or phone…"
                     style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '12px', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                    {[['all','All',allAgents.length],['pending','Pending',pendingAgents.length],['approved','Approved',approvedAgents.length],['disapproved','Disapproved',disapprovedAgents.length]].map(function([f, label, count]) {
-                      var isActive = agentFilter === f && !agentSearch;
-                      return (
-                        <button key={f} onClick={function(){ setAgentFilter(f); setAgentSearch(''); }}
-                          style={{ padding: '5px 14px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.76rem', cursor: 'pointer' }}>
-                          {label} ({count})
-                        </button>
-                      );
-                    })}
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    <button onClick={function(){ setAgentSubTab('pending'); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px', borderRadius: '9px', border: '1.5px solid ' + (agentSubTab === 'pending' ? '#0a2240' : '#e2e8f0'), backgroundColor: agentSubTab === 'pending' ? '#0a2240' : '#fff', color: agentSubTab === 'pending' ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                      Pending Review
+                      <span style={{ backgroundColor: '#f59e0b', color: '#fff', borderRadius: '20px', padding: '1px 8px', fontSize: '0.7rem', fontWeight: '800' }}>{pendingAgents.length}</span>
+                    </button>
+                    <button onClick={function(){ setAgentSubTab('approved'); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px', borderRadius: '9px', border: '1.5px solid ' + (agentSubTab === 'approved' ? '#0a2240' : '#e2e8f0'), backgroundColor: agentSubTab === 'approved' ? '#0a2240' : '#fff', color: agentSubTab === 'approved' ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                      Approved Agents
+                      <span style={{ backgroundColor: '#22c55e', color: '#fff', borderRadius: '20px', padding: '1px 8px', fontSize: '0.7rem', fontWeight: '800' }}>{approvedAgents.length}</span>
+                    </button>
                   </div>
                   {loading ? (
                     <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Loading…</p></div>
@@ -3490,8 +3493,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       {filtered.map(function(agent) {
                         var isExpanded = expandedAgent === agent.id;
-                        var isPending = agent._status === 'pending';
+                        var isPending = agentSubTab === 'pending';
                         var isDisapproved = agent._status === 'disapproved';
+                        var approvalDate = agent.updated_at || agent.created_at;
                         return (
                           <div key={agent.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '12px 14px' }}>
                             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
@@ -3501,6 +3505,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{agent.full_name || 'Name not provided'}</p>
                                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{agent.email || 'No email'}</p>
+                                {!isPending && (
+                                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem' }}>
+                                    {agent.city ? '📍 ' + agent.city + ' · ' : ''}Approved: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
+                                  </p>
+                                )}
                               </div>
                               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginBottom: isMobile ? '2px' : 0 }}>
                                 <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: isPending ? '#fffbeb' : isDisapproved ? '#fef2f2' : '#f0fff4', color: isPending ? '#92400e' : isDisapproved ? '#b91c1c' : '#166534', border: '1px solid ' + (isPending ? '#fde68a' : isDisapproved ? '#fecaca' : '#86efac') }}>
@@ -3532,6 +3541,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 {isDisapproved && (
                                   <button onClick={function(){ handleReapprove(agent.id, agent.email); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reapprove</button>
+                                )}
+                                {!isPending && (
+                                  <button onClick={function(){ handleRevoke(agent.id, agent.email); }}
+                                    style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Revoke Approval</button>
                                 )}
                               </div>
                             </div>
