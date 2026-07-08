@@ -141,6 +141,121 @@ function LegalModal({ type, onClose, onAccept, forceAccept }) {
     </div>
   );
 }
+function RateGHAModal({ ghaId, ghaName, inspectionId, customerEmail, onClose, onSubmitted }) {
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [reviewText, setReviewText] = useState('');
+  const [categories, setCategories] = useState({
+    punctuality: 0, professionalism: 0, knowledge: 0, communication: 0
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async function() {
+    if (rating === 0) { setError('Please select a star rating'); return; }
+    setSubmitting(true);
+    try {
+      var res = await fetch(API_URL + '/api/rate-gha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gha_id: ghaId,
+          inspection_id: inspectionId || null,
+          customer_email: customerEmail || null,
+          rating: rating,
+          review_text: reviewText.trim() || null,
+          categories: categories,
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit rating');
+      setSubmitted(true);
+      if (onSubmitted) onSubmitted();
+    } catch(err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
+        {submitted ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⭐</div>
+            <h3 style={{ color: '#166534', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 8px 0' }}>Thank You!</h3>
+            <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 20px 0' }}>Your rating has been submitted. This helps us improve our inspection service.</p>
+            <button onClick={onClose} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px 28px', fontWeight: '700', cursor: 'pointer' }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 4px 0' }}>Rate Your Inspection</h3>
+            <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 20px 0' }}>How was your experience with {ghaName || 'your GetHome inspection agent'}?</p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px' }}>
+              {[1,2,3,4,5].map(function(star) {
+                return (
+                  <button key={star}
+                    onMouseEnter={function() { setHoverRating(star); }}
+                    onMouseLeave={function() { setHoverRating(0); }}
+                    onClick={function() { setRating(star); }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '2rem', color: star <= (hoverRating || rating) ? '#f59e0b' : '#e2e8f0', transition: 'color 0.15s' }}>
+                    ★
+                  </button>
+                );
+              })}
+            </div>
+            {rating > 0 && (
+              <p style={{ textAlign: 'center', color: '#f59e0b', fontWeight: '700', fontSize: '0.84rem', margin: '-12px 0 16px 0' }}>
+                {['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][rating]}
+              </p>
+            )}
+
+            <p style={{ color: '#374151', fontWeight: '600', fontSize: '0.80rem', margin: '0 0 10px 0' }}>Rate specific areas (optional):</p>
+            {['punctuality', 'professionalism', 'knowledge', 'communication'].map(function(cat) {
+              return (
+                <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'capitalize' }}>{cat}</span>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {[1,2,3,4,5].map(function(star) {
+                      return (
+                        <button key={star}
+                          onClick={function() { setCategories(function(prev) { return Object.assign({}, prev, { [cat]: star }); }); }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', color: star <= categories[cat] ? '#f59e0b' : '#e2e8f0' }}>
+                          ★
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <textarea
+              placeholder='Share your experience (optional)...'
+              value={reviewText}
+              onChange={function(e) { setReviewText(e.target.value); }}
+              rows={3}
+              style={{ width: '100%', borderRadius: '10px', border: '1.5px solid #e2e8f0', padding: '10px 12px', fontSize: '0.82rem', resize: 'none', marginTop: '12px', boxSizing: 'border-box', outline: 'none' }}
+            />
+
+            {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: '8px 0 0 0' }}>{error}</p>}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <button onClick={onClose} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '0.86rem' }}>Skip</button>
+              <button onClick={handleSubmit} disabled={submitting || rating === 0}
+                style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: rating === 0 ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', cursor: rating === 0 ? 'not-allowed' : 'pointer', fontSize: '0.86rem' }}>
+                {submitting ? 'Submitting...' : 'Submit Rating'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [mode, setMode]                               = useState('login');
   const [email, setEmail]                             = useState('');
@@ -2492,6 +2607,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaInspPerfStats, setGhaInspPerfStats]         = useState([]);
   const [ghaInspPerfMonth, setGhaInspPerfMonth]         = useState(new Date().toISOString().slice(0, 7));
   const [ghaInspPerfLoading, setGhaInspPerfLoading]     = useState(false);
+  // GHA Management sub-tab + Ratings panel state
+  const [ghaMgmtSubTab, setGhaMgmtSubTab]               = useState('directory');
+  const [allRatings, setAllRatings]                     = useState({ leaderboard: [], recent_reviews: [] });
+  const [allRatingsLoading, setAllRatingsLoading]       = useState(false);
   // Monthly History panel state
   const [historyMonth, setHistoryMonth]                 = useState(new Date().toISOString().slice(0, 7));
   const [monthlyHistory, setMonthlyHistory]             = useState(null);
@@ -2508,6 +2627,59 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [paymentsMsg, setPaymentsMsg]                   = useState('');
   const [markingGhaPaidPayments, setMarkingGhaPaidPayments] = useState({});
   const [confirmingDepositPayments, setConfirmingDepositPayments] = useState(null);
+  // Staff Performance (KPI) panel state
+  const [kpiMonth, setKpiMonth]                         = useState(new Date().toISOString().slice(0, 7));
+  const [kpiData, setKpiData]                           = useState({ sa_kpis: [], gha_kpis: [] });
+  const [kpiLoading, setKpiLoading]                     = useState(false);
+  const [editingKpi, setEditingKpi]                     = useState(null);
+  const [kpiForm, setKpiForm]                           = useState({});
+  const [kpiMsg, setKpiMsg]                             = useState('');
+  const [kpiTab, setKpiTab]                             = useState('SA');
+
+  const fetchKPIs = async function(silent) {
+    if (!silent) setKpiLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/staff-kpis?month=' + kpiMonth, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setKpiData(data);
+    } catch(e) { console.error('KPI fetch error:', e.message); }
+    finally { setKpiLoading(false); }
+  };
+
+  const handleSaveKPI = async function(staffMember) {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/staff-kpis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          staff_id: staffMember.id,
+          staff_type: staffMember.staff_type,
+          staff_code: staffMember.staff_code,
+          staff_name: staffMember.staff_name || staffMember.full_name,
+          month_year: kpiMonth,
+          attendance_score: kpiForm.attendance_score,
+          csat_score: kpiForm.csat_score,
+          inspection_fidelity_score: kpiForm.inspection_fidelity_score,
+          onboarding_milestones_score: kpiForm.onboarding_milestones_score,
+          response_time_score: kpiForm.response_time_score,
+          management_notes: kpiForm.management_notes,
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setKpiMsg('KPI scores saved successfully for ' + (staffMember.staff_code || staffMember.full_name));
+      setEditingKpi(null);
+      setKpiForm({});
+      fetchKPIs(true);
+      setTimeout(function() { setKpiMsg(''); }, 4000);
+    } catch(err) {
+      setKpiMsg('Error: ' + err.message);
+    }
+  };
 
   const fetchListings = async function() {
     setListingsLoading(true);
@@ -2550,6 +2722,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       }
     } catch(e) { console.error('GHA inspection stats error:', e.message); }
     finally { setGhaInspPerfLoading(false); }
+  };
+
+  const fetchAllRatings = async function() {
+    setAllRatingsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/all-ratings', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setAllRatings({ leaderboard: data.leaderboard || [], recent_reviews: data.recent_reviews || [] });
+    } catch(e) { console.error('All ratings fetch error:', e.message); }
+    finally { setAllRatingsLoading(false); }
   };
 
   const fetchMonthlyHistory = async function(month) {
@@ -2903,6 +3088,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [adminTab, paymentsMonth]);
 
   useEffect(function() {
+    if (adminTab === 'performance') fetchKPIs();
+  }, [adminTab, kpiMonth]);
+
+  useEffect(function() {
     function handleClickOutside(e) {
       if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
         setMobileNavOpen(false);
@@ -3104,7 +3293,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
-    ['payments','Payments'],['monthly-history','Monthly History'],
+    ['payments','Payments'],['monthly-history','Monthly History'],['performance','Performance'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -3112,9 +3301,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'listings') fetchListings();
     if (t === 'deposits') fetchDeposits();
     if (t === 'sa-management' && allSAs.length === 0) fetchAllSAs();
-    if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); }
+    if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); fetchAllRatings(); }
     if (t === 'earnings') fetchStaffEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
+    if (t === 'performance') fetchKPIs();
   }
 
   return (
@@ -4103,6 +4293,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <p style={{ margin: 0, fontWeight: '700', fontSize: '0.84rem', color: ghaAdminMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{ghaAdminMsg}</p>
                   </div>
                 )}
+                {/* Sub-tabs */}
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                  {[['directory','Directory'],['ratings','Ratings']].map(function([t, label]) {
+                    var isActive = ghaMgmtSubTab === t;
+                    return (
+                      <button key={t} onClick={function(){ setGhaMgmtSubTab(t); if (t === 'ratings') fetchAllRatings(); }}
+                        style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {ghaMgmtSubTab === 'directory' && (<>
                 <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: isMobile ? undefined : '1fr 1.6fr', gap: '20px', alignItems: 'start' }}>
                   {/* Create GHA form */}
                   <div style={{ ...cardStyle, padding: '18px' }}>
@@ -4409,6 +4612,66 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     );
                   })()}
                 </div>
+                </>)}
+
+                {ghaMgmtSubTab === 'ratings' && (
+                  <div>
+                    {allRatingsLoading ? (
+                      <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Loading ratings…</p></div>
+                    ) : (
+                      <div>
+                        {/* GHA Leaderboard */}
+                        <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>GHA Leaderboard</h3>
+                        {(allRatings.leaderboard || []).length === 0 ? (
+                          <div style={{ ...cardStyle, padding: '28px', textAlign: 'center', marginBottom: '28px' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.82rem' }}>No ratings yet.</p></div>
+                        ) : (
+                          <div style={{ overflowX: isMobile ? 'auto' : undefined, marginBottom: '28px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 1fr 0.8fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.60rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', minWidth: isMobile ? '480px' : undefined }}>
+                              <span>GHA CODE</span><span>NAME</span><span>AVERAGE RATING</span><span>TOTAL RATINGS</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: isMobile ? '480px' : undefined }}>
+                              {[...(allRatings.leaderboard || [])].sort(function(a, b){ return Number(b.average_rating || 0) - Number(a.average_rating || 0); }).map(function(row, idx) {
+                                var avg = Number(row.average_rating || 0);
+                                return (
+                                  <div key={row.gha_code || idx} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 1fr 0.8fr', gap: '0 10px', padding: '9px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                    <span style={{ fontWeight: '800', fontSize: '0.74rem', color: '#22c55e', fontFamily: "'Inter', sans-serif" }}>{row.gha_code}</span>
+                                    <span style={{ fontWeight: '600', fontSize: '0.78rem', color: '#0a2240', fontFamily: "'Inter', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.gha_name || row.full_name}</span>
+                                    <span style={{ fontSize: '0.78rem', color: '#f59e0b', fontFamily: "'Inter', sans-serif" }}>
+                                      {'★'.repeat(Math.round(avg))}{'☆'.repeat(5 - Math.round(avg))} <span style={{ color: '#0a2240', fontWeight: '700' }}>{avg.toFixed(1)}</span>
+                                    </span>
+                                    <span style={{ fontWeight: '700', fontSize: '0.78rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>{row.total_ratings || 0}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Latest Reviews feed */}
+                        <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>Latest Reviews</h3>
+                        {(allRatings.recent_reviews || []).length === 0 ? (
+                          <div style={{ ...cardStyle, padding: '28px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.82rem' }}>No reviews yet.</p></div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {(allRatings.recent_reviews || []).slice(0, 20).map(function(r, idx) {
+                              return (
+                                <div key={r.id || idx} style={{ ...cardStyle, padding: '10px 14px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_name || r.gha_code}</span>
+                                    <span style={{ color: '#f59e0b', fontSize: '0.80rem' }}>{'★'.repeat(r.rating || 0)}{'☆'.repeat(5 - (r.rating || 0))}</span>
+                                  </div>
+                                  <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.74rem' }}>{r.customer_name || 'Anonymous'}</p>
+                                  {r.review_text && <p style={{ margin: '0 0 4px 0', color: '#374151', fontSize: '0.78rem' }}>{r.review_text}</p>}
+                                  {r.created_at && <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.66rem' }}>{new Date(r.created_at).toLocaleDateString()}</p>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -4456,9 +4719,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         {(earningsSubTab === 'gha' ? (staffEarnings.gha_earnings || []) : (staffEarnings.sa_earnings || [])).map(function(s) {
                           var key = s.id || s.gha_code || s.sa_code;
                           var prefixedKey = (earningsSubTab === 'gha' ? 'gha_' : 'sa_') + key;
-                          var isPaid = !!s.salary_paid;
+                          var isPaid = earningsSubTab === 'gha' ? !!s.salary_paid : !!s.is_paid;
+                          var paidAt = earningsSubTab === 'gha' ? s.salary_paid_at : s.paid_at;
                           var isMarkingNow = !!markingStaffPaid[prefixedKey];
-                          var commField = earningsSubTab === 'gha' ? 'commission_5pct' : 'commission_5pct';
+                          var commField = earningsSubTab === 'gha' ? 'commission_5pct' : 'commission_amount';
+                          var subsField = earningsSubTab === 'gha' ? 'total_subscriptions' : 'subscription_amount';
                           var codeVal = earningsSubTab === 'gha' ? s.gha_code : s.sa_code;
                           var apiEP = earningsSubTab === 'gha' ? '/api/admin/mark-gha-paid' : '/api/admin/mark-sa-paid';
                           var idF = earningsSubTab === 'gha' ? 'gha_id' : 'sa_id';
@@ -4469,24 +4734,25 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 {s.full_name && codeVal && <p style={{ margin: 0, color: '#64748b', fontSize: '0.68rem' }}>{s.full_name}</p>}
                               </div>
                               <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{s.agent_count || s.total_agents || 0}</span>
-                              <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(s.total_subscriptions || 0).toLocaleString()}</span>
+                              <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(s[subsField] || 0).toLocaleString()}</span>
                               <span style={{ fontWeight: '900', color: earningsSubTab === 'gha' ? '#166534' : '#1e40af', fontSize: '0.84rem' }}>₦{Number(s[commField] || 0).toLocaleString()}</span>
                               <div style={{ display: 'flex', alignItems: 'center' }}>
                                 {isPaid ? (
-                                  <span style={{ fontSize: '0.58rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontWeight: '800', whiteSpace: 'nowrap' }}>PAID{s.salary_paid_at ? ' · ' + new Date(s.salary_paid_at).toLocaleDateString() : ''}</span>
+                                  <span style={{ fontSize: '0.58rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontWeight: '800', whiteSpace: 'nowrap' }}>PAID{paidAt ? ' · ' + new Date(paidAt).toLocaleDateString() : ''}</span>
                                 ) : (
                                   <button onClick={async function() {
                                     setMarkingStaffPaid(function(prev){ return Object.assign({}, prev, { [prefixedKey]: true }); });
                                     try {
                                       var token = localStorage.getItem('gh_token');
                                       var body = { month_year: earningsMonth };
-                                      body[idF] = s.id || key;
+                                      body[idF] = earningsSubTab === 'gha' ? s.gha_id : s.sa_id;
                                       var res = await fetch(API_URL + apiEP, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
                                       var data = await res.json();
                                       if (!res.ok) throw new Error(data.error || 'Failed');
                                       setStaffEarnings(function(prev) {
                                         var lk = earningsSubTab === 'gha' ? 'gha_earnings' : 'sa_earnings';
-                                        return Object.assign({}, prev, { [lk]: (prev[lk] || []).map(function(x){ return (x.id || x.gha_code || x.sa_code) === key ? Object.assign({}, x, { salary_paid: true, salary_paid_at: new Date().toISOString() }) : x; }) });
+                                        var paidPatch = earningsSubTab === 'gha' ? { salary_paid: true, salary_paid_at: new Date().toISOString() } : { is_paid: true, paid_at: new Date().toISOString() };
+                                        return Object.assign({}, prev, { [lk]: (prev[lk] || []).map(function(x){ return (x.id || x.gha_code || x.sa_code) === key ? Object.assign({}, x, paidPatch) : x; }) });
                                       });
                                       setActionMsg('Marked paid: ' + (s.full_name || codeVal));
                                       setTimeout(function(){ setActionMsg(''); }, 4000);
@@ -4514,7 +4780,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '12px' }}>
                           <div>
                             <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>TOTAL SUBSCRIPTIONS</p>
-                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.total_subscriptions || 0); }, 0)).toLocaleString()}</p>
+                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.subscription_amount || 0); }, 0)).toLocaleString()}</p>
                           </div>
                           <div>
                             <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>GHA COMMISSIONS (5%)</p>
@@ -4522,7 +4788,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           </div>
                           <div>
                             <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: 'rgba(255,255,255,0.45)' }}>SA COMMISSIONS (5%)</p>
-                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#60a5fa' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.commission_5pct || 0); }, 0)).toLocaleString()}</p>
+                            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: '900', color: '#60a5fa' }}>₦{Number((staffEarnings.sa_earnings || []).reduce(function(s, a){ return s + (a.commission_amount || 0); }, 0)).toLocaleString()}</p>
                           </div>
                         </div>
                       </div>
@@ -4853,6 +5119,240 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               );
             })()}
 
+            {/* ── PERFORMANCE ── */}
+            {adminTab === 'performance' && (function() {
+              var staffList = kpiTab === 'SA' ? (kpiData.sa_kpis || []) : (kpiData.gha_kpis || []);
+
+              function overallColor(score) {
+                if (score >= 80) return { bg: '#f0fff4', color: '#166534', border: '#86efac' };
+                if (score >= 60) return { bg: '#fffbeb', color: '#92400e', border: '#fde68a' };
+                return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' };
+              }
+
+              function cellColor(kind, value) {
+                if (value === null || value === undefined || value === '') return '#94a3b8';
+                var v = Number(value);
+                if (kind === 'attendance') return v >= 98.5 ? '#166534' : v >= 95 ? '#92400e' : '#b91c1c';
+                if (kind === 'csat') return v >= 4.7 ? '#166534' : v >= 4.0 ? '#92400e' : '#b91c1c';
+                if (kind === 'inspection') return v >= 100 ? '#166534' : v >= 90 ? '#92400e' : '#b91c1c';
+                if (kind === 'onboarding') return v >= 100 ? '#166534' : v >= 75 ? '#92400e' : '#b91c1c';
+                if (kind === 'response') return v <= 15 ? '#166534' : v <= 30 ? '#92400e' : '#b91c1c';
+                return '#0a2240';
+              }
+
+              function kpiRows(s) {
+                return [
+                  { label: 'Attendance & Availability', target: '≥ 98.5%', weight: '15%', kind: 'attendance', raw: s.attendance_score, display: (s.attendance_score !== null && s.attendance_score !== undefined) ? s.attendance_score + '%' : '—' },
+                  { label: 'Customer Satisfaction (CSAT)', target: '≥ 4.7/5.0', weight: '25%', kind: 'csat', raw: s.csat_score, display: (s.csat_score !== null && s.csat_score !== undefined) ? s.csat_score + '/5.0' : '—' },
+                  { label: 'Inspection Log Fidelity', target: '100%', weight: '20%', kind: 'inspection', raw: s.inspection_fidelity_score, display: (s.inspection_fidelity_score !== null && s.inspection_fidelity_score !== undefined) ? s.inspection_fidelity_score + '%' : '—' },
+                  { label: 'Agent Onboarding Milestones', target: 'Target Achieved', weight: '25%', kind: 'onboarding', raw: s.onboarding_milestones_score, display: (s.onboarding_milestones_score !== null && s.onboarding_milestones_score !== undefined) ? s.onboarding_milestones_score + '%' : '—' },
+                  { label: 'Response Time', target: '≤ 15 mins', weight: '15%', kind: 'response', raw: s.response_time_score, display: (s.response_time_score !== null && s.response_time_score !== undefined) ? s.response_time_score + ' mins' : '—' },
+                ];
+              }
+
+              var thStyle = { padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc', textAlign: 'left' };
+              var tdStyle = { padding: '10px 14px', fontSize: '0.80rem', borderBottom: '1px solid #f1f5f9' };
+
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.1rem', margin: 0 }}>Staff Performance Matrix</h2>
+                    <input type="month" value={kpiMonth} onChange={function(e){ setKpiMonth(e.target.value); }}
+                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                  </div>
+
+                  {kpiMsg && (
+                    <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: kpiMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (kpiMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: kpiMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{kpiMsg}</p>
+                    </div>
+                  )}
+
+                  {/* Sub-tabs */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                    {['SA','GHA'].map(function(t) {
+                      var isActive = kpiTab === t;
+                      return (
+                        <button key={t} onClick={function(){ setKpiTab(t); }}
+                          style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* KPI targets reference card */}
+                  <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                    <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.82rem' }}>KPI Parameters &amp; Targets</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px 24px' }}>
+                      {[
+                        ['Attendance & Availability', '≥ 98.5%', '15%'],
+                        ['Customer Satisfaction (CSAT)', '≥ 4.7/5.0', '25%'],
+                        ['Inspection Log Fidelity', '100%', '20%'],
+                        ['Agent Onboarding Milestones', 'Target Met', '25%'],
+                        ['Response Time', '≤ 15 mins', '15%'],
+                      ].map(function(row) {
+                        return (
+                          <div key={row[0]} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#0a2240', gap: '8px' }}>
+                            <span style={{ fontWeight: '600' }}>{row[0]}</span>
+                            <span style={{ display: 'flex', gap: '10px', whiteSpace: 'nowrap' }}>
+                              <span style={{ fontWeight: '700' }}>{row[1]}</span>
+                              <span style={{ color: '#64748b' }}>Weight: {row[2]}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {kpiLoading ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>Loading…</p></div>
+                  ) : staffList.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8', fontSize: '0.84rem' }}>No {kpiTab} staff found.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {staffList.map(function(s) {
+                        var isEditing = editingKpi === s.id;
+                        var rows = kpiRows(s);
+                        var hasOverall = s.overall_score !== null && s.overall_score !== undefined;
+                        var oc = hasOverall ? overallColor(Number(s.overall_score)) : null;
+                        var typeLabel = (s.staff_type || kpiTab || '').toString().toUpperCase();
+                        var isSAType = typeLabel === 'SA';
+                        return (
+                          <div key={s.id} style={{ ...cardStyle, padding: '14px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ backgroundColor: '#0a2240', color: '#fff', fontWeight: '800', fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px' }}>{s.staff_code || '—'}</span>
+                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>{s.staff_name || s.full_name || 'Unnamed'}</span>
+                                <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: isSAType ? '#f0fdf4' : '#eff6ff', color: isSAType ? '#166534' : '#1e40af', border: '1px solid ' + (isSAType ? '#bbf7d0' : '#bfdbfe') }}>
+                                  {typeLabel}
+                                </span>
+                                {hasOverall ? (
+                                  <span style={{ fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: oc.bg, color: oc.color, border: '1px solid ' + oc.border }}>
+                                    {s.overall_score}%
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                                    Not Evaluated
+                                  </span>
+                                )}
+                              </div>
+                              <button onClick={function() {
+                                  setEditingKpi(s.id);
+                                  setKpiForm({
+                                    attendance_score: s.attendance_score,
+                                    csat_score: s.csat_score,
+                                    inspection_fidelity_score: s.inspection_fidelity_score,
+                                    onboarding_milestones_score: s.onboarding_milestones_score,
+                                    response_time_score: s.response_time_score,
+                                    management_notes: s.management_notes,
+                                  });
+                                }}
+                                style={{ padding: '5px 12px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                Edit Scores
+                              </button>
+                            </div>
+
+                            {/* Read-only performance matrix table */}
+                            <div style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? '480px' : undefined }}>
+                                <thead>
+                                  <tr>
+                                    <th style={thStyle}>Parameter</th>
+                                    <th style={thStyle}>Target</th>
+                                    <th style={thStyle}>Weight</th>
+                                    <th style={thStyle}>Score</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.map(function(row) {
+                                    return (
+                                      <tr key={row.label}>
+                                        <td style={{ ...tdStyle, color: '#0a2240', fontWeight: '600' }}>{row.label}</td>
+                                        <td style={{ ...tdStyle, color: '#64748b' }}>{row.target}</td>
+                                        <td style={{ ...tdStyle, color: '#64748b' }}>{row.weight}</td>
+                                        <td style={{ ...tdStyle, color: cellColor(row.kind, row.raw), fontWeight: '800' }}>{row.display}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {(s.management_notes || s.updated_at) && (
+                              <div style={{ marginTop: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
+                                {s.management_notes && (
+                                  <>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Coaching Notes</p>
+                                    <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151' }}>{s.management_notes}</p>
+                                  </>
+                                )}
+                                {s.updated_at && (
+                                  <p style={{ margin: s.management_notes ? '6px 0 0 0' : 0, fontSize: '0.68rem', color: '#94a3b8' }}>
+                                    Last updated: {new Date(s.updated_at).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {isEditing && (
+                              <div style={{ marginTop: '12px', padding: '14px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1.5px solid #e2e8f0' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Attendance &amp; Availability (%)</label>
+                                    <input type="number" step="0.1" value={kpiForm.attendance_score === null || kpiForm.attendance_score === undefined ? '' : kpiForm.attendance_score} placeholder="Target: 98.5"
+                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { attendance_score: v === '' ? null : Number(v) }); }); }}
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT (out of 5.0)</label>
+                                    <input type="number" step="0.1" value={kpiForm.csat_score === null || kpiForm.csat_score === undefined ? '' : kpiForm.csat_score} placeholder="Target: 4.7"
+                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { csat_score: v === '' ? null : Number(v) }); }); }}
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspection Log Fidelity (%)</label>
+                                    <input type="number" step="0.1" value={kpiForm.inspection_fidelity_score === null || kpiForm.inspection_fidelity_score === undefined ? '' : kpiForm.inspection_fidelity_score} placeholder="Target: 100"
+                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { inspection_fidelity_score: v === '' ? null : Number(v) }); }); }}
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Onboarding Milestones (%)</label>
+                                    <input type="number" step="0.1" value={kpiForm.onboarding_milestones_score === null || kpiForm.onboarding_milestones_score === undefined ? '' : kpiForm.onboarding_milestones_score} placeholder="Target: 100"
+                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { onboarding_milestones_score: v === '' ? null : Number(v) }); }); }}
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time (mins)</label>
+                                    <input type="number" step="1" value={kpiForm.response_time_score === null || kpiForm.response_time_score === undefined ? '' : kpiForm.response_time_score} placeholder="Target: 15"
+                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { response_time_score: v === '' ? null : Number(v) }); }); }}
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                  </div>
+                                </div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Coaching / Management Notes</label>
+                                <textarea rows={3} value={kpiForm.management_notes || ''} placeholder="Add coaching notes for this staff member…"
+                                  onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { management_notes: v }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', marginBottom: '12px', resize: 'vertical', fontFamily: "'Inter', sans-serif" }} />
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button onClick={function(){ handleSaveKPI(s); }}
+                                    style={{ padding: '7px 16px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    Save
+                                  </button>
+                                  <button onClick={function(){ setEditingKpi(null); setKpiForm({}); }}
+                                    style={{ padding: '7px 16px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       </div>
@@ -4883,6 +5383,8 @@ function GHADashboard({ staffUser, onLogout }) {
   const [inspLoading, setInspLoading]               = useState(false);
   const [overview, setOverview]                     = useState(null);
   const [overviewLoading, setOverviewLoading]       = useState(false);
+  const [ghaRatings, setGhaRatings]                 = useState(null);
+  const [ghaRatingsLoading, setGhaRatingsLoading]   = useState(false);
   const [actionMsg, setActionMsg]                   = useState('');
   const [confirmingId, setConfirmingId]             = useState(null);
   const [verifyingId, setVerifyingId]               = useState(null);
@@ -4921,6 +5423,15 @@ function GHADashboard({ staffUser, onLogout }) {
       setOverview(data);
     } catch(e) { console.error(e); }
     finally { setOverviewLoading(false); }
+  }
+  async function fetchGhaRatings() {
+    setGhaRatingsLoading(true);
+    try {
+      var res = await fetch(API_URL + '/api/gha-ratings/' + staffUser.id, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) setGhaRatings(data);
+    } catch(e) { console.error('GHA ratings fetch error:', e.message); }
+    finally { setGhaRatingsLoading(false); }
   }
   async function fetchAgents(silent) {
     if (!silent) setAgentsLoading(true);
@@ -5036,7 +5547,7 @@ function GHADashboard({ staffUser, onLogout }) {
   useEffect(function() { fetchGHAProfile(); }, []);
 
   useEffect(function() {
-    fetchOverview(); fetchAgents(); fetchGHANotifications();
+    fetchOverview(); fetchAgents(); fetchGHANotifications(); fetchGhaRatings();
     var notifInterval = setInterval(fetchGHANotifications, 20000);
     return function() { clearInterval(notifInterval); };
   }, []);
@@ -5311,6 +5822,51 @@ function GHADashboard({ staffUser, onLogout }) {
                     }
                   </div>
                 </div>
+
+                {/* Ratings section */}
+                {(function() {
+                  var avg = Number((ghaRatings && ghaRatings.average_rating) || 0);
+                  var total = Number((ghaRatings && ghaRatings.total_ratings) || 0);
+                  var reviews = (ghaRatings && ghaRatings.reviews) || [];
+                  return (
+                    <div style={{ ...cardSt, padding: '20px 24px', marginTop: '20px' }}>
+                      <p style={{ margin: '0 0 14px 0', fontSize: '0.9rem', fontWeight: '800', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Ratings</p>
+                      {ghaRatingsLoading ? (
+                        <div style={{ textAlign: 'center', padding: '20px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading ratings...</p></div>
+                      ) : total === 0 ? (
+                        <p style={{ color: '#94a3b8', fontSize: '0.84rem', textAlign: 'center', padding: '20px 0', fontFamily: "'Inter', sans-serif" }}>No ratings yet — ratings will appear here after customers rate their inspections.</p>
+                      ) : (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                            <p style={{ margin: 0, fontSize: '2rem', fontWeight: '800', color: '#f59e0b', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{avg.toFixed(1)}</p>
+                            <div>
+                              <div style={{ display: 'flex', gap: '2px' }}>
+                                {[1,2,3,4,5].map(function(star) {
+                                  return <span key={star} style={{ fontSize: '1.3rem', color: star <= Math.round(avg) ? '#f59e0b' : '#e2e8f0' }}>★</span>;
+                                })}
+                              </div>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '0.76rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{total} rating{total === 1 ? '' : 's'}</p>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {reviews.slice(0, 5).map(function(r, idx) {
+                              return (
+                                <div key={r.id || idx} style={{ border: '1px solid #f1f5f9', borderRadius: '10px', padding: '10px 14px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>{r.customer_name || 'Anonymous'}</span>
+                                    <span style={{ color: '#f59e0b', fontSize: '0.80rem' }}>{'★'.repeat(r.rating || 0)}{'☆'.repeat(5 - (r.rating || 0))}</span>
+                                  </div>
+                                  {r.review_text && <p style={{ margin: '0 0 4px 0', color: '#374151', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{r.review_text}</p>}
+                                  {r.created_at && <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.66rem', fontFamily: "'Inter', sans-serif" }}>{new Date(r.created_at).toLocaleDateString()}</p>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -6534,6 +7090,13 @@ function SADashboard({ staffUser, onLogout }) {
                             <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{gha.listing_count || 0} Listings</span>
                             <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{gha.active_subscriptions || 0} Active / {gha.expired_subscriptions || 0} Expired Subs</span>
                             <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0f9ff', color: '#0369a1', fontFamily: "'Inter', sans-serif" }}>{(inspectionStats.find(function(s){ return s.gha_id === gha.id; }) || {}).completed_count || 0} Inspections This Month</span>
+                            {(gha.total_ratings || 0) === 0 ? (
+                              <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>No ratings yet</span>
+                            ) : (
+                              <span style={{ fontSize: '0.72rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>
+                                <span style={{ color: '#f59e0b' }}>★</span> <span style={{ fontWeight: '700' }}>{Number(gha.average_rating || 0).toFixed(1)}</span> <span style={{ color: '#94a3b8' }}>({gha.total_ratings})</span>
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '6px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
@@ -7533,6 +8096,12 @@ function SADashboard({ staffUser, onLogout }) {
                                 if (!res.ok) throw new Error(data.error || 'Failed');
                                 setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'confirmed', confirmed_at: new Date().toISOString() }) : x; }); });
                                 setInspMsg('Inspection confirmed successfully.');
+                                if (insp.customer_email) {
+                                  // Show rating prompt to customer via WhatsApp/email after confirmation
+                                  // The rating link goes to the app with query params
+                                  var ratingUrl = 'https://trygethome.online/?rate=true&gha=' + insp.gha_id + '&insp=' + insp.id;
+                                  console.log('Rating link for customer:', ratingUrl);
+                                }
                               } catch(e) { setInspMsg('Error: ' + e.message); }
                               finally { setConfirmingId(null); }
                             }} disabled={isConfirming}
@@ -7964,6 +8533,9 @@ function AppContent() {
   const [newPasswordValue, setNewPasswordValue]             = useState('');
   const [resetPasswordLoading, setResetPasswordLoading]     = useState(false);
   const [resetPasswordError, setResetPasswordError]         = useState('');
+  const [showRatingModal, setShowRatingModal]               = useState(false);
+  const [ratingGhaId, setRatingGhaId]                       = useState(null);
+  const [ratingInspectionId, setRatingInspectionId]         = useState(null);
   useEffect(function() {
     var handler = function(e) {
       e.preventDefault();
@@ -7981,6 +8553,13 @@ function AppContent() {
       }
     } catch(e) {}
     try {
+      var ratingParams = new URLSearchParams(window.location.search);
+      if (ratingParams.get('rate') === 'true' && ratingParams.get('gha')) {
+        setRatingGhaId(ratingParams.get('gha'));
+        setRatingInspectionId(ratingParams.get('insp') || null);
+        setShowRatingModal(true);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
       const hash = window.location.hash;
       // Recovery links contain both access_token AND type=recovery — check this first
       // so the email-confirmation branch below never steals and clears a recovery hash.
@@ -8280,6 +8859,16 @@ function AppContent() {
       `}</style>
       {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} />}
       {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={function(){ setFooterModal(null); }} />}
+      {showRatingModal && ratingGhaId && (
+        <RateGHAModal
+          ghaId={ratingGhaId}
+          ghaName='Your GetHome Inspection Agent'
+          inspectionId={ratingInspectionId}
+          customerEmail={user?.email || null}
+          onClose={function() { setShowRatingModal(false); }}
+          onSubmitted={function() { console.log('Rating submitted successfully'); }}
+        />
+      )}
       {showResetPasswordModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
