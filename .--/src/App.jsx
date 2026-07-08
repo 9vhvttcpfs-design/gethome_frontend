@@ -2635,6 +2635,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [kpiForm, setKpiForm]                           = useState({});
   const [kpiMsg, setKpiMsg]                             = useState('');
   const [kpiTab, setKpiTab]                             = useState('SA');
+  const [calculatingScores, setCalculatingScores]       = useState(false);
+  const [calcMsg, setCalcMsg]                           = useState('');
+  const [showTargets, setShowTargets]                   = useState(false);
+  const [targetsForm, setTargetsForm]                   = useState({ inspections_target: 10, response_time_target_hours: 48, agent_verifications_target: 5, csat_target: 4.7 });
+  const [savingTargets, setSavingTargets]               = useState(false);
+  const [targetsMsg, setTargetsMsg]                     = useState('');
 
   const fetchKPIs = async function(silent) {
     if (!silent) setKpiLoading(true);
@@ -2678,6 +2684,49 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       setTimeout(function() { setKpiMsg(''); }, 4000);
     } catch(err) {
       setKpiMsg('Error: ' + err.message);
+    }
+  };
+
+  const handleAutoCalculate = async function() {
+    setCalculatingScores(true);
+    setCalcMsg('');
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/calculate-kpis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ month: kpiMonth }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Calculation failed');
+      setCalcMsg('Scores calculated automatically from inspection data, ratings, and agent activity. Attendance must still be entered manually.');
+      fetchKPIs();
+      setTimeout(function() { setCalcMsg(''); }, 6000);
+    } catch(err) {
+      setCalcMsg('Error: ' + err.message);
+    } finally {
+      setCalculatingScores(false);
+    }
+  };
+
+  const handleSaveTargets = async function() {
+    setSavingTargets(true);
+    setTargetsMsg('');
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/staff-targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify(targetsForm),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setTargetsMsg('Targets saved successfully.');
+      setTimeout(function() { setTargetsMsg(''); }, 4000);
+    } catch(err) {
+      setTargetsMsg('Error: ' + err.message);
+    } finally {
+      setSavingTargets(false);
     }
   };
 
@@ -5161,6 +5210,21 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
                   </div>
 
+                  {/* Auto-Calculate Scores */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <button onClick={handleAutoCalculate} disabled={calculatingScores}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 22px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.90rem', fontWeight: '800', cursor: calculatingScores ? 'not-allowed' : 'pointer', opacity: calculatingScores ? 0.7 : 1, boxShadow: '0 3px 12px rgba(10,34,64,0.20)' }}>
+                      <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>⚡</span>
+                      {calculatingScores ? 'Calculating…' : 'Auto-Calculate Scores'}
+                    </button>
+                  </div>
+
+                  {calcMsg && (
+                    <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: calcMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (calcMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: calcMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{calcMsg}</p>
+                    </div>
+                  )}
+
                   {kpiMsg && (
                     <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: kpiMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (kpiMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
                       <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: kpiMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{kpiMsg}</p>
@@ -5202,6 +5266,60 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Monthly Targets (collapsible) */}
+                  <div style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '12px', marginBottom: '16px', overflow: 'hidden' }}>
+                    <button onClick={function(){ setShowTargets(!showTargets); }}
+                      style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', backgroundColor: '#f8fafc', border: 'none', cursor: 'pointer' }}>
+                      <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>🎯 Monthly Targets (GHA &amp; SA)</span>
+                      <span style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: '700' }}>{showTargets ? '▲ Collapse' : '▼ Expand'}</span>
+                    </button>
+                    {showTargets && (
+                      <div style={{ padding: '16px' }}>
+                        <p style={{ margin: '0 0 14px 0', fontSize: '0.78rem', color: '#64748b' }}>
+                          These targets are used to auto-calculate performance scores. Update them at the start of each month before calculating.
+                        </p>
+
+                        {targetsMsg && (
+                          <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: targetsMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (targetsMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
+                            <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: targetsMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{targetsMsg}</p>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspections Target</label>
+                            <input type="number" step="1" value={targetsForm.inspections_target}
+                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { inspections_target: v === '' ? '' : Number(v) }); }); }}
+                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
+                            <input type="number" step="1" value={targetsForm.response_time_target_hours}
+                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
+                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Verifications Target</label>
+                            <input type="number" step="1" value={targetsForm.agent_verifications_target}
+                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { agent_verifications_target: v === '' ? '' : Number(v) }); }); }}
+                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
+                            <input type="number" step="0.1" value={targetsForm.csat_target}
+                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
+                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                          </div>
+                        </div>
+
+                        <button onClick={handleSaveTargets} disabled={savingTargets}
+                          style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
+                          {savingTargets ? 'Saving…' : 'Save Targets'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {kpiLoading ? (
@@ -5298,31 +5416,44 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               <div style={{ marginTop: '12px', padding: '14px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1.5px solid #e2e8f0' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                                   <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Attendance &amp; Availability (%)</label>
+                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Attendance % (manual entry required)</label>
                                     <input type="number" step="0.1" value={kpiForm.attendance_score === null || kpiForm.attendance_score === undefined ? '' : kpiForm.attendance_score} placeholder="Target: 98.5"
                                       onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { attendance_score: v === '' ? null : Number(v) }); }); }}
                                       style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                                    <p style={{ margin: '4px 0 0 0', fontSize: '0.66rem', color: '#94a3b8' }}>Enter the percentage of rostered hours this staff member was checked in and available this month.</p>
                                   </div>
                                   <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT (out of 5.0)</label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                                      CSAT (out of 5.0)
+                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
+                                    </label>
                                     <input type="number" step="0.1" value={kpiForm.csat_score === null || kpiForm.csat_score === undefined ? '' : kpiForm.csat_score} placeholder="Target: 4.7"
                                       onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { csat_score: v === '' ? null : Number(v) }); }); }}
                                       style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
                                   </div>
                                   <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspection Log Fidelity (%)</label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                                      Inspection Log Fidelity (%)
+                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
+                                    </label>
                                     <input type="number" step="0.1" value={kpiForm.inspection_fidelity_score === null || kpiForm.inspection_fidelity_score === undefined ? '' : kpiForm.inspection_fidelity_score} placeholder="Target: 100"
                                       onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { inspection_fidelity_score: v === '' ? null : Number(v) }); }); }}
                                       style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
                                   </div>
                                   <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Onboarding Milestones (%)</label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                                      Agent Onboarding Milestones (%)
+                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
+                                    </label>
                                     <input type="number" step="0.1" value={kpiForm.onboarding_milestones_score === null || kpiForm.onboarding_milestones_score === undefined ? '' : kpiForm.onboarding_milestones_score} placeholder="Target: 100"
                                       onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { onboarding_milestones_score: v === '' ? null : Number(v) }); }); }}
                                       style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
                                   </div>
                                   <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time (mins)</label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
+                                      Response Time (mins)
+                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
+                                    </label>
                                     <input type="number" step="1" value={kpiForm.response_time_score === null || kpiForm.response_time_score === undefined ? '' : kpiForm.response_time_score} placeholder="Target: 15"
                                       onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { response_time_score: v === '' ? null : Number(v) }); }); }}
                                       style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
