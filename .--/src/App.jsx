@@ -5248,13 +5248,18 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 return '#0a2240';
               }
 
+              function displayScore(value, suffix) {
+                if (value === null || value === undefined) return '—';
+                return value + (suffix || '');
+              }
+
               function kpiRows(s) {
                 return [
-                  { label: 'Attendance & Availability', target: '≥ 98.5%', weight: '15%', kind: 'attendance', raw: s.attendance_score, display: (s.attendance_score !== null && s.attendance_score !== undefined) ? s.attendance_score + '%' : '—' },
-                  { label: 'Customer Satisfaction (CSAT)', target: '≥ 4.7/5.0', weight: '25%', kind: 'csat', raw: s.csat_score, display: (s.csat_score !== null && s.csat_score !== undefined) ? s.csat_score + '/5.0' : '—' },
-                  { label: 'Inspection Log Fidelity', target: '100%', weight: '20%', kind: 'inspection', raw: s.inspection_fidelity_score, display: (s.inspection_fidelity_score !== null && s.inspection_fidelity_score !== undefined) ? s.inspection_fidelity_score + '%' : '—' },
-                  { label: 'Agent Onboarding Milestones', target: 'Target Achieved', weight: '25%', kind: 'onboarding', raw: s.onboarding_milestones_score, display: (s.onboarding_milestones_score !== null && s.onboarding_milestones_score !== undefined) ? s.onboarding_milestones_score + '%' : '—' },
-                  { label: 'Response Time', target: '≤ 15 mins', weight: '15%', kind: 'response', raw: s.response_time_score, display: (s.response_time_score !== null && s.response_time_score !== undefined) ? s.response_time_score + ' mins' : '—' },
+                  { label: 'Attendance & Availability', target: '≥ 98.5%', weight: '15%', kind: 'attendance', raw: s.attendance_score, display: displayScore(s.attendance_score, '%') },
+                  { label: 'Customer Satisfaction (CSAT)', target: '≥ 4.7/5.0', weight: '25%', kind: 'csat', raw: s.csat_score, display: displayScore(s.csat_score, '/5.0') },
+                  { label: 'Inspection Log Fidelity', target: '100%', weight: '20%', kind: 'inspection', raw: s.inspection_fidelity_score, display: displayScore(s.inspection_fidelity_score, '%') },
+                  { label: 'Agent Onboarding Milestones', target: 'Target Achieved', weight: '25%', kind: 'onboarding', raw: s.onboarding_milestones_score, display: displayScore(s.onboarding_milestones_score, '%') },
+                  { label: 'Response Time', target: '≤ 15 mins', weight: '15%', kind: 'response', raw: s.response_time_score, display: displayScore(s.response_time_score, ' mins') },
                 ];
               }
 
