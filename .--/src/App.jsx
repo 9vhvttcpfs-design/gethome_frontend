@@ -7529,9 +7529,32 @@ function SADashboard({ staffUser, onLogout }) {
                             <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Assign to GHA for Inspection</p>
                             <select
                               value={selectedGhaForAgent[a.id] || ''}
-                              onChange={function(e){ var v = e.target.value; setSelectedGhaForAgent(function(prev){ return Object.assign({}, prev, { [a.id]: v }); }); }}
+                              disabled={!!pendingAgentAction[a.id]}
+                              onChange={async function(e){
+                                var ghaId = e.target.value;
+                                setSelectedGhaForAgent(function(prev){ return Object.assign({}, prev, { [a.id]: ghaId }); });
+                                if (!ghaId) return;
+                                setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: 'assigning' }); });
+                                try {
+                                  var res = await fetch(API_URL + '/api/sa/send-to-gha', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ agent_id: a.id, gha_id: ghaId }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setAgentWorkflowMsg('Agent sent to GHA for inspection. You will be notified when GHA confirms.');
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
+                                  fetchPendingAgents();
+                                } catch(e) {
+                                  setAgentWorkflowMsg('Error: ' + e.message);
+                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
+                                } finally {
+                                  setPendingAgentAction(function(prev){ return Object.assign({}, prev, { [a.id]: null }); });
+                                }
+                              }}
                               style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #bfdbfe', fontSize: '0.82rem', color: '#0a2240', marginBottom: '8px', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff', boxSizing: 'border-box' }}>
-                              <option value="">Select a GHA…</option>
+                              <option value="">{pendingAgentAction[a.id] === 'assigning' ? 'Assigning…' : 'Select GHA to assign instantly →'}</option>
                               {saGhas.map(function(g) {
                                 return <option key={g.id} value={g.id}>{g.gha_code} - {g.full_name} ({g.agent_count} agents)</option>;
                               })}
@@ -7556,30 +7579,6 @@ function SADashboard({ staffUser, onLogout }) {
                                 </div>
                               );
                             })()}
-                            <button
-                              disabled={!selectedGhaForAgent[a.id] || !!pendingAgentAction[a.id]}
-                              onClick={async function() {
-                                var ghaId = selectedGhaForAgent[a.id];
-                                if (!ghaId) return;
-                                try {
-                                  var res = await fetch(API_URL + '/api/sa/send-to-gha', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                    body: JSON.stringify({ agent_id: a.id, gha_id: ghaId }),
-                                  });
-                                  var data = await res.json();
-                                  if (!res.ok) throw new Error(data.error || 'Failed');
-                                  setAgentWorkflowMsg('Agent sent to GHA for inspection. You will be notified when GHA confirms.');
-                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
-                                  fetchPendingAgents();
-                                } catch(e) {
-                                  setAgentWorkflowMsg('Error: ' + e.message);
-                                  setTimeout(function(){ setAgentWorkflowMsg(''); }, 6000);
-                                }
-                              }}
-                              style={{ width: '100%', padding: '10px', backgroundColor: (selectedGhaForAgent[a.id] && !pendingAgentAction[a.id]) ? '#16a34a' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: (selectedGhaForAgent[a.id] && !pendingAgentAction[a.id]) ? 'pointer' : 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
-                              Assign and Send to GHA for Inspection
-                            </button>
                           </div>
 
                           {/* Direct Approve / Reject */}
@@ -8079,9 +8078,17 @@ function SADashboard({ staffUser, onLogout }) {
                               {isAssigning ? 'Cancel' : 'Assign to GHA'}
                             </button>
                             <button onClick={async function() {
-                              try { await fetch(API_URL + '/api/sa/notifications/' + notif.id + '/dismiss', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch(e) {}
-                              setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
-                              if (assigningNotifId === notif.id) setAssigningNotifId(null);
+                              try {
+                                var res = await fetch(API_URL + '/api/sa/dismiss-notification', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                  body: JSON.stringify({ notification_id: notif.id }),
+                                });
+                                if (res.ok) {
+                                  setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+                                  if (assigningNotifId === notif.id) setAssigningNotifId(null);
+                                }
+                              } catch(e) { console.error('Dismiss failed:', e.message); }
                             }}
                               style={{ padding: '5px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1.5px solid #e2e8f0', borderRadius: '7px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
                               Dismiss
