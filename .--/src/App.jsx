@@ -872,14 +872,28 @@ function PricingModal({ property, onClose, user, onUserChange }) {
       console.log('Could not fetch SA details, using default number');
     }
 
-    var msg = encodeURIComponent(
-      'Hello ' + saName + ', I would like to book a FREE inspection for:\n\n' +
+    var disclaimerMessage =
+      'Hello ' + saName + ',\n\n' +
+      'I would like to book a FREE inspection for:\n\n' +
       'Property: ' + property.title + '\n' +
-      'Location: ' + property.location + '\n' +
-      'My Name: ' + (user ? user.email : 'Customer') + '\n\n' +
-      'Please confirm a suitable inspection date and time.'
-    );
-    window.open('https://wa.me/' + targetNumber + '?text=' + msg, '_blank');
+      'Location: ' + (property.location || property.address || '') + '\n' +
+      'My Name/Email: ' + (user ? user.email : 'Customer') + '\n\n' +
+      '---\n' +
+      '🛡️ IMPORTANT NOTICE FROM GETHOME:\n\n' +
+      'GetHome is a property discovery platform that connects potential buyers and tenants with property listings. We do not own, manage, or control any of the properties listed on our platform.\n\n' +
+      'For your protection:\n' +
+      '• GetHome sends verified GHA (GetHome Agents) to physically inspect and assess all listed properties before they go live.\n' +
+      '• We strive for full transparency in every listing.\n' +
+      '• However, GetHome is NOT liable for any individual agent who may attempt to defraud or mislead you outside of our verified process.\n\n' +
+      '⚠️ If any agent asks you for money outside the official GetHome payment process, pressures you, or behaves suspiciously:\n' +
+      '1. Do NOT make any payment directly to an agent\n' +
+      '2. Report immediately to your SA (' + saName + ') via this chat\n' +
+      '3. We will investigate and permanently ban confirmed bad actors from our platform\n\n' +
+      'GetHome is committed to making property search safe, transparent and trustworthy for everyone.\n' +
+      'Thank you for using GetHome 🏠';
+
+    var encodedMsg = encodeURIComponent(disclaimerMessage);
+    window.open('https://wa.me/' + targetNumber + '?text=' + encodedMsg, '_blank');
   };
   const triggerProxyInspection = async (u) => {
     const usr = u || user;
@@ -2532,6 +2546,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [saForm, setSaForm]                             = useState({ fullName: '', email: '', phone: '', location: '', password: '', confirmPassword: '' });
   const [saFormLoading, setSaFormLoading]               = useState(false);
   const [saMsg, setSaMsg]                               = useState('');
+  const [saLocations, setSaLocations]                   = useState([]);
+  const [expandedSaLocations, setExpandedSaLocations]   = useState(null);
+  const [newLocationCity, setNewLocationCity]           = useState('');
+  const [locationMsg, setLocationMsg]                   = useState('');
   const [expandedSAGhas, setExpandedSAGhas]             = useState(null);
   const [saSalaryMonths, setSaSalaryMonths]             = useState({});
   const [markingSASalary, setMarkingSASalary]           = useState({});
@@ -2560,6 +2578,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [confirmingInspId, setConfirmingInspId]         = useState(null);
   const [adminInspections, setAdminInspections]         = useState([]);
   const [adminInspLoading, setAdminInspLoading]         = useState(false);
+  const [inspectionsSubTab, setInspectionsSubTab]       = useState('list');
+  const [ghaPayments, setGhaPayments]                   = useState([]);
+  const [ghaPaymentsMonth, setGhaPaymentsMonth]         = useState(new Date().toISOString().slice(0, 7));
+  const [ghaPaymentsLoading, setGhaPaymentsLoading]     = useState(false);
+  const [expandedGhaPayment, setExpandedGhaPayment]     = useState(null);
   const [deactivateSaTarget, setDeactivateSaTarget]     = useState(null);
   const [deactivateGhaTarget, setDeactivateGhaTarget]   = useState(null);
   const [deactivatingSa, setDeactivatingSa]             = useState(false);
@@ -2971,6 +2994,15 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     finally { setSasLoading(false); }
   };
 
+  const fetchSALocations = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/sa-locations', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      setSaLocations(Array.isArray(data) ? data : []);
+    } catch(e) { console.error(e); }
+  };
+
   const fetchAllGHAsAdmin = async function() {
     setGhasAdminLoading(true);
     try {
@@ -2991,6 +3023,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       setAdminInspections(Array.isArray(data) ? data : []);
     } catch(e) { console.error(e); }
     finally { setAdminInspLoading(false); }
+  };
+
+  const fetchGHAPayments = async function() {
+    setGhaPaymentsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/gha-inspection-payments?month=' + ghaPaymentsMonth, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setGhaPayments(data);
+    } catch(e) { console.error('GHA payments fetch error:', e.message); }
+    finally { setGhaPaymentsLoading(false); }
   };
 
   const fetchStaffEarnings = async function(month) {
@@ -3122,6 +3167,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   useEffect(function() {
     if (adminTab === 'gha-management') fetchGhaInspPerfStats(ghaInspPerfMonth);
   }, [ghaInspPerfMonth]);
+
+  useEffect(function() {
+    if (adminTab === 'inspections' && inspectionsSubTab === 'gha-payments') fetchGHAPayments();
+  }, [adminTab, inspectionsSubTab, ghaPaymentsMonth]);
 
   useEffect(function() {
     if (adminTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
@@ -3388,7 +3437,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'transactions') fetchTransactions();
     if (t === 'listings') fetchListings();
     if (t === 'deposits') fetchDeposits();
-    if (t === 'sa-management' && allSAs.length === 0) fetchAllSAs();
+    if (t === 'sa-management') { if (allSAs.length === 0) fetchAllSAs(); fetchSALocations(); }
     if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); fetchAllRatings(); }
     if (t === 'earnings') fetchStaffEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
@@ -3911,6 +3960,21 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <button onClick={fetchAdminInspections} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
                   </div>
 
+                  {/* Sub-tabs */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                    {[['list','All Inspections'],['gha-payments','GHA Payments']].map(function([t, label]) {
+                      var isActive = inspectionsSubTab === t;
+                      return (
+                        <button key={t} onClick={function(){ setInspectionsSubTab(t); }}
+                          style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {inspectionsSubTab === 'list' && (
+                  <>
                   {/* Stats row */}
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
                     {[
@@ -4141,6 +4205,141 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       Showing {filteredInspections.length} of {adminInspections.length} inspection{adminInspections.length !== 1 ? 's' : ''}
                     </p>
                   )}
+                  </>
+                  )}
+
+                  {inspectionsSubTab === 'gha-payments' && (function() {
+                    var payments = ghaPayments && ghaPayments.gha_payments ? ghaPayments.gha_payments : [];
+                    var TIER_RATE = { tier1: 1200, tier2: 1500, tier3: 1700 };
+                    var TIER_LABEL = { tier1: '1-10 inspections', tier2: '11-20 inspections', tier3: '21-30 inspections' };
+                    function fmtNaira(n) { return '₦' + Number(n || 0).toLocaleString('en-NG'); }
+                    function fmtDate(d) {
+                      if (!d) return '—';
+                      var dt = new Date(d);
+                      if (isNaN(dt.getTime())) return '—';
+                      var dd = String(dt.getDate()).padStart(2, '0');
+                      var mm = String(dt.getMonth() + 1).padStart(2, '0');
+                      var yyyy = dt.getFullYear();
+                      return dd + '/' + mm + '/' + yyyy;
+                    }
+                    var grandTotalInspections = ghaPayments.total_inspections || payments.reduce(function(sum, g){ return sum + (g.total_inspections || 0); }, 0);
+                    var grandTotalPayment = ghaPayments.grand_total_payment || payments.reduce(function(sum, g){ return sum + (g.total_payment || 0); }, 0);
+                    return (
+                      <div>
+                        {/* Header row */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                          <h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>GHA Inspection Payments</h3>
+                          <input type="month" value={ghaPaymentsMonth}
+                            onChange={function(e){ setGhaPaymentsMonth(e.target.value); }}
+                            style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                        </div>
+
+                        {/* Summary stats row */}
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                          <div style={{ backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px', padding: '14px 20px', flex: '1 1 160px' }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.66rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total Inspections</p>
+                            <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#0a2240' }}>{grandTotalInspections}</p>
+                          </div>
+                          <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '14px 20px', flex: '1 1 160px' }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.66rem', fontWeight: '700', color: '#166534', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Grand Total Payment</p>
+                            <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#166534' }}>{fmtNaira(grandTotalPayment)}</p>
+                          </div>
+                        </div>
+
+                        {/* Payment tier legend */}
+                        <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px' }}>
+                          <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#1e40af', fontSize: '0.82rem' }}>Payment Tiers</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>1-10 inspections &nbsp;&nbsp;→ ₦1,200 each</p>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>11-20 inspections &nbsp;→ ₦1,500 each</p>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>21-30 inspections &nbsp;→ ₦1,700 each</p>
+                          </div>
+                        </div>
+
+                        {ghaPaymentsLoading ? (
+                          <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8' }}>Loading GHA payments…</p></div>
+                        ) : payments.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.86rem' }}>No GHA payment data for this month.</p></div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            {payments.map(function(gha) {
+                              var isEmpty = !gha.total_inspections || gha.total_inspections === 0;
+                              var isExpanded = expandedGhaPayment === gha.gha_id;
+                              var tierCounts = gha.tier_counts || {};
+                              var breakdownParts = ['tier1', 'tier2', 'tier3'].filter(function(tk){ return (tierCounts[tk] || 0) > 0; }).map(function(tk){
+                                var count = tierCounts[tk] || 0;
+                                var rate = TIER_RATE[tk];
+                                return '[' + count + ' × ₦' + rate.toLocaleString('en-NG') + ' = ₦' + (count * rate).toLocaleString('en-NG') + ']';
+                              });
+                              var inspectionsForGha = gha.inspections || [];
+                              return (
+                                <div key={gha.gha_id} style={{ backgroundColor: isEmpty ? '#f8fafc' : '#fff', border: '1.5px solid ' + (isEmpty ? '#e2e8f0' : '#e2e8f0'), borderRadius: '12px', padding: '14px 16px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                    <span style={{ padding: '3px 12px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontSize: '0.70rem', flexShrink: 0 }}>{gha.gha_code}</span>
+                                    <p style={{ margin: 0, fontWeight: '700', color: isEmpty ? '#94a3b8' : '#0a2240', fontSize: '0.86rem' }}>{gha.gha_name}</p>
+                                    <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{gha.sa_code}</span>
+                                    <span style={{ fontSize: '0.62rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', marginLeft: 'auto' }}>{gha.total_inspections || 0} inspections</span>
+                                    <span style={{ fontSize: '1.05rem', fontWeight: '900', color: isEmpty ? '#94a3b8' : '#166534' }}>{fmtNaira(gha.total_payment)}</span>
+                                  </div>
+
+                                  {isEmpty ? (
+                                    <p style={{ margin: '10px 0 0 0', color: '#94a3b8', fontSize: '0.80rem' }}>No completed inspections this month</p>
+                                  ) : (
+                                    <>
+                                      <p style={{ margin: '10px 0 0 0', fontSize: '0.80rem', color: '#374151', fontFamily: 'monospace' }}>
+                                        {breakdownParts.join(' + ')} = {fmtNaira(gha.total_payment)}
+                                      </p>
+                                      <button onClick={function(){ setExpandedGhaPayment(isExpanded ? null : gha.gha_id); }}
+                                        style={{ marginTop: '10px', padding: '5px 12px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer' }}>
+                                        {isExpanded ? 'Hide Inspections' : 'View Inspections'}
+                                      </button>
+                                      {isExpanded && (
+                                        <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                                          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '420px' }}>
+                                            <thead>
+                                              <tr>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Customer Name</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Property Address</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Completion Date</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {inspectionsForGha.map(function(insp, idx) {
+                                                return (
+                                                  <tr key={insp.id || idx}>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.customer_name || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.property_address || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{fmtDate(insp.gha_done_at || insp.completion_date)}</td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                            <tfoot>
+                                              <tr>
+                                                <td colSpan={2} style={{ padding: '8px 10px', fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>Total</td>
+                                                <td style={{ padding: '8px 10px', fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>{inspectionsForGha.length}</td>
+                                              </tr>
+                                            </tfoot>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Grand total footer */}
+                            <div style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '10px', padding: '14px 20px', textAlign: 'center', marginTop: '6px' }}>
+                              <p style={{ margin: 0, fontWeight: '800', fontSize: '0.88rem' }}>
+                                Platform Total: {grandTotalInspections} inspections | Total GHA Payments: {fmtNaira(grandTotalPayment)}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
@@ -4220,6 +4419,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <p style={{ margin: '0 0 1px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>{sa.full_name || sa.name}</p>
                                   <p style={{ margin: 0, color: '#64748b', fontSize: '0.70rem' }}>{sa.email}{sa.location ? ' · ' + sa.location : ''}</p>
+                                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.70rem' }}>
+                                    Coverage: {(saLocations.find(function(s){ return s.id === sa.id; })?.locations || []).length > 0
+                                      ? (saLocations.find(function(s){ return s.id === sa.id; }).locations.map(function(loc){ return loc.city; }).join(', '))
+                                      : 'Not assigned'}
+                                  </p>
                                 </div>
                                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
                                   <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{sa.agent_count || 0} Agents</span>
@@ -4238,6 +4442,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 <button onClick={function(){ setCloseSaTarget(closeSaTarget && (closeSaTarget.id || closeSaTarget.sa_code || closeSaTarget.staff_id) === saKey ? null : sa); setCloseSaTargetId(''); }}
                                   style={{ padding: '4px 10px', backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
                                   Close SA
+                                </button>
+                                <button onClick={function(){ setExpandedSaLocations(expandedSaLocations === sa.id ? null : sa.id); }}
+                                  style={{ padding: '4px 10px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
+                                  {expandedSaLocations === sa.id ? 'Hide Locations' : 'Manage Locations'}
                                 </button>
                               </div>
                               {/* Deactivate / Reactivate SA confirmation */}
@@ -4310,6 +4518,79 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <button onClick={function(){ setCloseSaTarget(null); setCloseSaTargetId(''); }}
                                       style={{ padding: '7px 12px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                                   </div>
+                                </div>
+                              )}
+                              {expandedSaLocations === sa.id && (
+                                <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '16px', marginTop: '12px', border: '1px solid #e2e8f0' }}>
+                                  <p style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', margin: '0 0 12px 0' }}>
+                                    Coverage Locations for {sa.sa_code} — {sa.full_name}
+                                  </p>
+
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                                    {(saLocations.find(function(s){ return s.id === sa.id; })?.locations || []).map(function(loc) {
+                                      return (
+                                        <div key={loc.city} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '20px', padding: '4px 10px' }}>
+                                          <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#1e40af' }}>{loc.city}</span>
+                                          <button onClick={async function() {
+                                            var token = localStorage.getItem('gh_token');
+                                            var res = await fetch(API_URL + '/api/admin/sa-remove-location', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                              body: JSON.stringify({ sa_id: sa.id, city: loc.city }),
+                                            });
+                                            if (res.ok) { fetchSALocations(); setLocationMsg(loc.city + ' removed'); }
+                                          }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '0.80rem', fontWeight: '700', padding: '0 2px' }}>×</button>
+                                        </div>
+                                      );
+                                    })}
+                                    {(saLocations.find(function(s){ return s.id === sa.id; })?.locations || []).length === 0 && (
+                                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0 }}>No locations assigned yet</p>
+                                    )}
+                                  </div>
+
+                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                    <select
+                                      value={newLocationCity}
+                                      onChange={function(e) { setNewLocationCity(e.target.value); }}
+                                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem' }}>
+                                      <option value=''>Select city to add...</option>
+                                      {['Abuja', 'Lagos', 'Kano', 'Kaduna', 'Port Harcourt', 'Ibadan', 'Benin City', 'Enugu', 'Aba', 'Onitsha', 'Warri', 'Calabar', 'Uyo', 'Jos', 'Ilorin', 'Maiduguri', 'Abeokuta', 'Akure', 'Owerri', 'Asaba'].map(function(city) {
+                                        return <option key={city} value={city}>{city}</option>;
+                                      })}
+                                    </select>
+                                    <button onClick={async function() {
+                                      if (!newLocationCity) return;
+                                      var token = localStorage.getItem('gh_token');
+                                      var res = await fetch(API_URL + '/api/admin/sa-add-location', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ sa_id: sa.id, city: newLocationCity }),
+                                      });
+                                      var data = await res.json();
+                                      if (res.ok) {
+                                        setNewLocationCity('');
+                                        fetchSALocations();
+                                        setLocationMsg(newLocationCity + ' added to ' + sa.sa_code);
+                                        setTimeout(function() { setLocationMsg(''); }, 3000);
+                                      } else {
+                                        setLocationMsg('Error: ' + data.error);
+                                      }
+                                    }} style={{ padding: '8px 16px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '0.82rem' }}>
+                                      Add City
+                                    </button>
+                                  </div>
+
+                                  {locationMsg && <p style={{ color: '#27ae60', fontSize: '0.78rem', marginTop: '8px', fontWeight: '600' }}>{locationMsg}</p>}
+
+                                  <p style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.82rem', margin: '16px 0 8px 0' }}>GHA City Assignments</p>
+                                  {(saLocations.find(function(s){ return s.id === sa.id; })?.gha_assignments || []).map(function(assign) {
+                                    return (
+                                      <div key={assign.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: '#fff', borderRadius: '8px', marginBottom: '4px', border: '1px solid #f1f5f9' }}>
+                                        <span style={{ fontSize: '0.78rem', color: '#0a2240', fontWeight: '600' }}>{assign.gha_agents?.gha_code} — {assign.gha_agents?.full_name}</span>
+                                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>covers {assign.city}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                               {isExpanded && (
@@ -6746,6 +7027,20 @@ function SADashboard({ staffUser, onLogout }) {
   const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
+  const [saCoveredCities, setSaCoveredCities]       = useState([]);
+
+  const fetchSALocations = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/sa/my-locations', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (res.ok) {
+        var data = await res.json();
+        setSaCoveredCities(data.cities || []);
+      }
+    } catch(e) { console.error('SA locations fetch error:', e.message); }
+  };
 
   async function fetchGhas() {
     setGhasLoading(true);
@@ -6908,7 +7203,7 @@ function SADashboard({ staffUser, onLogout }) {
   }
 
   useEffect(function() {
-    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile();
+    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations();
     var notifInterval = setInterval(fetchNotifications, 30000);
     return function() { clearInterval(notifInterval); };
   }, []);
@@ -7006,9 +7301,9 @@ function SADashboard({ staffUser, onLogout }) {
             <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{staffUser.full_name || staffUser.name || 'Service Agent'}</p>
             <p style={{ margin: 0, color: 'rgba(255,255,255,0.55)', fontSize: '0.75rem' }}>Service Agent Portal</p>
             <div style={{ backgroundColor: '#f1f5f9', borderRadius: '20px', padding: '3px 10px', fontSize: '0.76rem', color: '#64748b', display: 'inline-block', marginTop: '5px' }}>
-              📍 {staffUser.location || 'Location not set'}
+              📍 {saCoveredCities.length > 0 ? saCoveredCities.join(', ') : (staffUser.location || 'Location not set')}
             </div>
-            <p style={{ margin: '3px 0 0 0', color: 'rgba(255,255,255,0.45)', fontSize: '0.71rem' }}>Showing agents in your area: {staffUser.location || 'N/A'}</p>
+            <p style={{ margin: '3px 0 0 0', color: 'rgba(255,255,255,0.45)', fontSize: '0.71rem' }}>Showing agents in your area: {saCoveredCities.length > 0 ? saCoveredCities.join(', ') : (staffUser.location || 'N/A')}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
@@ -7167,6 +7462,20 @@ function SADashboard({ staffUser, onLogout }) {
                   </div>
                 );
               })}
+            </div>
+            <div style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid #0a2240', marginBottom: '20px' }}>
+              <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: '0 0 12px 0', fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Coverage Areas</p>
+              {saCoveredCities.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {saCoveredCities.map(function(city) {
+                    return (
+                      <span key={city} style={{ backgroundColor: '#0a2240', color: '#fff', fontSize: '0.74rem', fontWeight: '700', padding: '5px 13px', borderRadius: '20px', fontFamily: "'Inter', sans-serif" }}>{city}</span>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>No coverage areas assigned</p>
+              )}
             </div>
             {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
               <div style={{ ...cardSt, padding: '14px 18px', backgroundColor: '#fffbeb', borderLeft: '4px solid #f59e0b' }}>
@@ -8599,9 +8908,9 @@ function SADashboard({ staffUser, onLogout }) {
 
               {/* Other fields */}
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                {[['Full Name','full_name','text'],['Phone','phone','tel'],['Location / Area','location','text']].map(function([lbl, field, type]) {
+                {[['Full Name','full_name','text'],['Phone','phone','tel']].map(function([lbl, field, type]) {
                   return (
-                    <div key={field} style={{ gridColumn: field === 'location' && !isMobile ? '1 / -1' : undefined }}>
+                    <div key={field}>
                       <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{lbl.toUpperCase()}</label>
                       <input
                         type={type}
@@ -8615,6 +8924,18 @@ function SADashboard({ staffUser, onLogout }) {
                 })}
               </div>
 
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ fontSize: '0.76rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '4px' }}>Coverage Areas (managed by Admin)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1.5px solid #e2e8f0' }}>
+                  {saCoveredCities.length > 0
+                    ? saCoveredCities.map(function(city) {
+                        return <span key={city} style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '20px', padding: '3px 10px', fontSize: '0.74rem', fontWeight: '600' }}>{city}</span>;
+                      })
+                    : <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>No coverage areas assigned yet — contact admin</span>
+                  }
+                </div>
+              </div>
+
               <button onClick={async function() {
                 setProfileLoading(true);
                 setProfileMsg('');
@@ -8625,7 +8946,6 @@ function SADashboard({ staffUser, onLogout }) {
                     body: JSON.stringify({
                       full_name: profileForm.full_name,
                       phone: profileForm.phone,
-                      location: profileForm.location,
                       whatsapp_number: profileForm.whatsapp_number,
                     }),
                   });
@@ -8641,7 +8961,6 @@ function SADashboard({ staffUser, onLogout }) {
                     whatsapp_number: profileForm.whatsapp_number,
                     full_name: profileForm.full_name,
                     phone: profileForm.phone,
-                    location: profileForm.location,
                   });
                   localStorage.setItem('gh_staff_user', JSON.stringify(updatedUser));
                 } catch(e) { setProfileMsg('Error: ' + e.message); }
