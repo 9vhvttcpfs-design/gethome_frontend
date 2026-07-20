@@ -33,6 +33,39 @@ const AGENT_TIERS = {
   agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
 };
 const fmtNGN = (n) => { const num = Number(n); if (!num || isNaN(num)) return 'NGN 0'; return 'NGN ' + num.toLocaleString('en-NG'); };
+var NIGERIAN_BANKS = [
+  { code: '044', name: 'Access Bank' },
+  { code: '063', name: 'Access Bank (Diamond)' },
+  { code: '035A', name: 'ALAT by Wema' },
+  { code: '401', name: 'ASO Savings and Loans' },
+  { code: '023', name: 'Citibank Nigeria' },
+  { code: '050', name: 'EcoBank Nigeria' },
+  { code: '562', name: 'Ekondo Microfinance Bank' },
+  { code: '070', name: 'Fidelity Bank' },
+  { code: '011', name: 'First Bank of Nigeria' },
+  { code: '214', name: 'First City Monument Bank (FCMB)' },
+  { code: '058', name: 'Guaranty Trust Bank (GTB)' },
+  { code: '030', name: 'Heritage Bank' },
+  { code: '301', name: 'Jaiz Bank' },
+  { code: '082', name: 'Keystone Bank' },
+  { code: '526', name: 'Moniepoint MFB' },
+  { code: '014', name: 'MainStreet Bank' },
+  { code: '076', name: 'Polaris Bank' },
+  { code: '101', name: 'Providus Bank' },
+  { code: '221', name: 'Stanbic IBTC Bank' },
+  { code: '068', name: 'Standard Chartered Bank' },
+  { code: '232', name: 'Sterling Bank' },
+  { code: '100', name: 'Suntrust Bank' },
+  { code: '032', name: 'Union Bank of Nigeria' },
+  { code: '033', name: 'United Bank for Africa (UBA)' },
+  { code: '215', name: 'Unity Bank' },
+  { code: '035', name: 'Wema Bank' },
+  { code: '057', name: 'Zenith Bank' },
+  { code: '120001', name: 'OPay' },
+  { code: '120002', name: 'PalmPay' },
+  { code: '999991', name: 'Kuda Bank' },
+  { code: '999992', name: 'Carbon' },
+];
 function useWindowWidth() {
   var [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   useEffect(function() {
@@ -2582,6 +2615,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaPayments, setGhaPayments]                   = useState([]);
   const [ghaPaymentsMonth, setGhaPaymentsMonth]         = useState(new Date().toISOString().slice(0, 7));
   const [ghaPaymentsLoading, setGhaPaymentsLoading]     = useState(false);
+  const [staffPayments, setStaffPayments]               = useState({ gha_payments: [], sa_payments: [], totals: {} });
+  const [staffPaymentsMonth, setStaffPaymentsMonth]     = useState(new Date().toISOString().slice(0, 7));
+  const [staffPaymentsLoading, setStaffPaymentsLoading] = useState(false);
+  const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
+  const [payingStaff, setPayingStaff]                   = useState(null);
+  const [staffPayMsg, setStaffPayMsg]                   = useState('');
   const [expandedGhaPayment, setExpandedGhaPayment]     = useState(null);
   const [deactivateSaTarget, setDeactivateSaTarget]     = useState(null);
   const [deactivateGhaTarget, setDeactivateGhaTarget]   = useState(null);
@@ -3038,6 +3077,65 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     finally { setGhaPaymentsLoading(false); }
   };
 
+  const fetchStaffPayments = async function() {
+    setStaffPaymentsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/staff-payments?month=' + staffPaymentsMonth, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setStaffPayments(data);
+    } catch(e) { console.error('Staff payments error:', e.message); }
+    finally { setStaffPaymentsLoading(false); }
+  };
+
+  const handlePayViaFlutterwave = async function(payment) {
+    if (!payment.account_number) {
+      alert((payment.gha_name || payment.sa_name) + ' has not added their bank account details yet. Ask them to update their profile.');
+      return;
+    }
+    setPayingStaff(payment.staff_id);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/pay-staff-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({
+          staff_id: payment.staff_id,
+          staff_type: payment.staff_type,
+          month_year: staffPaymentsMonth,
+        }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Transfer failed');
+      setStaffPayMsg('Transfer initiated to ' + (payment.bank_name || 'bank') + ' for ' + (payment.gha_code || payment.sa_code) + '. Funds should arrive within minutes.');
+      fetchStaffPayments();
+    } catch(err) {
+      setStaffPayMsg('Error: ' + err.message);
+    } finally {
+      setPayingStaff(null);
+    }
+  };
+
+  const handleMarkStaffPaid = async function(payment) {
+    if (!window.confirm('Mark ' + (payment.gha_code || payment.sa_code) + ' as paid manually? This confirms payment was made outside the app.')) return;
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/mark-staff-paid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ staff_id: payment.staff_id, month_year: staffPaymentsMonth }),
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setStaffPayMsg((payment.gha_code || payment.sa_code) + ' marked as paid successfully');
+      fetchStaffPayments();
+    } catch(err) {
+      setStaffPayMsg('Error: ' + err.message);
+    }
+  };
+
   const fetchStaffEarnings = async function(month) {
     setEarningsLoading(true);
     try {
@@ -3171,6 +3269,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   useEffect(function() {
     if (adminTab === 'inspections' && inspectionsSubTab === 'gha-payments') fetchGHAPayments();
   }, [adminTab, inspectionsSubTab, ghaPaymentsMonth]);
+
+  useEffect(function() {
+    if (adminTab === 'staff-payments') fetchStaffPayments();
+  }, [adminTab, staffPaymentsMonth]);
+
+  useEffect(function() {
+    if (!staffPayMsg) return;
+    var t = setTimeout(function() { setStaffPayMsg(''); }, 4000);
+    return function() { clearTimeout(t); };
+  }, [staffPayMsg]);
 
   useEffect(function() {
     if (adminTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
@@ -3430,7 +3538,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
-    ['payments','Payments'],['monthly-history','Monthly History'],['performance','Performance'],
+    ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -3441,6 +3549,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); fetchAllRatings(); }
     if (t === 'earnings') fetchStaffEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
+    if (t === 'staff-payments') fetchStaffPayments();
     if (t === 'performance') fetchKPIs();
   }
 
@@ -5373,6 +5482,160 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               );
             })()}
 
+            {/* ── STAFF PAYMENTS ── */}
+            {adminTab === 'staff-payments' && (function() {
+              function formatNaira(n) { return '₦' + Number(n || 0).toLocaleString('en-NG'); }
+              function formatDate(d) {
+                if (!d) return '—';
+                var dt = new Date(d);
+                if (isNaN(dt.getTime())) return '—';
+                return dt.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+              }
+              var totals = (staffPayments && staffPayments.totals) || {};
+              var ghaPaymentsList = Array.isArray(staffPayments.gha_payments) ? staffPayments.gha_payments : [];
+              var saPaymentsList = Array.isArray(staffPayments.sa_payments) ? staffPayments.sa_payments : [];
+              var activeList = staffPaymentTab === 'GHA' ? ghaPaymentsList : saPaymentsList;
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Staff Payments</h2>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="month" value={staffPaymentsMonth} onChange={function(e){ setStaffPaymentsMonth(e.target.value); }} style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                      <button onClick={fetchStaffPayments} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                    </div>
+                  </div>
+
+                  {staffPayMsg && (
+                    <div style={{ backgroundColor: staffPayMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (staffPayMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '10px 14px', marginBottom: '16px' }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: staffPayMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{staffPayMsg}</p>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    <div style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid #22c55e', padding: '14px 16px', flex: '1 1 180px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#0a2240' }}>{fmtNGN(totals.gha_total || 0)}</p>
+                      <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total GHA Payments</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid #0a2240', padding: '14px 16px', flex: '1 1 180px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#0a2240' }}>{fmtNGN(totals.sa_total || 0)}</p>
+                      <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total SA Payments</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid #22c55e', padding: '14px 16px', flex: '1 1 180px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#27ae60' }}>{fmtNGN(totals.grand_total || 0)}</p>
+                      <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Grand Total</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid #f59e0b', padding: '14px 16px', flex: '1 1 180px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>⚠️ {totals.unpaid_count || 0}</p>
+                      <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Unpaid Staff</p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                    {[['GHA','GHA'],['SA','SA']].map(function([t, label]) {
+                      var active = staffPaymentTab === t;
+                      return (
+                        <button key={t} onClick={function(){ setStaffPaymentTab(t); }} style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (active ? '#0a2240' : '#e2e8f0'), backgroundColor: active ? '#0a2240' : '#fff', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {staffPaymentTab === 'GHA' && (
+                    <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
+                      <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#1e40af', fontSize: '0.82rem' }}>Payment Tier Legend</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,200/inspection (1-10)</p>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,500/inspection (11-20)</p>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,700/inspection (21+)</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {staffPaymentsLoading ? (
+                    <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8' }}>Loading staff payments…</p></div>
+                  ) : activeList.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8', margin: 0 }}>No staff payment data for this month.</p></div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {activeList.map(function(payment) {
+                        var paymentStatus = String(payment.payment_status || payment.status || '').toLowerCase();
+                        var isPaying = payingStaff === payment.staff_id;
+                        var isUnpaid = paymentStatus === 'unpaid';
+                        var isProcessing = paymentStatus === 'processing';
+                        var isPaid = paymentStatus === 'paid';
+                        return (
+                          <div key={payment.staff_id || payment.gha_code || payment.sa_code} style={{ ...cardStyle, padding: '16px 18px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '999px', padding: '4px 10px', fontSize: '0.72rem', fontWeight: '800' }}>{staffPaymentTab === 'GHA' ? (payment.gha_code || payment.staff_code || '—') : (payment.sa_code || payment.staff_code || '—')}</span>
+                                <div>
+                                  <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.92rem' }}>{staffPaymentTab === 'GHA' ? (payment.gha_name || payment.staff_name || '—') : (payment.sa_name || payment.staff_name || '—')}</p>
+                                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{staffPaymentTab === 'GHA' ? (payment.sa_code || '—') : (payment.gha_code || '—')}</p>
+                                </div>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ margin: 0, fontWeight: '800', fontSize: '1.1rem', color: '#27ae60' }}>{formatNaira(payment.total_payment || 0)}</p>
+                                <span style={{ display: 'inline-block', marginTop: '6px', padding: '3px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '800', backgroundColor: isPaid ? '#f0fff4' : isProcessing ? '#eff6ff' : '#fffbeb', color: isPaid ? '#166534' : isProcessing ? '#1e40af' : '#b45309', border: '1px solid ' + (isPaid ? '#86efac' : isProcessing ? '#bfdbfe' : '#fde68a') }}>
+                                  {isPaid ? 'PAID' : isProcessing ? 'PROCESSING' : 'UNPAID'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {staffPaymentTab === 'GHA' ? (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                                <span style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{payment.inspection_count || 0} inspections</span>
+                                <span style={{ backgroundColor: '#f8fafc', color: '#0a2240', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.inspection_payment || 0)}</span>
+                                <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.commission_amount || 0)} commission</span>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
+                                <span style={{ backgroundColor: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{payment.inspections_overseen || 0} inspections overseen</span>
+                                <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.commission_amount || 0)} commission</span>
+                              </div>
+                            )}
+
+                            {payment.account_number ? (
+                              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '12px' }}>
+                                🏦 {payment.bank_name} •••• {payment.account_number?.slice(-4)} — {payment.account_name}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '0.74rem', color: '#ef4444', fontWeight: '600', marginTop: '12px' }}>
+                                ⚠ No bank account added — staff must update their profile before payment can be processed
+                              </div>
+                            )}
+
+                            <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              {isUnpaid && (payment.total_payment || 0) > 0 ? (
+                                <>
+                                  <button onClick={function(){ handlePayViaFlutterwave(payment); }} disabled={isPaying}
+                                    style={{ padding: '7px 12px', backgroundColor: isPaying ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: isPaying ? 'not-allowed' : 'pointer' }}>
+                                    {isPaying ? 'Processing…' : 'Pay via Flutterwave'}
+                                  </button>
+                                  <button onClick={function(){ handleMarkStaffPaid(payment); }} style={{ padding: '7px 12px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>
+                                    Mark as Paid
+                                  </button>
+                                </>
+                              ) : isProcessing ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '7px 12px', backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem' }}>
+                                  <div style={{ width: '12px', height: '12px', border: '2px solid #bfdbfe', borderTopColor: '#1e40af', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                                  Awaiting Payment Confirmation
+                                </div>
+                              ) : isPaid ? (
+                                <span style={{ padding: '7px 12px', backgroundColor: '#f0fff4', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', border: '1.5px solid #86efac' }}>
+                                  PAID · {formatDate(payment.paid_at)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* ── MONTHLY HISTORY ── */}
             {adminTab === 'monthly-history' && (function() {
               var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
@@ -5848,6 +6111,14 @@ function GHADashboard({ staffUser, onLogout }) {
   function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
 
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
+  const [bankForm, setBankForm]                     = useState({
+    bank_name: staffUser?.bank_name || '',
+    account_number: staffUser?.account_number || '',
+    account_name: staffUser?.account_name || '',
+    bank_code: staffUser?.bank_code || '',
+  });
+  const [bankSaving, setBankSaving]                 = useState(false);
+  const [bankMsg, setBankMsg]                       = useState('');
   const [ghaTab, setGhaTab]                         = useState('overview');
   const [mobileNavOpen, setMobileNavOpen]           = useState(false);
   const mobileNavRef                                = useRef(null);
@@ -6343,6 +6614,96 @@ function GHADashboard({ staffUser, onLogout }) {
                     </div>
                   );
                 })()}
+
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', marginTop: '16px', boxShadow: '0 2px 8px rgba(10,34,64,0.06)', maxWidth: '560px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '1.1rem' }}>🏦</span>
+                    <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
+                    {staffUser?.account_number
+                      ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>✓ Account Added</span>
+                      : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>⚠ No Account Added</span>
+                    }
+                  </div>
+
+                  <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 16px 0' }}>
+                    Add your bank account so GetHome can transfer your commission and inspection payments directly to you each month.
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Bank Name *</label>
+                      <select value={bankForm.bank_code} onChange={function(e) {
+                        var selected = NIGERIAN_BANKS.find(function(b) { return b.code === e.target.value; });
+                        setBankForm(function(prev) { return Object.assign({}, prev, { bank_code: e.target.value, bank_name: selected ? selected.name : '' }); });
+                      }} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                        <option value=''>Select bank...</option>
+                        {NIGERIAN_BANKS.map(function(bank) {
+                          return <option key={bank.code} value={bank.code}>{bank.name}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Number * (10 digits)</label>
+                      <input
+                        type='text'
+                        maxLength={10}
+                        placeholder='0123456789'
+                        value={bankForm.account_number}
+                        onChange={function(e) { setBankForm(function(prev) { return Object.assign({}, prev, { account_number: e.target.value.replace(/\D/g, '') }); }); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div style={{ gridColumn: isMobile ? '1' : '1 / -1' }}>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Name * (as it appears on your bank)</label>
+                      <input
+                        type='text'
+                        placeholder='IBRAHIM MEDINAT'
+                        value={bankForm.account_name}
+                        onChange={function(e) { setBankForm(function(prev) { return Object.assign({}, prev, { account_name: e.target.value.toUpperCase() }); }); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {bankMsg && (
+                    <p style={{ marginTop: '10px', fontSize: '0.78rem', fontWeight: '600', color: bankMsg.startsWith('Error') ? '#ef4444' : '#166534' }}>{bankMsg}</p>
+                  )}
+
+                  <button
+                    onClick={async function() {
+                      if (!bankForm.bank_name || !bankForm.account_number || !bankForm.account_name) {
+                        setBankMsg('Error: Please fill in all bank details');
+                        return;
+                      }
+                      if (bankForm.account_number.length !== 10) {
+                        setBankMsg('Error: Account number must be exactly 10 digits');
+                        return;
+                      }
+                      setBankSaving(true);
+                      setBankMsg('');
+                      try {
+                        var res = await fetch(API_URL + '/api/gha/update-bank-details', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                          body: JSON.stringify(bankForm),
+                        });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed to save');
+                        setBankMsg('Bank details saved successfully! Payments will be sent to this account.');
+                        setTimeout(function() { setBankMsg(''); }, 5000);
+                      } catch(err) {
+                        setBankMsg('Error: ' + err.message);
+                      } finally {
+                        setBankSaving(false);
+                      }
+                    }}
+                    disabled={bankSaving}
+                    style={{ marginTop: '14px', width: '100%', padding: '12px', backgroundColor: bankSaving ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: bankSaving ? 'not-allowed' : 'pointer' }}>
+                    {bankSaving ? 'Saving...' : 'Save Bank Details'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -7001,6 +7362,14 @@ function SADashboard({ staffUser, onLogout }) {
   });
   const [profileMsg, setProfileMsg]                 = useState('');
   const [profileLoading, setProfileLoading]         = useState(false);
+  const [bankForm, setBankForm]                     = useState({
+    bank_name: staffUser?.bank_name || '',
+    account_number: staffUser?.account_number || '',
+    account_name: staffUser?.account_name || '',
+    bank_code: staffUser?.bank_code || '',
+  });
+  const [bankSaving, setBankSaving]                 = useState(false);
+  const [bankMsg, setBankMsg]                       = useState('');
   const [showWaBanner, setShowWaBanner]             = useState(!staffUser.whatsapp_number || !staffUser.whatsapp_number.trim());
   const [pendingAgents, setPendingAgents]           = useState([]);
   const [ghaInspectionAgents, setGhaInspectionAgents] = useState([]);
@@ -8968,6 +9337,96 @@ function SADashboard({ staffUser, onLogout }) {
               }} disabled={profileLoading}
                 style={{ width: '100%', padding: '12px', backgroundColor: profileLoading ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: profileLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
                 {profileLoading ? 'Saving…' : 'Save Profile'}
+              </button>
+            </div>
+
+            <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', border: '1px solid #e2e8f0', marginTop: '16px', boxShadow: '0 2px 8px rgba(10,34,64,0.06)', maxWidth: '560px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                <span style={{ fontSize: '1.1rem' }}>🏦</span>
+                <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
+                {staffUser?.account_number
+                  ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>✓ Account Added</span>
+                  : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>⚠ No Account Added</span>
+                }
+              </div>
+
+              <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 16px 0' }}>
+                Add your bank account so GetHome can transfer your commission and inspection payments directly to you each month.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Bank Name *</label>
+                  <select value={bankForm.bank_code} onChange={function(e) {
+                    var selected = NIGERIAN_BANKS.find(function(b) { return b.code === e.target.value; });
+                    setBankForm(function(prev) { return Object.assign({}, prev, { bank_code: e.target.value, bank_name: selected ? selected.name : '' }); });
+                  }} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                    <option value=''>Select bank...</option>
+                    {NIGERIAN_BANKS.map(function(bank) {
+                      return <option key={bank.code} value={bank.code}>{bank.name}</option>;
+                    })}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Number * (10 digits)</label>
+                  <input
+                    type='text'
+                    maxLength={10}
+                    placeholder='0123456789'
+                    value={bankForm.account_number}
+                    onChange={function(e) { setBankForm(function(prev) { return Object.assign({}, prev, { account_number: e.target.value.replace(/\D/g, '') }); }); }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: isMobile ? '1' : '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Name * (as it appears on your bank)</label>
+                  <input
+                    type='text'
+                    placeholder='IBRAHIM MEDINAT'
+                    value={bankForm.account_name}
+                    onChange={function(e) { setBankForm(function(prev) { return Object.assign({}, prev, { account_name: e.target.value.toUpperCase() }); }); }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              {bankMsg && (
+                <p style={{ marginTop: '10px', fontSize: '0.78rem', fontWeight: '600', color: bankMsg.startsWith('Error') ? '#ef4444' : '#166534' }}>{bankMsg}</p>
+              )}
+
+              <button
+                onClick={async function() {
+                  if (!bankForm.bank_name || !bankForm.account_number || !bankForm.account_name) {
+                    setBankMsg('Error: Please fill in all bank details');
+                    return;
+                  }
+                  if (bankForm.account_number.length !== 10) {
+                    setBankMsg('Error: Account number must be exactly 10 digits');
+                    return;
+                  }
+                  setBankSaving(true);
+                  setBankMsg('');
+                  try {
+                    var res = await fetch(API_URL + '/api/sa/update-bank-details', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                      body: JSON.stringify(bankForm),
+                    });
+                    var data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Failed to save');
+                    setBankMsg('Bank details saved successfully! Payments will be sent to this account.');
+                    setTimeout(function() { setBankMsg(''); }, 5000);
+                  } catch(err) {
+                    setBankMsg('Error: ' + err.message);
+                  } finally {
+                    setBankSaving(false);
+                  }
+                }}
+                disabled={bankSaving}
+                style={{ marginTop: '14px', width: '100%', padding: '12px', backgroundColor: bankSaving ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: bankSaving ? 'not-allowed' : 'pointer' }}>
+                {bankSaving ? 'Saving...' : 'Save Bank Details'}
               </button>
             </div>
           </div>
