@@ -33,21 +33,20 @@ const AGENT_TIERS = {
   agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
 };
 var PROPERTY_TYPES = [
-  { value: '', label: 'All Types', icon: '🏠' },
+  { value: '', label: 'All Property Types', icon: '🏠' },
   { value: 'apartment', label: 'Apartment', icon: '🏢' },
   { value: 'house', label: 'House', icon: '🏡' },
-  { value: 'shop', label: 'Shop', icon: '🏪' },
-  { value: 'restaurant', label: 'Restaurant', icon: '🍽️' },
-  { value: 'office', label: 'Office Space', icon: '🏛️' },
-  { value: 'warehouse', label: 'Warehouse', icon: '🏭' },
-  { value: 'land', label: 'Land', icon: '🌍' },
-  { value: 'hotel', label: 'Hotel/Lodge', icon: '🏨' },
-  { value: 'shortlet', label: 'Shortlet', icon: '🛎️' },
   { value: 'duplex', label: 'Duplex', icon: '🏘️' },
   { value: 'bungalow', label: 'Bungalow', icon: '🏠' },
   { value: 'studio', label: 'Studio', icon: '🛋️' },
   { value: 'self_contain', label: 'Self Contain', icon: '🚪' },
-  { value: 'commercial', label: 'Commercial', icon: '🏬' },
+  { value: 'shop', label: 'Shop', icon: '🏪' },
+  { value: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+  { value: 'office', label: 'Office Space', icon: '🏛️' },
+  { value: 'warehouse', label: 'Warehouse', icon: '🏭' },
+  { value: 'land', label: 'Land / Plot', icon: '🌍' },
+  { value: 'hotel', label: 'Hotel / Lodge', icon: '🏨' },
+  { value: 'commercial', label: 'Commercial Space', icon: '🏬' },
 ];
 const fmtNGN = (n) => { const num = Number(n); if (!num || isNaN(num)) return 'NGN 0'; return 'NGN ' + num.toLocaleString('en-NG'); };
 var NIGERIAN_BANKS = [
@@ -10007,12 +10006,10 @@ function AppContent() {
   const getResultsSummary = function(list) {
     var count = searchFiltered(list).length;
     var typeObj = PROPERTY_TYPES.find(function(pt) { return pt.value === selectedPropertyType; });
-    var typeLabel = typeObj && typeObj.value ? typeObj.label.toLowerCase() : null;
-    var cityPart = filterCity !== 'All' ? ' in ' + filterCity : '';
-    if (typeLabel) {
-      return 'Showing ' + count + ' ' + typeLabel + (count !== 1 ? 's' : '') + cityPart;
+    if (typeObj && typeObj.value) {
+      return 'Showing ' + count + ' ' + typeObj.label + ' listings';
     }
-    return count + ' listing' + (count !== 1 ? 's' : '') + ' available' + cityPart;
+    return count + ' listing' + (count !== 1 ? 's' : '') + ' available';
   };
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
@@ -10247,29 +10244,41 @@ function AppContent() {
                     </select>
                     {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>Clear</button>}
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                    {PROPERTY_TYPES.map(function(type) {
-                      return (
-                        <button key={type.value}
-                          onClick={function(){ updatePropertyType(type.value); }}
-                          style={{
-                            flexShrink: 0,
-                            padding: '8px 14px',
-                            borderRadius: '20px',
-                            border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
-                            backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
-                            color: selectedPropertyType === type.value ? '#fff' : '#374151',
-                            fontWeight: selectedPropertyType === type.value ? '700' : '500',
-                            fontSize: '0.80rem',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                            transition: 'all 0.15s',
-                            fontFamily: "'Inter', sans-serif",
-                          }}>
-                          {type.icon} {type.label}
-                        </button>
-                      );
-                    })}
+                  <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
+                    <select
+                      value={selectedPropertyType}
+                      onChange={function(e) {
+                        var val = e.target.value;
+                        if (val === 'shortlet') {
+                          navigateTab('shortlet');
+                          updatePropertyType('');
+                          return;
+                        }
+                        updatePropertyType(val);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 36px 10px 14px',
+                        borderRadius: '10px',
+                        border: '1.5px solid ' + (selectedPropertyType ? '#0a2240' : '#e2e8f0'),
+                        backgroundColor: selectedPropertyType ? '#f0f9ff' : '#fff',
+                        color: selectedPropertyType ? '#0a2240' : '#64748b',
+                        fontWeight: selectedPropertyType ? '700' : '500',
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        appearance: 'auto',
+                        outline: 'none',
+                        fontFamily: "'Inter', sans-serif",
+                      }}>
+                      {PROPERTY_TYPES.map(function(type) {
+                        return (
+                          <option key={type.value} value={type.value}>
+                            {type.icon} {type.label}
+                          </option>
+                        );
+                      })}
+                      <option value='shortlet'>🛎️ Shortlet → View Shortlets</option>
+                    </select>
                   </div>
                 </div>
                 {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
@@ -10368,29 +10377,41 @@ function AppContent() {
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
                 {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                {PROPERTY_TYPES.map(function(type) {
-                  return (
-                    <button key={type.value}
-                      onClick={function(){ updatePropertyType(type.value); }}
-                      style={{
-                        flexShrink: 0,
-                        padding: '8px 14px',
-                        borderRadius: '20px',
-                        border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
-                        backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
-                        color: selectedPropertyType === type.value ? '#fff' : '#374151',
-                        fontWeight: selectedPropertyType === type.value ? '700' : '500',
-                        fontSize: '0.80rem',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.15s',
-                        fontFamily: "'Inter', sans-serif",
-                      }}>
-                      {type.icon} {type.label}
-                    </button>
-                  );
-                })}
+              <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
+                <select
+                  value={selectedPropertyType}
+                  onChange={function(e) {
+                    var val = e.target.value;
+                    if (val === 'shortlet') {
+                      navigateTab('shortlet');
+                      updatePropertyType('');
+                      return;
+                    }
+                    updatePropertyType(val);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 36px 10px 14px',
+                    borderRadius: '10px',
+                    border: '1.5px solid ' + (selectedPropertyType ? '#0a2240' : '#e2e8f0'),
+                    backgroundColor: selectedPropertyType ? '#f0f9ff' : '#fff',
+                    color: selectedPropertyType ? '#0a2240' : '#64748b',
+                    fontWeight: selectedPropertyType ? '700' : '500',
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    appearance: 'auto',
+                    outline: 'none',
+                    fontFamily: "'Inter', sans-serif",
+                  }}>
+                  {PROPERTY_TYPES.map(function(type) {
+                    return (
+                      <option key={type.value} value={type.value}>
+                        {type.icon} {type.label}
+                      </option>
+                    );
+                  })}
+                  <option value='shortlet'>🛎️ Shortlet → View Shortlets</option>
+                </select>
               </div>
               {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
@@ -10436,29 +10457,32 @@ function AppContent() {
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
                 {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-                {PROPERTY_TYPES.map(function(type) {
-                  return (
-                    <button key={type.value}
-                      onClick={function(){ updatePropertyType(type.value); }}
-                      style={{
-                        flexShrink: 0,
-                        padding: '8px 14px',
-                        borderRadius: '20px',
-                        border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
-                        backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
-                        color: selectedPropertyType === type.value ? '#fff' : '#374151',
-                        fontWeight: selectedPropertyType === type.value ? '700' : '500',
-                        fontSize: '0.80rem',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        transition: 'all 0.15s',
-                        fontFamily: "'Inter', sans-serif",
-                      }}>
-                      {type.icon} {type.label}
-                    </button>
-                  );
-                })}
+              <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
+                <select
+                  value={selectedPropertyType}
+                  onChange={function(e) { updatePropertyType(e.target.value); }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 36px 10px 14px',
+                    borderRadius: '10px',
+                    border: '1.5px solid ' + (selectedPropertyType ? '#0a2240' : '#e2e8f0'),
+                    backgroundColor: selectedPropertyType ? '#f0f9ff' : '#fff',
+                    color: selectedPropertyType ? '#0a2240' : '#64748b',
+                    fontWeight: selectedPropertyType ? '700' : '500',
+                    fontSize: '0.84rem',
+                    cursor: 'pointer',
+                    appearance: 'auto',
+                    outline: 'none',
+                    fontFamily: "'Inter', sans-serif",
+                  }}>
+                  {PROPERTY_TYPES.map(function(type) {
+                    return (
+                      <option key={type.value} value={type.value}>
+                        {type.icon} {type.label}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
               {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
