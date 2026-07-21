@@ -32,6 +32,23 @@ const AGENT_TIERS = {
   premium: { listingLimit: 15,  label: 'Premium Agent', price: 8500  },
   agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
 };
+var PROPERTY_TYPES = [
+  { value: '', label: 'All Types', icon: '🏠' },
+  { value: 'apartment', label: 'Apartment', icon: '🏢' },
+  { value: 'house', label: 'House', icon: '🏡' },
+  { value: 'shop', label: 'Shop', icon: '🏪' },
+  { value: 'restaurant', label: 'Restaurant', icon: '🍽️' },
+  { value: 'office', label: 'Office Space', icon: '🏛️' },
+  { value: 'warehouse', label: 'Warehouse', icon: '🏭' },
+  { value: 'land', label: 'Land', icon: '🌍' },
+  { value: 'hotel', label: 'Hotel/Lodge', icon: '🏨' },
+  { value: 'shortlet', label: 'Shortlet', icon: '🛎️' },
+  { value: 'duplex', label: 'Duplex', icon: '🏘️' },
+  { value: 'bungalow', label: 'Bungalow', icon: '🏠' },
+  { value: 'studio', label: 'Studio', icon: '🛋️' },
+  { value: 'self_contain', label: 'Self Contain', icon: '🚪' },
+  { value: 'commercial', label: 'Commercial', icon: '🏬' },
+];
 const fmtNGN = (n) => { const num = Number(n); if (!num || isNaN(num)) return 'NGN 0'; return 'NGN ' + num.toLocaleString('en-NG'); };
 var NIGERIAN_BANKS = [
   { code: '044', name: 'Access Bank' },
@@ -815,6 +832,11 @@ function PropertyCard({ house, onSelect }) {
         <img src={house.image_url} alt={house.title} loading="lazy" style={{ width: '100%', height: isMobile ? '112px' : '160px', objectFit: 'cover', display: 'block' }}
           onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
         <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', padding: '2px 8px', borderRadius: '20px', fontSize: isMobile ? '0.52rem' : '0.60rem', fontWeight: '700', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>VERIFIED</div>
+        {house.property_type && house.property_type !== 'apartment' && (
+          <div style={{ position: 'absolute', top: isMobile ? '26px' : '30px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', borderRadius: '6px', padding: '3px 8px', fontSize: '0.68rem', fontWeight: '700', backdropFilter: 'blur(4px)' }}>
+            {(PROPERTY_TYPES.find(function(t) { return t.value === house.property_type; }) || {}).icon || ''} {(house.property_type || '').toUpperCase()}
+          </div>
+        )}
         {(house.agent_tier || house.verification_level) && (
           <div style={{ position: 'absolute', top: '7px', right: '7px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: (house.agent_tier || house.verification_level) === 'premium' ? '#f59e0b' : (house.agent_tier || house.verification_level) === 'verified' ? '#94a3b8' : '#cd7f32', border: '2px solid rgba(255,255,255,0.85)', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
         )}
@@ -1641,7 +1663,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       .catch(function() {});
   }, [user?.id]);
   const DRAFT_KEY = 'gh_upload_draft_' + (user?.id || 'guest');
-  const EMPTY_FORM = { title: '', description: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
+  const EMPTY_FORM = { title: '', description: '', property_type: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
   const [form, setForm]                           = useState(function() {
     try {
       var saved = sessionStorage.getItem(DRAFT_KEY);
@@ -1730,7 +1752,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   }, [form, editingProperty]);
   const enterEditMode = (property) => {
     setEditingProperty(property);
-    setForm({ title: property.title || '', location: property.location || '', country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
+    setForm({ title: property.title || '', property_type: property.property_type || '', location: property.location || '', country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
     setWantsFeatured(property.is_featured || false); setFeaturedPaid(property.is_featured || false);
     window.scrollTo({ top: 0, behavior: 'smooth' }); clearMessages();
   };
@@ -1823,7 +1845,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       if (form.purpose === 'sale') purposeLabel = ' (For SALE)';
       else if (form.purpose === 'shortlet') purposeLabel = ' (Shortlet)';
       else purposeLabel = ' (For RENT)';
-      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: form.location.trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
+      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: form.location.trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
       if (isEditMode) {
         const { data: updData, error: updateError } = await supabase
           .from('properties')
@@ -2102,6 +2124,19 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
               value={form.description || ''}
               onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { description: e.target.value }); }); clearMessages(); }}
             />
+          </div>
+          <div>
+            <label style={ls2}>Property Type *</label>
+            <select
+              value={form.property_type || ''}
+              onChange={function(e) { setForm(function(f) { return Object.assign({}, f, { property_type: e.target.value }); }); clearMessages(); }}
+              required
+              style={is2}>
+              <option value=''>Select property type...</option>
+              {PROPERTY_TYPES.filter(function(t) { return t.value !== ''; }).map(function(type) {
+                return <option key={type.value} value={type.value}>{type.icon} {type.label}</option>;
+              })}
+            </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '14px' }}>
             {field('location', 'Location / Area', 'text', 'e.g., Lekki Phase 1, Lagos')}
@@ -2619,8 +2654,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffPaymentsMonth, setStaffPaymentsMonth]     = useState(new Date().toISOString().slice(0, 7));
   const [staffPaymentsLoading, setStaffPaymentsLoading] = useState(false);
   const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
-  const [payingStaff, setPayingStaff]                   = useState(null);
   const [staffPayMsg, setStaffPayMsg]                   = useState('');
+  const [payoutTab, setPayoutTab]                       = useState('pending');
+  const [copyMsg, setCopyMsg]                           = useState('');
+  const [confirmPayModal, setConfirmPayModal]           = useState(null);
+  const [paymentNote, setPaymentNote]                   = useState('');
   const [expandedGhaPayment, setExpandedGhaPayment]     = useState(null);
   const [deactivateSaTarget, setDeactivateSaTarget]     = useState(null);
   const [deactivateGhaTarget, setDeactivateGhaTarget]   = useState(null);
@@ -3090,49 +3128,20 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     finally { setStaffPaymentsLoading(false); }
   };
 
-  const handlePayViaFlutterwave = async function(payment) {
-    if (!payment.account_number) {
-      alert((payment.gha_name || payment.sa_name) + ' has not added their bank account details yet. Ask them to update their profile.');
-      return;
-    }
-    setPayingStaff(payment.staff_id);
+  const copyToClipboard = async function(text, label) {
     try {
-      var token = localStorage.getItem('gh_token');
-      var res = await fetch(API_URL + '/api/admin/pay-staff-transfer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({
-          staff_id: payment.staff_id,
-          staff_type: payment.staff_type,
-          month_year: staffPaymentsMonth,
-        }),
-      });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Transfer failed');
-      setStaffPayMsg('Transfer initiated to ' + (payment.bank_name || 'bank') + ' for ' + (payment.gha_code || payment.sa_code) + '. Funds should arrive within minutes.');
-      fetchStaffPayments();
-    } catch(err) {
-      setStaffPayMsg('Error: ' + err.message);
-    } finally {
-      setPayingStaff(null);
-    }
-  };
-
-  const handleMarkStaffPaid = async function(payment) {
-    if (!window.confirm('Mark ' + (payment.gha_code || payment.sa_code) + ' as paid manually? This confirms payment was made outside the app.')) return;
-    try {
-      var token = localStorage.getItem('gh_token');
-      var res = await fetch(API_URL + '/api/admin/mark-staff-paid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify({ staff_id: payment.staff_id, month_year: staffPaymentsMonth }),
-      });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      setStaffPayMsg((payment.gha_code || payment.sa_code) + ' marked as paid successfully');
-      fetchStaffPayments();
-    } catch(err) {
-      setStaffPayMsg('Error: ' + err.message);
+      await navigator.clipboard.writeText(text);
+      setCopyMsg(label + ' copied!');
+      setTimeout(function() { setCopyMsg(''); }, 2000);
+    } catch(e) {
+      var el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopyMsg(label + ' copied!');
+      setTimeout(function() { setCopyMsg(''); }, 2000);
     }
   };
 
@@ -5484,19 +5493,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
             {/* ── STAFF PAYMENTS ── */}
             {adminTab === 'staff-payments' && (function() {
-              function formatNaira(n) { return '₦' + Number(n || 0).toLocaleString('en-NG'); }
-              function formatDate(d) {
-                if (!d) return '—';
-                var dt = new Date(d);
-                if (isNaN(dt.getTime())) return '—';
-                return dt.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
-              }
               var totals = (staffPayments && staffPayments.totals) || {};
-              var ghaPaymentsList = Array.isArray(staffPayments.gha_payments) ? staffPayments.gha_payments : [];
-              var saPaymentsList = Array.isArray(staffPayments.sa_payments) ? staffPayments.sa_payments : [];
-              var activeList = staffPaymentTab === 'GHA' ? ghaPaymentsList : saPaymentsList;
+              var currentList = staffPaymentTab === 'GHA' ? (staffPayments.gha_payments || []) : (staffPayments.sa_payments || []);
+              var pendingList = currentList.filter(function(p) { return p.payment_status !== 'paid' && p.total_payment > 0; });
+              var paidList = currentList.filter(function(p) { return p.payment_status === 'paid'; });
+              var displayList = payoutTab === 'pending' ? pendingList : paidList;
               return (
                 <div>
+                  {copyMsg && (
+                    <div style={{ position: 'fixed', bottom: '24px', right: '24px', backgroundColor: '#0a2240', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', fontSize: '0.84rem', zIndex: 99999, boxShadow: '0 4px 20px rgba(10,34,64,0.3)' }}>
+                      ✓ {copyMsg}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                     <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Staff Payments</h2>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -5530,11 +5539,22 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
                     {[['GHA','GHA'],['SA','SA']].map(function([t, label]) {
                       var active = staffPaymentTab === t;
                       return (
                         <button key={t} onClick={function(){ setStaffPaymentTab(t); }} style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (active ? '#0a2240' : '#e2e8f0'), backgroundColor: active ? '#0a2240' : '#fff', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                    {[['pending','Pending Payouts'],['history','Payment History']].map(function([t, label]) {
+                      var active = payoutTab === t;
+                      return (
+                        <button key={t} onClick={function(){ setPayoutTab(t); }} style={{ padding: '7px 18px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
                           {label}
                         </button>
                       );
@@ -5554,82 +5574,205 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
                   {staffPaymentsLoading ? (
                     <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8' }}>Loading staff payments…</p></div>
-                  ) : activeList.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8', margin: 0 }}>No staff payment data for this month.</p></div>
+                  ) : displayList.length === 0 ? (
+                    payoutTab === 'pending' ? (
+                      <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                        <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>🎉</p>
+                        <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0' }}>All payments completed!</p>
+                        <p style={{ fontSize: '0.82rem', margin: 0 }}>No pending payouts for {staffPaymentsMonth}</p>
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                        <p style={{ fontSize: '0.84rem' }}>No payment history for {staffPaymentsMonth} yet</p>
+                      </div>
+                    )
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {activeList.map(function(payment) {
-                        var paymentStatus = String(payment.payment_status || payment.status || '').toLowerCase();
-                        var isPaying = payingStaff === payment.staff_id;
-                        var isUnpaid = paymentStatus === 'unpaid';
-                        var isProcessing = paymentStatus === 'processing';
-                        var isPaid = paymentStatus === 'paid';
+                    <div>
+                      {displayList.map(function(payment) {
+                        var staffCode = payment.gha_code || payment.sa_code;
+                        var staffName = payment.gha_name || payment.sa_name;
+                        var isPaid = payment.payment_status === 'paid';
+
                         return (
-                          <div key={payment.staff_id || payment.gha_code || payment.sa_code} style={{ ...cardStyle, padding: '16px 18px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
-                              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '999px', padding: '4px 10px', fontSize: '0.72rem', fontWeight: '800' }}>{staffPaymentTab === 'GHA' ? (payment.gha_code || payment.staff_code || '—') : (payment.sa_code || payment.staff_code || '—')}</span>
-                                <div>
-                                  <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.92rem' }}>{staffPaymentTab === 'GHA' ? (payment.gha_name || payment.staff_name || '—') : (payment.sa_name || payment.staff_name || '—')}</p>
-                                  <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{staffPaymentTab === 'GHA' ? (payment.sa_code || '—') : (payment.gha_code || '—')}</p>
+                          <div key={payment.staff_id} style={{
+                            backgroundColor: isPaid ? '#f8fafc' : '#fff',
+                            borderRadius: '14px',
+                            padding: '18px',
+                            marginBottom: '12px',
+                            border: '1px solid ' + (isPaid ? '#e2e8f0' : '#bfdbfe'),
+                            boxShadow: isPaid ? 'none' : '0 2px 12px rgba(10,34,64,0.08)',
+                            opacity: isPaid ? 0.75 : 1,
+                          }}>
+
+                            {/* Header row */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '6px', padding: '2px 8px', fontSize: '0.72rem', fontWeight: '700' }}>{staffCode}</span>
+                                  <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>{staffName}</span>
+                                  {payment.sa_code && staffPaymentTab === 'GHA' && (
+                                    <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>under {payment.sa_code}</span>
+                                  )}
                                 </div>
+                                {isPaid && payment.paid_at && (
+                                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>
+                                    Paid on {new Date(payment.paid_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </p>
+                                )}
                               </div>
                               <div style={{ textAlign: 'right' }}>
-                                <p style={{ margin: 0, fontWeight: '800', fontSize: '1.1rem', color: '#27ae60' }}>{formatNaira(payment.total_payment || 0)}</p>
-                                <span style={{ display: 'inline-block', marginTop: '6px', padding: '3px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '800', backgroundColor: isPaid ? '#f0fff4' : isProcessing ? '#eff6ff' : '#fffbeb', color: isPaid ? '#166534' : isProcessing ? '#1e40af' : '#b45309', border: '1px solid ' + (isPaid ? '#86efac' : isProcessing ? '#bfdbfe' : '#fde68a') }}>
-                                  {isPaid ? 'PAID' : isProcessing ? 'PROCESSING' : 'UNPAID'}
+                                <p style={{ margin: '0 0 4px 0', fontWeight: '800', fontSize: '1.2rem', color: isPaid ? '#27ae60' : '#0a2240' }}>
+                                  ₦{parseFloat(payment.total_payment).toLocaleString()}
+                                </p>
+                                <span style={{
+                                  borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700',
+                                  backgroundColor: isPaid ? '#f0fff4' : payment.payment_status === 'processing' ? '#eff6ff' : '#fff7ed',
+                                  color: isPaid ? '#166534' : payment.payment_status === 'processing' ? '#1e40af' : '#c2410c',
+                                  border: '1px solid ' + (isPaid ? '#bbf7d0' : payment.payment_status === 'processing' ? '#bfdbfe' : '#fed7aa'),
+                                }}>
+                                  {isPaid ? '✓ PAID' : payment.payment_status === 'processing' ? '⟳ PROCESSING' : '● UNPAID'}
                                 </span>
                               </div>
                             </div>
 
-                            {staffPaymentTab === 'GHA' ? (
-                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-                                <span style={{ backgroundColor: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{payment.inspection_count || 0} inspections</span>
-                                <span style={{ backgroundColor: '#f8fafc', color: '#0a2240', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.inspection_payment || 0)}</span>
-                                <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.commission_amount || 0)} commission</span>
-                              </div>
-                            ) : (
-                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-                                <span style={{ backgroundColor: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{payment.inspections_overseen || 0} inspections overseen</span>
-                                <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: '700' }}>{formatNaira(payment.commission_amount || 0)} commission</span>
+                            {/* Payment breakdown */}
+                            {payment.staff_type === 'GHA' && (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                                <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
+                                  {payment.inspection_count} inspections → ₦{parseFloat(payment.inspection_payment || 0).toLocaleString()}
+                                </span>
+                                {payment.commission_amount > 0 && (
+                                  <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
+                                    Commission → ₦{parseFloat(payment.commission_amount).toLocaleString()}
+                                  </span>
+                                )}
                               </div>
                             )}
 
+                            {/* Bank details section */}
                             {payment.account_number ? (
-                              <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '12px' }}>
-                                🏦 {payment.bank_name} •••• {payment.account_number?.slice(-4)} — {payment.account_name}
+                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ margin: '0 0 8px 0', fontSize: '0.70rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bank Details for Transfer</p>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                  <div>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8' }}>Bank Name</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>{payment.bank_name}</p>
+                                      <button onClick={function() { copyToClipboard(payment.bank_name, 'Bank name'); }}
+                                        style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8' }}>Account Number</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1rem', letterSpacing: '0.08em' }}>{payment.account_number}</p>
+                                      <button onClick={function() { copyToClipboard(payment.account_number, 'Account number'); }}
+                                        style={{ background: '#0a2240', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.68rem', cursor: 'pointer', color: '#fff', fontWeight: '600' }}>COPY</button>
+                                    </div>
+                                  </div>
+                                  <div style={{ gridColumn: '1 / -1' }}>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8' }}>Account Name</p>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>{payment.account_name}</p>
+                                      <button onClick={function() { copyToClipboard(payment.account_name, 'Account name'); }}
+                                        style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.68rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Copy all details at once */}
+                                <button onClick={function() {
+                                  var allDetails = 'Bank: ' + payment.bank_name + '\nAccount Number: ' + payment.account_number + '\nAccount Name: ' + payment.account_name + '\nAmount: NGN ' + parseFloat(payment.total_payment).toLocaleString() + '\nRef: ' + staffCode + ' ' + staffPaymentsMonth;
+                                  copyToClipboard(allDetails, 'All payment details');
+                                }} style={{ marginTop: '10px', width: '100%', padding: '8px', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', color: '#374151' }}>
+                                  📋 Copy All Payment Details
+                                </button>
                               </div>
                             ) : (
-                              <div style={{ fontSize: '0.74rem', color: '#ef4444', fontWeight: '600', marginTop: '12px' }}>
-                                ⚠ No bank account added — staff must update their profile before payment can be processed
+                              <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #fed7aa' }}>
+                                <p style={{ margin: 0, fontSize: '0.78rem', color: '#c2410c', fontWeight: '600' }}>
+                                  ⚠ No bank account added — {staffName} must add their bank details in their profile before payment
+                                </p>
                               </div>
                             )}
 
-                            <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              {isUnpaid && (payment.total_payment || 0) > 0 ? (
-                                <>
-                                  <button onClick={function(){ handlePayViaFlutterwave(payment); }} disabled={isPaying}
-                                    style={{ padding: '7px 12px', backgroundColor: isPaying ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: isPaying ? 'not-allowed' : 'pointer' }}>
-                                    {isPaying ? 'Processing…' : 'Pay via Flutterwave'}
-                                  </button>
-                                  <button onClick={function(){ handleMarkStaffPaid(payment); }} style={{ padding: '7px 12px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>
-                                    Mark as Paid
-                                  </button>
-                                </>
-                              ) : isProcessing ? (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '7px 12px', backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem' }}>
-                                  <div style={{ width: '12px', height: '12px', border: '2px solid #bfdbfe', borderTopColor: '#1e40af', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                                  Awaiting Payment Confirmation
-                                </div>
-                              ) : isPaid ? (
-                                <span style={{ padding: '7px 12px', backgroundColor: '#f0fff4', color: '#166534', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', border: '1.5px solid #86efac' }}>
-                                  PAID · {formatDate(payment.paid_at)}
-                                </span>
-                              ) : null}
-                            </div>
+                            {/* Action buttons */}
+                            {!isPaid && (
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  onClick={function() { setConfirmPayModal(payment); setPaymentNote(''); }}
+                                  disabled={!payment.account_number}
+                                  style={{
+                                    flex: 1, padding: '10px', border: 'none', borderRadius: '10px',
+                                    backgroundColor: payment.account_number ? '#27ae60' : '#94a3b8',
+                                    color: '#fff', fontWeight: '700', fontSize: '0.84rem',
+                                    cursor: payment.account_number ? 'pointer' : 'not-allowed',
+                                  }}>
+                                  ✓ Mark as Paid
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {confirmPayModal && (
+                    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                      <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%' }}>
+                        <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 8px 0', fontSize: '1.05rem' }}>Confirm Payment</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 20px 0' }}>
+                          Confirm you have successfully transferred <strong style={{ color: '#27ae60' }}>₦{parseFloat(confirmPayModal.total_payment).toLocaleString()}</strong> to {confirmPayModal.gha_name || confirmPayModal.sa_name} via Flutterwave or bank transfer.
+                        </p>
+
+                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px', marginBottom: '16px', fontSize: '0.80rem', color: '#374151' }}>
+                          <p style={{ margin: '0 0 4px 0' }}><strong>Staff:</strong> {confirmPayModal.gha_code || confirmPayModal.sa_code} — {confirmPayModal.gha_name || confirmPayModal.sa_name}</p>
+                          <p style={{ margin: '0 0 4px 0' }}><strong>Bank:</strong> {confirmPayModal.bank_name}</p>
+                          <p style={{ margin: '0 0 4px 0' }}><strong>Account:</strong> {confirmPayModal.account_number}</p>
+                          <p style={{ margin: 0 }}><strong>Amount:</strong> ₦{parseFloat(confirmPayModal.total_payment).toLocaleString()}</p>
+                        </div>
+
+                        <textarea
+                          placeholder='Payment reference or note (optional)...'
+                          value={paymentNote}
+                          onChange={function(e) { setPaymentNote(e.target.value); }}
+                          rows={2}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', resize: 'none', boxSizing: 'border-box', marginBottom: '14px' }}
+                        />
+
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button onClick={function() { setConfirmPayModal(null); setPaymentNote(''); }}
+                            style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                          <button onClick={async function() {
+                            try {
+                              var token = localStorage.getItem('gh_token');
+                              var res = await fetch(API_URL + '/api/admin/mark-staff-paid', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                body: JSON.stringify({
+                                  staff_id: confirmPayModal.staff_id,
+                                  month_year: staffPaymentsMonth,
+                                  payment_notes: paymentNote.trim() || null,
+                                }),
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Failed');
+                              setConfirmPayModal(null);
+                              setPaymentNote('');
+                              setStaffPayMsg('Payment confirmed for ' + (confirmPayModal.gha_code || confirmPayModal.sa_code) + ' ✓');
+                              fetchStaffPayments();
+                              setTimeout(function() { setStaffPayMsg(''); }, 5000);
+                            } catch(err) {
+                              setStaffPayMsg('Error: ' + err.message);
+                              setConfirmPayModal(null);
+                            }
+                          }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
+                            ✓ Confirm Payment Made
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -6103,13 +6246,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     </div>
   );
 }
-function GHADashboard({ staffUser, onLogout }) {
+function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var token = localStorage.getItem('gh_staff_token');
   var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
   var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
   function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
 
+  const [staffUser, setStaffUser]                   = useState(initialStaffUser);
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
   const [bankForm, setBankForm]                     = useState({
     bank_name: staffUser?.bank_name || '',
@@ -6691,6 +6835,18 @@ function GHADashboard({ staffUser, onLogout }) {
                         });
                         var data = await res.json();
                         if (!res.ok) throw new Error(data.error || 'Failed to save');
+
+                        var updatedUser = Object.assign({}, staffUser, {
+                          bank_name: bankForm.bank_name,
+                          account_number: bankForm.account_number,
+                          account_name: bankForm.account_name,
+                          bank_code: bankForm.bank_code,
+                        });
+                        setStaffUser(updatedUser);
+                        try {
+                          localStorage.setItem('gh_staff_user', JSON.stringify(updatedUser));
+                        } catch(e) {}
+
                         setBankMsg('Bank details saved successfully! Payments will be sent to this account.');
                         setTimeout(function() { setBankMsg(''); }, 5000);
                       } catch(err) {
@@ -7299,13 +7455,14 @@ function GHADashboard({ staffUser, onLogout }) {
   );
 }
 
-function SADashboard({ staffUser, onLogout }) {
+function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var token = localStorage.getItem('gh_staff_token');
   var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
   function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
   var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
 
+  const [staffUser, setStaffUser]             = useState(initialStaffUser);
   const [saTab, setSaTab]                     = useState('overview');
   const [mobileNavOpen, setMobileNavOpen]     = useState(false);
   const mobileNavRef                          = useRef(null);
@@ -9416,6 +9573,18 @@ function SADashboard({ staffUser, onLogout }) {
                     });
                     var data = await res.json();
                     if (!res.ok) throw new Error(data.error || 'Failed to save');
+
+                    var updatedUser = Object.assign({}, staffUser, {
+                      bank_name: bankForm.bank_name,
+                      account_number: bankForm.account_number,
+                      account_name: bankForm.account_name,
+                      bank_code: bankForm.bank_code,
+                    });
+                    setStaffUser(updatedUser);
+                    try {
+                      localStorage.setItem('gh_staff_user', JSON.stringify(updatedUser));
+                    } catch(e) {}
+
                     setBankMsg('Bank details saved successfully! Payments will be sent to this account.');
                     setTimeout(function() { setBankMsg(''); }, 5000);
                   } catch(err) {
@@ -9496,6 +9665,9 @@ function AppContent() {
   });
   const [filterCity, setFilterCity]             = useState(function() {
     try { return new URLSearchParams(window.location.search).get('city') || 'All'; } catch(e) { return 'All'; }
+  });
+  const [selectedPropertyType, setSelectedPropertyType] = useState(function() {
+    try { return new URLSearchParams(window.location.search).get('type') || ''; } catch(e) { return ''; }
   });
   const [footerModal, setFooterModal]           = useState(null);
   const [menuOpen, setMenuOpen]                 = useState(false);
@@ -9659,6 +9831,20 @@ function AppContent() {
       window.history.replaceState({ tab: currentTab }, '', '?' + params.toString());
     } catch(e) {}
   };
+  const updatePropertyType = function(type) {
+    setSelectedPropertyType(type);
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (type) params.set('type', type); else params.delete('type');
+      params.set('tab', currentTab);
+      window.history.replaceState({ tab: currentTab }, '', '?' + params.toString());
+    } catch(e) {}
+  };
+  const clearAllFilters = function() {
+    updateSearch('');
+    updateCity('All');
+    updatePropertyType('');
+  };
   // Handle browser back/forward buttons
   useEffect(function() {
     function handlePopState(e) {
@@ -9797,9 +9983,36 @@ function AppContent() {
   }, [user?.id]);
   const searchFiltered = function(list) {
     var result = list;
-    if (searchQuery.trim()) { var q = searchQuery.toLowerCase(); result = result.filter(function(p) { return String(p.title || '').toLowerCase().includes(q) || String(p.location || '').toLowerCase().includes(q); }); }
+    if (searchQuery.trim()) {
+      var q = searchQuery.toLowerCase();
+      result = result.filter(function(p) {
+        return String(p.title || '').toLowerCase().includes(q)
+          || String(p.location || '').toLowerCase().includes(q)
+          || String(p.property_type || '').toLowerCase().includes(q)
+          || String(p.description || '').toLowerCase().includes(q);
+      });
+    }
     if (filterCity !== 'All') { result = result.filter(function(p) { return String(p.location || '').toLowerCase().includes(filterCity.toLowerCase()); }); }
+    if (selectedPropertyType) {
+      var t = selectedPropertyType.toLowerCase();
+      result = result.filter(function(p) {
+        return String(p.property_type || '').toLowerCase() === t
+          || String(p.type || '').toLowerCase() === t
+          || String(p.title || '').toLowerCase().includes(t)
+          || String(p.description || '').toLowerCase().includes(t);
+      });
+    }
     return result;
+  };
+  const getResultsSummary = function(list) {
+    var count = searchFiltered(list).length;
+    var typeObj = PROPERTY_TYPES.find(function(pt) { return pt.value === selectedPropertyType; });
+    var typeLabel = typeObj && typeObj.value ? typeObj.label.toLowerCase() : null;
+    var cityPart = filterCity !== 'All' ? ' in ' + filterCity : '';
+    if (typeLabel) {
+      return 'Showing ' + count + ' ' + typeLabel + (count !== 1 ? 's' : '') + cityPart;
+    }
+    return count + ' listing' + (count !== 1 ? 's' : '') + ' available' + cityPart;
   };
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
@@ -10025,25 +10238,59 @@ function AppContent() {
                 </div>
                 <h1 style={{ color: '#fff', fontSize: isMobile ? '1.55rem' : '3rem', fontWeight: '800', margin: '0 0 12px 0', lineHeight: '1.12', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", letterSpacing: '-0.04em' }}>Find Your Next Home<br /><span style={{ color: '#22c55e' }}>with Confidence.</span></h1>
                 <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: isMobile ? '0.82rem' : '0.95rem', margin: '0 0 22px 0', lineHeight: '1.65', maxWidth: '520px', fontFamily: "'Inter', sans-serif" }}>Browse verified listings in {activeCountry.flag} {activeCountry.name} — full fee breakdown, escrow protection, and no hidden charges.</p>
-                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: isMobile ? '10px' : '12px 14px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '140px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.88rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }} />
-                  <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
-                    <option value="All">All Cities</option>
-                    {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
-                  </select>
-                  {(searchQuery || filterCity !== 'All') && <button onClick={function(){ updateSearch(''); updateCity('All'); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>Clear</button>}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: isMobile ? '10px' : '12px 14px', boxShadow: '0 20px 40px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '140px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.88rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }} />
+                    <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
+                      <option value="All">All Cities</option>
+                      {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                    </select>
+                    {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>Clear</button>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                    {PROPERTY_TYPES.map(function(type) {
+                      return (
+                        <button key={type.value}
+                          onClick={function(){ updatePropertyType(type.value); }}
+                          style={{
+                            flexShrink: 0,
+                            padding: '8px 14px',
+                            borderRadius: '20px',
+                            border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
+                            backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
+                            color: selectedPropertyType === type.value ? '#fff' : '#374151',
+                            fontWeight: selectedPropertyType === type.value ? '700' : '500',
+                            fontSize: '0.80rem',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            transition: 'all 0.15s',
+                            fontFamily: "'Inter', sans-serif",
+                          }}>
+                          {type.icon} {type.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
+                {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '14px' }}>
+                    <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '0.82rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>{getResultsSummary(rentProperties)}</p>
+                    <button onClick={clearAllFilters} style={{ padding: '7px 16px', borderRadius: '20px', border: '1.5px solid #ef4444', backgroundColor: 'transparent', color: '#f87171', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                      Clear All Filters
+                    </button>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: isMobile ? '20px' : '28px', marginTop: '22px', flexWrap: 'wrap' }}>
                   {[{ value: countryProperties.length, label: 'Verified Listings' }, { value: '6+', label: 'Cities Covered' }, { value: '100%', label: 'Fee Transparent' }].map(function(s){ return <div key={s.label}><span style={{ fontSize: isMobile ? '1.15rem' : '1.4rem', fontWeight: '800', color: '#22c55e', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{s.value}</span><span style={{ fontSize: '0.72rem', display: 'block', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontFamily: "'Inter', sans-serif", letterSpacing: '0.02em' }}>{s.label}</span></div>; })}
                 </div>
               </div>
             </div>
-            {(searchQuery || filterCity !== 'All') ? (
+            {(searchQuery || filterCity !== 'All' || selectedPropertyType) ? (
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
                   <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Search Results</h2>
                   <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', fontSize: '0.68rem', fontWeight: '700', padding: '3px 10px', borderRadius: '20px', border: '1px solid #bfdbfe' }}>{searchFiltered(rentProperties).length} found</span>
-                  <button onClick={function(){ updateSearch(''); updateCity('All'); }} style={{ marginLeft: 'auto', padding: '5px 13px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#64748b', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>
+                  <button onClick={clearAllFilters} style={{ marginLeft: 'auto', padding: '5px 13px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#64748b', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>
                 </div>
                 {searchFiltered(rentProperties).length === 0
                   ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ fontSize: '2.6rem', marginBottom: '12px' }}>🔍</div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
@@ -10119,8 +10366,40 @@ function AppContent() {
               <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Verified properties available to buy in {activeCountry.flag} {activeCountry.name}</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
-                {searchQuery && <button onClick={function(){ updateSearch(''); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
+                {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                {PROPERTY_TYPES.map(function(type) {
+                  return (
+                    <button key={type.value}
+                      onClick={function(){ updatePropertyType(type.value); }}
+                      style={{
+                        flexShrink: 0,
+                        padding: '8px 14px',
+                        borderRadius: '20px',
+                        border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
+                        backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
+                        color: selectedPropertyType === type.value ? '#fff' : '#374151',
+                        fontWeight: selectedPropertyType === type.value ? '700' : '500',
+                        fontSize: '0.80rem',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s',
+                        fontFamily: "'Inter', sans-serif",
+                      }}>
+                      {type.icon} {type.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                  <p style={{ color: '#64748b', fontSize: '0.8rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>{getResultsSummary(saleProperties)}</p>
+                  <button onClick={clearAllFilters} style={{ padding: '7px 16px', borderRadius: '20px', border: '1.5px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                    Clear All Filters
+                  </button>
+                </div>
+              )}
             </div>
             {searchFiltered(saleProperties).length === 0
               ? (
@@ -10155,8 +10434,40 @@ function AppContent() {
               <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Furnished short-stay rentals — book by the night</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
-                {searchQuery && <button onClick={function(){ updateSearch(''); }} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
+                {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
+              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                {PROPERTY_TYPES.map(function(type) {
+                  return (
+                    <button key={type.value}
+                      onClick={function(){ updatePropertyType(type.value); }}
+                      style={{
+                        flexShrink: 0,
+                        padding: '8px 14px',
+                        borderRadius: '20px',
+                        border: '1.5px solid ' + (selectedPropertyType === type.value ? '#0a2240' : '#e2e8f0'),
+                        backgroundColor: selectedPropertyType === type.value ? '#0a2240' : '#fff',
+                        color: selectedPropertyType === type.value ? '#fff' : '#374151',
+                        fontWeight: selectedPropertyType === type.value ? '700' : '500',
+                        fontSize: '0.80rem',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.15s',
+                        fontFamily: "'Inter', sans-serif",
+                      }}>
+                      {type.icon} {type.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {(searchQuery || filterCity !== 'All' || selectedPropertyType) && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+                  <p style={{ color: '#64748b', fontSize: '0.8rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>{getResultsSummary(shortletProperties)}</p>
+                  <button onClick={clearAllFilters} style={{ padding: '7px 16px', borderRadius: '20px', border: '1.5px solid #ef4444', backgroundColor: 'transparent', color: '#ef4444', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                    Clear All Filters
+                  </button>
+                </div>
+              )}
             </div>
             {searchFiltered(shortletProperties).length === 0
               ? (
