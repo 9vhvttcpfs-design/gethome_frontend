@@ -27,18 +27,21 @@
   </p>
   <script>
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-      <rect width="1024" height="1024" fill="#0a2240" rx="210"/>
-      <polygon points="512,192 172,516 852,516" fill="white"/>
-      <rect x="636" y="232" width="64" height="120" fill="white"/>
-      <rect x="244" y="492" width="536" height="340" fill="white"/>
-      <path d="M462,832 L462,642 Q462,572 512,572 Q562,572 562,642 L562,832 Z" fill="#0a2240"/>
-      <rect x="292" y="556" width="106" height="88" fill="#27ae60" rx="10"/>
-      <rect x="341" y="556" width="8" height="88" fill="white"/>
-      <rect x="292" y="596" width="106" height="8" fill="white"/>
-      <rect x="626" y="556" width="106" height="88" fill="#27ae60" rx="10"/>
-      <rect x="675" y="556" width="8" height="88" fill="white"/>
-      <rect x="626" y="596" width="106" height="8" fill="white"/>
-      <circle cx="562" cy="700" r="12" fill="#27ae60"/>
+      <defs>
+        <linearGradient id="pinGrad" x1="512" y1="200" x2="512" y2="840" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#4ade80"/>
+          <stop offset="50%" stop-color="#22c55e"/>
+          <stop offset="100%" stop-color="#0d9488"/>
+        </linearGradient>
+      </defs>
+      <rect width="1024" height="1024" rx="208" fill="#ffffff"/>
+      <path d="M322,390 A190,190 0 0,1 702,390 C702,540 600,680 512,840 C424,680 322,540 322,390 Z" fill="url(#pinGrad)"/>
+      <rect x="562" y="250" width="34" height="100" fill="#0a2240"/>
+      <polygon points="402,350 512,220 622,350" fill="#0a2240"/>
+      <rect x="474" y="380" width="32" height="32" rx="6" fill="#0a2240"/>
+      <rect x="518" y="380" width="32" height="32" rx="6" fill="#0a2240"/>
+      <rect x="474" y="424" width="32" height="32" rx="6" fill="#0a2240"/>
+      <rect x="518" y="424" width="32" height="32" rx="6" fill="#0a2240"/>
     </svg>`;
 
     const img = new Image();

@@ -163,6 +163,14 @@ var LEGAL_CONTENT = {
     { heading: "6. Escrow", body: "Funds released after verification." },
     { heading: "7. Prohibited", body: "No unauthorized listings or duplicate posts." },
     { heading: "8. Termination", body: "Violations result in termination." }
+  ]},
+  about: { title: "About GetHome", subtitle: "Founded 2026 · Abuja, Nigeria", sections: [
+    { heading: "About GetHome", body: "GetHome is a Nigerian real estate property discovery platform founded by Ibrahim Medinat. We connect buyers, tenants and renters with verified property listings across Nigerian cities including Abuja, Lagos, Kano and Kaduna." },
+    { heading: "Our Mission", body: "To make property search in Nigeria safe, transparent and trustworthy. Every property listed on GetHome is physically inspected by our verified GetHome Agents (GHAs) before going live." },
+    { heading: "Founded", body: "2026" },
+    { heading: "Founder & CEO", body: "Ibrahim Medinat" },
+    { heading: "Headquarters", body: "Abuja, Nigeria" },
+    { heading: "Website", body: "trygethome.online" }
   ]}
 };
 function LegalModal({ type, onClose, onAccept, forceAccept }) {
@@ -176,7 +184,7 @@ function LegalModal({ type, onClose, onAccept, forceAccept }) {
       <div onClick={function(e){ e.stopPropagation(); }} style={{ backgroundColor: '#fff', borderRadius: '22px 22px 0 0', maxWidth: '680px', width: '100%', maxHeight: isMobile ? '95vh' : '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(10,34,64,0.2)' }}>
         <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d2d4e 100%)', borderRadius: '22px 22px 0 0', padding: isMobile ? '18px 22px' : '22px 30px', flexShrink: 0 }}>
           <h2 style={{ color: '#fff', margin: '0 0 4px 0', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{doc.title}</h2>
-          <p style={{ color: 'rgba(255,255,255,0.42)', margin: 0, fontSize: '0.71rem', fontFamily: "'Inter', sans-serif" }}>v{doc.version} &middot; Please read carefully</p>
+          <p style={{ color: 'rgba(255,255,255,0.42)', margin: 0, fontSize: '0.71rem', fontFamily: "'Inter', sans-serif" }}>{doc.subtitle || ('v' + doc.version + ' · Please read carefully')}</p>
         </div>
         <div onScroll={handleScroll} style={{ overflowY: 'auto', padding: isMobile ? '20px 22px' : '26px 30px', flex: 1 }}>
           {doc.sections.map(function(s, i) { return ( <div key={i} style={{ marginBottom: '18px' }}><h3 style={{ color: '#0a2240', fontSize: '0.86rem', fontWeight: '700', margin: '0 0 5px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.heading}</h3><p style={{ color: '#475569', fontSize: '0.83rem', lineHeight: '1.7', margin: 0, fontFamily: "'Inter', sans-serif" }}>{s.body}</p></div> ); })}
@@ -334,6 +342,9 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [resetSent, setResetSent]                     = useState(false);
   const [resetLoading, setResetLoading]               = useState(false);
   const [resetError, setResetError]                   = useState('');
+  const [customerName, setCustomerName]               = useState('');
+  const [customerPhone, setCustomerPhone]             = useState('');
+  const [customerIntent, setCustomerIntent]           = useState('rent');
   const isSignUp = mode === 'signup';
   const countryConfigs = {
     NG: {
@@ -530,6 +541,70 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
       setError(err.message || 'Network error. Please check your connection.');
     } finally { setLoading(false); }
   };
+  const handleCustomerSignup = async function() {
+    if (!email.trim() || !password.trim() || !customerName.trim()) {
+      setError('Please fill in your name, email and password');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      // Sign up via Supabase Auth with customer role metadata
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: password,
+        options: {
+          data: {
+            role: 'customer',
+            full_name: customerName.trim(),
+            phone: customerPhone.trim() || null,
+            intent: customerIntent,
+          }
+        }
+      });
+
+      if (signUpError) throw signUpError;
+
+      // Check for already registered email
+      if (authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+        throw new Error('This email is already registered. Please sign in instead.');
+      }
+
+      if (!authData?.user?.id) throw new Error('Account creation failed. Please try again.');
+
+      // Update profile with full details
+      await supabase.from('profiles').upsert([{
+        id: authData.user.id,
+        email: email.trim().toLowerCase(),
+        role: 'customer',
+        full_name: customerName.trim(),
+        phone: customerPhone.trim() || null,
+        status: 'active',
+      }], { onConflict: 'id' });
+
+      // Store user session
+      localStorage.setItem('gh_token', authData.session?.access_token || '');
+      localStorage.setItem('gh_user', JSON.stringify({
+        id: authData.user.id,
+        email: email.trim().toLowerCase(),
+        full_name: customerName.trim(),
+        role: 'customer',
+        intent: customerIntent,
+      }));
+
+      setError('');
+      if (onSuccess) onSuccess(authData.user);
+
+    } catch(err) {
+      setError(err.message || 'Sign up failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
   if (showForgotPassword) {
     return (
       <div className="gh-auth-form-inner">
@@ -571,7 +646,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.78rem', color: '#94a3b8' }}>
           <span onClick={function(){ setShowForgotPassword(false); setResetSent(false); setResetEmail(''); setResetError(''); }}
             style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
-            Back to Sign In
+            Back to Login
           </span>
         </p>
       </div>
@@ -592,11 +667,97 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         Already verified?{' '}
         <span onClick={function(){ setEmailSent(false); setMode('login'); }}
           style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
-          Sign in
+          Login
         </span>
       </p>
     </div>
   );
+  if (mode === 'customer') {
+    return (
+      <div className="gh-auth-form-inner">
+        <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 4px 0' }}>
+          Create Your Account
+        </h3>
+        <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 20px 0' }}>
+          Sign up to save properties, book inspections and connect with agents
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Full Name *</label>
+            <input
+              type='text'
+              placeholder='Your full name'
+              value={customerName}
+              onChange={function(e) { setCustomerName(e.target.value); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Email Address *</label>
+            <input
+              type='email'
+              placeholder='your@email.com'
+              value={email}
+              onChange={function(e) { setEmail(e.target.value); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Phone Number</label>
+            <input
+              type='tel'
+              placeholder='08012345678'
+              value={customerPhone}
+              onChange={function(e) { setCustomerPhone(e.target.value); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Password *</label>
+            <input
+              type='password'
+              placeholder='At least 6 characters'
+              value={password}
+              onChange={function(e) { setPassword(e.target.value); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>What are you looking for?</label>
+            <select
+              value={customerIntent}
+              onChange={function(e) { setCustomerIntent(e.target.value); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', backgroundColor: '#fff' }}>
+              <option value='buy'>Buy a property</option>
+              <option value='rent'>Rent a property</option>
+              <option value='shortlet'>Shortlet / Short stay</option>
+              <option value='commercial'>Commercial space</option>
+              <option value='land'>Buy land</option>
+            </select>
+          </div>
+
+          {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
+
+          <button
+            onClick={handleCustomerSignup}
+            disabled={loading}
+            style={{ width: '100%', padding: '13px', backgroundColor: loading ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.92rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            {loading ? 'Creating Account...' : 'Create Account'}
+          </button>
+
+          <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
+            Already have an account?{' '}
+            <span onClick={function() { setMode('login'); setError(''); }} style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer' }}>Login</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="gh-auth-form-inner">
       {showTermsModal  && <LegalModal type="terms"   forceAccept onClose={function(){ setShowTermsModal(false);  }} onAccept={function(){ setTermsAccepted(true); setShowTermsModal(false);  }} />}
@@ -604,12 +765,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
 
       {/* Mode toggle */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', backgroundColor: '#f0f4f8', borderRadius: '10px', padding: '3px' }}>
-        {[['login','Sign In'], ['signup','Agent Sign Up']].map(function([m, lbl]) {
+        {[['login', '', 'Login'], ['customer', '🔍', 'Create Account'], ['signup', '🏠', 'Create Agent Account']].map(function([m, icon, lbl]) {
+          var active = mode === m;
           return (
             <button key={m} type="button"
               onClick={function(){ setMode(m); setError(''); setTermsAccepted(false); setConfirmPassword(''); }}
-              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: mode === m ? '#fff' : 'transparent', color: mode === m ? '#0a2240' : '#94a3b8', fontWeight: mode === m ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', boxShadow: mode === m ? '0 1px 4px rgba(10,34,64,0.1)' : 'none', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>
-              {lbl}
+              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#374151', fontWeight: active ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>
+              {icon ? icon + ' ' : ''}{lbl}
             </button>
           );
         })}
@@ -762,7 +924,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
 
         <button type="submit" disabled={loading}
           style={{ padding: '14px', backgroundColor: loading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: loading ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
-          {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Agent Account'}
+          {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Agent Account'}
         </button>
       </form>
 
@@ -770,7 +932,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         {mode === 'login' ? 'Not registered yet?' : 'Already have an account?'}{' '}
         <span onClick={function(){ setMode(mode === 'login' ? 'signup' : 'login'); setError(''); setTermsAccepted(false); setConfirmPassword(''); }}
           style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
-          {mode === 'login' ? 'Register as Agent' : 'Sign in'}
+          {mode === 'login' ? 'Create Agent Account' : 'Login'}
         </span>
       </p>
     </div>
@@ -10055,7 +10217,7 @@ function AppContent() {
         .gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
       `}</style>
       {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} />}
-      {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={function(){ setFooterModal(null); }} />}
+      {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={footerModal === 'about' ? undefined : function(){ setFooterModal(null); }} />}
       {showRatingModal && ratingGhaId && (
         <RateGHAModal
           ghaId={ratingGhaId}
@@ -10705,7 +10867,7 @@ function AppContent() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '22px', display: 'flex', justifyContent: isMobile ? 'center' : 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
             <p style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.32)', margin: 0, fontFamily: "'Inter', sans-serif" }}>&copy; {new Date().getFullYear()} GetHome. All rights reserved.</p>
             <div style={{ display: 'flex', gap: '20px' }}>
-              {[{ label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
+              {[{ label: 'About Us', type: 'about' }, { label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
             </div>
           </div>
         </div>
