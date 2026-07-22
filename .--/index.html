@@ -131,6 +131,60 @@
       /* Prevent content flash */
       #root { min-height: 100vh; }
     </style>
+
+    <!-- Organization structured data -->
+    <script type='application/ld+json'>
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "GetHome",
+      "url": "https://trygethome.online",
+      "logo": "https://trygethome.online/logo.png",
+      "description": "GetHome is a Nigerian real estate property discovery platform connecting buyers, tenants and agents across Nigerian cities including Abuja, Lagos, Kano and Kaduna.",
+      "foundingDate": "2024",
+      "founder": {
+        "@type": "Person",
+        "name": "Ibrahim Medinat",
+        "jobTitle": "Founder & CEO",
+        "worksFor": {
+          "@type": "Organization",
+          "name": "GetHome"
+        }
+      },
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "NG",
+        "addressLocality": "Abuja"
+      },
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "customer support",
+        "availableLanguage": "English"
+      },
+      "sameAs": [
+        "https://trygethome.online"
+      ]
+    }
+    </script>
+
+    <!-- Website structured data -->
+    <script type='application/ld+json'>
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "GetHome",
+      "url": "https://trygethome.online",
+      "description": "Find verified properties for rent, sale and shortlet across Nigeria. GetHome connects you with trusted agents and conducts physical inspections on all listed properties.",
+      "publisher": {
+        "@type": "Organization",
+        "name": "GetHome",
+        "founder": {
+          "@type": "Person",
+          "name": "Ibrahim Medinat"
+        }
+      }
+    }
+    </script>
   </head>
   <body>
     <!-- Native loading splash before React boots -->
