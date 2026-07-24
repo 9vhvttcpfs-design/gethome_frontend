@@ -1088,11 +1088,20 @@ function PricingModal({ property, onClose, user, onUserChange }) {
       console.log('Could not fetch SA details, using default number');
     }
 
+    // Get the first property image
+    var propertyImage = null;
+    if (Array.isArray(property.image_urls) && property.image_urls.length > 0) {
+      propertyImage = property.image_urls[0];
+    } else if (Array.isArray(property.images) && property.images.length > 0) {
+      propertyImage = property.images[0];
+    }
+
     var disclaimerMessage =
       'Hello ' + saName + ',\n\n' +
       'I would like to book a FREE inspection for:\n\n' +
       'Property: ' + property.title + '\n' +
       'Location: ' + (property.location || property.address || '') + '\n' +
+      (propertyImage ? 'Property Image: ' + propertyImage + '\n' : '') +
       'My Name/Email: ' + (user ? user.email : 'Customer') + '\n\n' +
       '---\n' +
       '🛡️ IMPORTANT NOTICE FROM GETHOME:\n\n' +
@@ -3041,6 +3050,20 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      // Auto-generate snapshot if no data exists for this month
+      if ((!data.gha_summaries || data.gha_summaries.length === 0) && m <= new Date().toISOString().slice(0, 7)) {
+        console.log('No snapshot data found for', m, '— auto-generating...');
+        await fetch(API_URL + '/api/admin/take-snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ month: m }),
+        }).catch(function(e){ console.error('Auto-snapshot failed:', e.message); });
+        // Re-fetch after snapshot
+        var res2 = await fetch(API_URL + '/api/admin/monthly-history?month=' + m, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        data = await res2.json();
+      }
       // Enrich agent snapshots with gha_code/gha_name from gha_summaries (agent_snapshots only stores gha_id)
       var ghaMap = {};
       (data.gha_summaries || []).forEach(function(g) {
@@ -6715,6 +6738,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [doneNotes, setDoneNotes]                   = useState({});
   const [markingDone, setMarkingDone]               = useState(null);
   const [ghaNotifications, setGhaNotifications]     = useState([]);
+  const ghaNotificationsRef                         = useRef([]);
   const [newInspIds, setNewInspIds]                 = useState(new Set());
   const knownInspIdsRef                             = useRef(new Set());
   const [ghaNotifs, setGhaNotifs]                   = useState([]);
@@ -6807,6 +6831,19 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      // Auto-generate snapshot if no data exists for this month
+      // (GHA responses don't include gha_summaries — agent_snapshots is the field this view relies on)
+      if ((!data.agent_snapshots || data.agent_snapshots.length === 0) && m <= new Date().toISOString().slice(0, 7)) {
+        console.log('No snapshot data found for', m, '— auto-generating...');
+        await fetch(API_URL + '/api/gha/request-snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ month: m }),
+        }).catch(function(e){ console.error('Auto-snapshot failed:', e.message); });
+        // Re-fetch after snapshot
+        var res2 = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+        data = await res2.json();
+      }
       var enrichedSnapshots = (data.agent_snapshots || []).map(function(snap) {
         return Object.assign({}, snap, {
           agent_email: snap.agent_email || snap.email || '—',
@@ -6888,7 +6925,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       if (res.ok) {
         var staffMessages = data.messages || [];
         // Merge notifications into inbox as read-only system messages
-        var notifAsMessages = (ghaNotifications || []).map(function(n) {
+        // Read from the ref (not the ghaNotifications state) so this always sees the
+        // latest notifications even when called from the setInterval closure captured on mount.
+        var notifAsMessages = (ghaNotificationsRef.current || []).map(function(n) {
           return {
             id: 'notif-' + n.id,
             sender_type: 'SYSTEM',
@@ -6937,8 +6976,11 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   useEffect(function() { fetchGHAProfile(); }, []);
 
+  useEffect(function() { ghaNotificationsRef.current = ghaNotifications; }, [ghaNotifications]);
+
   useEffect(function() {
-    fetchOverview(); fetchAgents(); fetchGHANotifications(); fetchGhaRatings(); fetchMessages();
+    fetchOverview(); fetchAgents(); fetchGhaRatings();
+    fetchGHANotifications().then(function(){ fetchMessages(); });
     var notifInterval = setInterval(fetchGHANotifications, 20000);
     var messagesInterval = setInterval(fetchMessages, 30000);
     return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
@@ -7878,8 +7920,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   {/* Agent snapshots */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
                   {snapshots.length === 0 ? (
-                    <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
-                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No agent snapshots for this month.</p>
+                    <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>👥</p>
+                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Agent Snapshots Yet</p>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                        Agent activity snapshots will appear here once your agents make subscription payments or complete inspections for {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}.
+                      </p>
                     </div>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
@@ -8499,6 +8545,18 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/sa/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      // Auto-generate snapshot if no data exists for this month
+      if ((!data.gha_summaries || data.gha_summaries.length === 0) && m <= new Date().toISOString().slice(0, 7)) {
+        console.log('No snapshot data found for', m, '— auto-generating...');
+        await fetch(API_URL + '/api/sa/request-snapshot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+          body: JSON.stringify({ month: m }),
+        }).catch(function(e){ console.error('Auto-snapshot failed:', e.message); });
+        // Re-fetch after snapshot
+        var res2 = await fetch(API_URL + '/api/sa/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+        data = await res2.json();
+      }
       // Enrich agent snapshots with gha_code/gha_name from gha_summaries (agent_snapshots only stores gha_id)
       var ghaMap = {};
       (data.gha_summaries || []).forEach(function(g) {
@@ -10079,8 +10137,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           var ghaTotals = ghaSummary.reduce(function(acc, g) {
             acc.total_agents += g.total_agents || 0;
             acc.active_subscriptions += g.active_subscriptions || 0;
-            acc.revenue += g.revenue || 0;
-            acc.inspections_done += g.inspections_done || 0;
+            acc.revenue += g.total_subscription_revenue || g.revenue || 0;
+            acc.inspections_done += g.inspections_completed || g.inspections_done || 0;
             return acc;
           }, { total_agents: 0, active_subscriptions: 0, revenue: 0, inspections_done: 0 });
 
@@ -10108,7 +10166,13 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   {/* GHA Summary */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Summary</h3>
                   {ghaSummary.length === 0 ? (
-                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '20px', fontFamily: "'Inter', sans-serif" }}>No GHA data for this month.</p>
+                    <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
+                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>📊</p>
+                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Activity This Month</p>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                        No agents are assigned to your GHAs yet for {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}, or no subscription payments have been made. Data will appear here once agents are active under your GHAs.
+                      </p>
+                    </div>
                   ) : (
                     <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
                       <div style={{ minWidth: '860px' }}>
@@ -10123,10 +10187,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_name || g.full_name || '—'}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.total_agents || 0}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.active_subscriptions || 0}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.revenue || 0).toLocaleString()}</span>
-                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.gha_commission || 0).toLocaleString()}</span>
-                                <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.sa_commission || 0).toLocaleString()}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_done || 0}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.total_subscription_revenue || g.revenue || 0).toLocaleString()}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.total_gha_commission || g.gha_commission || 0).toLocaleString()}</span>
+                                <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.total_sa_commission || g.sa_commission || 0).toLocaleString()}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_completed || g.inspections_done || 0}</span>
                               </div>
                             );
                           })}
@@ -10153,7 +10217,13 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       style={{ padding: '7px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.80rem', color: '#0a2240', minWidth: '220px', fontFamily: "'Inter', sans-serif" }} />
                   </div>
                   {filteredSnapshots.length === 0 ? (
-                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', textAlign: 'center', padding: '24px 0', fontFamily: "'Inter', sans-serif" }}>No agent snapshots found.</p>
+                    <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>👥</p>
+                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Agent Snapshots Yet</p>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                        Agent activity snapshots will appear here once agents under your GHAs make subscription payments or complete inspections.
+                      </p>
+                    </div>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
                       <div style={{ minWidth: '760px' }}>
@@ -10166,11 +10236,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                               <div key={a.id || a.agent_email || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
                                 <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
                                 <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || a.email || '—'}</span>
-                                <span>{tierBadgeSm(a.tier || a.subscription_tier)}</span>
+                                <span>{tierBadgeSm(a.subscription_tier || a.tier || 'free')}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
+                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listing_count || a.listings || 0}</span>
                                 <span style={{ color: '#0a2240', fontSize: '0.78rem' }}>{a.gha_code || '—'}</span>
-                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(a.commission_generated || 0).toLocaleString()}</span>
+                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(a.gha_commission || a.commission_amount || a.commission_generated || 0).toLocaleString()}</span>
                               </div>
                             );
                           })}
@@ -11963,6 +12033,23 @@ function AppContent() {
             <div style={{ display: 'flex', gap: '20px' }}>
               {[{ label: 'About Us', type: 'about' }, { label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
             </div>
+          </div>
+
+          <div style={{
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+            paddingTop: '24px',
+            marginTop: '24px',
+            textAlign: 'center',
+          }}>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', margin: '0 0 6px 0', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: '600' }}>Join Our Team</p>
+            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.84rem', margin: '0 0 12px 0' }}>
+              Interested in working with GetHome as a field agent or partner?
+            </p>
+            <button onClick={function() {
+              window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
+            }} style={{ backgroundColor: 'transparent', color: '#27ae60', border: '1.5px solid #27ae60', borderRadius: '20px', padding: '8px 22px', fontSize: '0.80rem', fontWeight: '700', cursor: 'pointer' }}>
+              Work With Us
+            </button>
           </div>
         </div>
       </footer>
