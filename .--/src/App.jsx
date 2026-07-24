@@ -3280,7 +3280,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       var res = await fetch(API_URL + '/api/admin/messages', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (res.ok) {
-        setMessages(data.messages || []);
+        setMessages(data.inbox || []);
         setMessageUnread(data.unread_count || 0);
       }
     } catch(e) { console.error('Fetch admin messages error:', e.message); }
@@ -3291,7 +3291,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       var token = localStorage.getItem('gh_token');
       var res = await fetch(API_URL + '/api/admin/sent-messages', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      if (res.ok) setSentMessages(data.messages || []);
+      if (res.ok) setSentMessages(data.sent || []);
     } catch(e) { console.error('Fetch admin sent messages error:', e.message); }
   };
 
@@ -4631,28 +4631,36 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       </button>
                                       {isExpanded && (
                                         <div style={{ marginTop: '12px', overflowX: 'auto' }}>
-                                          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '420px' }}>
+                                          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '620px' }}>
                                             <thead>
                                               <tr>
-                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Customer Name</th>
-                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Property Address</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Customer Email</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Property Name</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>GHA Code</th>
                                                 <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Completion Date</th>
+                                                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc' }}>Status</th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {inspectionsForGha.map(function(insp, idx) {
                                                 return (
                                                   <tr key={insp.id || idx}>
-                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.customer_name || '—'}</td>
-                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.property_address || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.customer_email || insp.customer_name || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{insp.property_title || insp.property_address || '—'}</td>
+                                                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
+                                                      {insp.agent_gha_code ? (
+                                                        <span style={{ padding: '2px 10px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontSize: '0.68rem' }}>{insp.agent_gha_code}</span>
+                                                      ) : '—'}
+                                                    </td>
                                                     <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9' }}>{fmtDate(insp.gha_done_at || insp.completion_date)}</td>
+                                                    <td style={{ padding: '8px 10px', fontSize: '0.80rem', color: '#0a2240', borderBottom: '1px solid #f1f5f9', textTransform: 'capitalize' }}>{insp.status || '—'}</td>
                                                   </tr>
                                                 );
                                               })}
                                             </tbody>
                                             <tfoot>
                                               <tr>
-                                                <td colSpan={2} style={{ padding: '8px 10px', fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>Total</td>
+                                                <td colSpan={4} style={{ padding: '8px 10px', fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>Total</td>
                                                 <td style={{ padding: '8px 10px', fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>{inspectionsForGha.length}</td>
                                               </tr>
                                             </tfoot>
@@ -6878,7 +6886,28 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       });
       var data = await res.json();
       if (res.ok) {
-        setMessages(data.messages || []);
+        var staffMessages = data.messages || [];
+        // Merge notifications into inbox as read-only system messages
+        var notifAsMessages = (ghaNotifications || []).map(function(n) {
+          return {
+            id: 'notif-' + n.id,
+            sender_type: 'SYSTEM',
+            sender_name: 'GetHome System',
+            sender_code: 'SYSTEM',
+            recipient_type: 'GHA',
+            subject: n.title,
+            message: n.message,
+            message_type: n.type,
+            is_read: n.is_read || n.read,
+            created_at: n.created_at,
+            is_notification: true,
+          };
+        });
+        // Combine and sort by date
+        var combined = [...staffMessages, ...notifAsMessages].sort(function(a, b) {
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        setMessages(combined);
         setMessageUnread(data.unread_count || 0);
       }
     } catch(e) { console.error('Fetch messages error:', e.message); }
@@ -7482,13 +7511,24 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   var isVerified = !!p.gha_verified;
                   var purposeColors = { rent: { bg: '#eff6ff', color: '#1e40af' }, sale: { bg: '#fef9ee', color: '#b45309' }, shortlet: { bg: '#f5f3ff', color: '#7c3aed' } };
                   var pc = purposeColors[p.purpose] || { bg: '#f1f5f9', color: '#64748b' };
+                  var imageUrl = null;
+                  if (p.display_image) {
+                    imageUrl = p.display_image;
+                  } else if (p.image_url) {
+                    imageUrl = p.image_url;
+                  } else if (Array.isArray(p.image_urls) && p.image_urls.length > 0) {
+                    imageUrl = p.image_urls[0];
+                  } else if (typeof p.image_urls === 'string') {
+                    try { imageUrl = JSON.parse(p.image_urls)[0]; } catch(e) {}
+                  }
                   return (
                     <div key={p.id} style={{ ...cardSt, padding: '16px 18px', display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                      {p.image_url && (
-                        <img src={p.image_url} alt={p.title} loading="lazy"
-                          style={{ width: '72px', height: '60px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }}
-                          onError={function(e){ e.target.style.display='none'; }} />
-                      )}
+                      {imageUrl
+                        ? <img src={imageUrl} alt={p.title} loading="lazy"
+                            style={{ width: '72px', height: '60px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }}
+                            onError={function(e){ e.target.style.display='none'; }} />
+                        : <div style={{ width: '72px', height: '60px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>🏠</div>
+                      }
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.9rem', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</p>
                         <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{p.location}</p>
@@ -7503,26 +7543,54 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Agent: {p.agent_name || p.agent_email || '—'}</p>
                         <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>₦{Number(p.price || 0).toLocaleString()}</p>
                       </div>
-                      {!isVerified && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+                        {!isVerified && (
+                          <button onClick={async function() {
+                            setVerifyingId(p.id);
+                            try {
+                              var res = await fetch(API_URL + '/api/gha/verify-listing', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                body: JSON.stringify({ property_id: p.id })
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Failed');
+                              setListings(function(prev) { return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { gha_verified: true }) : x; }); });
+                              showMsg('Listing marked as GHA Verified.');
+                            } catch(e) { showMsg('Error: ' + e.message); }
+                            finally { setVerifyingId(null); }
+                          }} disabled={isVerifying}
+                            style={{ padding: '8px 14px', backgroundColor: isVerifying ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isVerifying ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                            {isVerifying ? 'Verifying…' : 'Mark GHA Verified'}
+                          </button>
+                        )}
                         <button onClick={async function() {
-                          setVerifyingId(p.id);
-                          try {
-                            var res = await fetch(API_URL + '/api/gha/verify-listing', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                              body: JSON.stringify({ property_id: p.id })
-                            });
-                            var data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Failed');
-                            setListings(function(prev) { return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { gha_verified: true }) : x; }); });
-                            showMsg('Listing marked as GHA Verified.');
-                          } catch(e) { showMsg('Error: ' + e.message); }
-                          finally { setVerifyingId(null); }
-                        }} disabled={isVerifying}
-                          style={{ padding: '8px 14px', backgroundColor: isVerifying ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isVerifying ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0, fontFamily: "'Inter', sans-serif" }}>
-                          {isVerifying ? 'Verifying…' : 'Mark GHA Verified'}
+                            if (!window.confirm('Report this property as inaccurate or non-existent? Admin will be notified immediately.')) return;
+                            try {
+                              var tkn = localStorage.getItem('gh_staff_token');
+                              var res = await fetch(API_URL + '/api/staff/send-message', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn },
+                                body: JSON.stringify({
+                                  recipient_type: 'ADMIN',
+                                  recipient_id: 'admin',
+                                  subject: 'Inaccurate Property Report: ' + (p.title || ''),
+                                  message: 'GHA has flagged this property as inaccurate or non-existent.\n\nProperty: ' + (p.title || '') + '\nLocation: ' + (p.location || '') + '\nPosted by Agent: ' + (p.agent_name || '') + ' (' + (p.agent_email || '') + ')\nProperty ID: ' + p.id + '\n\nPlease review and take appropriate action.',
+                                  message_type: 'general',
+                                  related_property_id: p.id,
+                                }),
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Failed to report');
+                              alert('Property reported to admin successfully. Admin will review and take action.');
+                            } catch(err) {
+                              alert('Error: ' + err.message);
+                            }
+                          }}
+                          style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '8px', padding: '8px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                          ⚠ Report Inaccurate
                         </button>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -7965,7 +8033,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
                   else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
                 }
-                var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
+                var codeLabel = msg.is_notification ? 'SYSTEM' : (inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || ''));
                 var msgText = msg.message || '';
                 var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
                 return (
@@ -7974,15 +8042,15 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       setSelectedMessage(msg);
                       if (isUnread) {
                         setMessages(function(prev){ return prev.map(function(m){ return m.id === msg.id ? Object.assign({}, m, { read: true, is_read: true }) : m; }); });
-                        setMessageUnread(function(c){ return Math.max(0, c - 1); });
-                        markMessageRead(msg.id);
+                        if (!msg.is_notification) setMessageUnread(function(c){ return Math.max(0, c - 1); });
+                        if (!msg.is_notification) markMessageRead(msg.id);
                       }
                     }}
                     style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: isUnread ? '#f0fff4' : '#fff', borderLeft: isUnread ? '3px solid #27ae60' : '3px solid transparent', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: msg.is_notification ? '#f1f5f9' : '#eff6ff', color: msg.is_notification ? '#64748b' : '#1e40af', border: '1px solid ' + (msg.is_notification ? '#e2e8f0' : '#bfdbfe') }}>{codeLabel}</span>
                           <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{msg.subject || '(no subject)'}</span>
                         </div>
                         <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>{preview}</p>
@@ -8000,13 +8068,15 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
                 : m.message_type === 'new_listing_alert'
                 ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                : m.is_notification
+                ? { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'System Notification' }
                 : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
               return (
                 <div style={{ ...cardSt, padding: '20px 24px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff' }}>
-                        From: {m.sender_code || m.sender_type || 'Unknown'}{m.sender_name ? ' — ' + m.sender_name : ''}
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: m.is_notification ? '#64748b' : '#0a2240', color: '#fff' }}>
+                        From: {m.is_notification ? 'SYSTEM' : (m.sender_code || m.sender_type || 'Unknown')}{m.sender_name ? ' — ' + m.sender_name : ''}
                       </span>
                       <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#334155' }}>
                         To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
@@ -8031,14 +8101,16 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         View Property
                       </button>
                     )}
-                    <button onClick={function(){
-                        setComposeForm({ recipient_type: m.sender_type === 'ADMIN' ? 'ADMIN' : 'SA', recipient_id: m.sender_type === 'ADMIN' ? '' : (staffUser.sa_id || ''), subject: 'Re: ' + (m.subject || ''), message: '' });
-                        setMessageMsg('');
-                        setShowComposeModal(true);
-                      }}
-                      style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
-                      Reply
-                    </button>
+                    {!m.is_notification && (
+                      <button onClick={function(){
+                          setComposeForm({ recipient_type: m.sender_type === 'ADMIN' ? 'ADMIN' : 'SA', recipient_id: m.sender_type === 'ADMIN' ? '' : (staffUser.sa_id || ''), subject: 'Re: ' + (m.subject || ''), message: '' });
+                          setMessageMsg('');
+                          setShowComposeModal(true);
+                        }}
+                        style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        Reply
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -8097,12 +8169,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 setComposing(true);
                 try {
                   var token = localStorage.getItem('gh_staff_token');
-                  var recipientId = composeForm.recipient_type === 'ADMIN' ? '00000000-0000-0000-0000-000000000000' : composeForm.recipient_id;
+                  var recipientType = composeForm.recipient_type.toUpperCase();
+                  var recipientId = recipientType === 'ADMIN' ? '00000000-0000-0000-0000-000000000000' : composeForm.recipient_id;
                   var res = await fetch(API_URL + '/api/staff/send-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                     body: JSON.stringify({
-                      recipient_type: composeForm.recipient_type,
+                      recipient_type: recipientType,
                       recipient_id: recipientId,
                       subject: composeForm.subject.trim() || null,
                       message: composeForm.message.trim(),
@@ -8237,7 +8310,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [inboxTab, setInboxTab]                     = useState('inbox');
   const [selectedMessage, setSelectedMessage]       = useState(null);
   const [showComposeModal, setShowComposeModal]     = useState(false);
-  const [composeForm, setComposeForm]               = useState({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+  const [composeForm, setComposeForm]               = useState({ recipient_type: '', recipient_id: '', subject: '', message: '' });
   const [composing, setComposing]                   = useState(false);
   const [messageMsg, setMessageMsg]                 = useState('');
   const [allSasList, setAllSasList]                 = useState([]);
@@ -8326,7 +8399,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       });
       var data = await res.json();
       if (res.ok) {
-        setMessages(data.messages || []);
+        var staffMessages = data.messages || [];
+        // Merge bell notifications (inspection requests) into inbox as read-only system items
+        var notifAsMessages = (notifications || []).map(function(n) {
+          return {
+            id: 'notif-' + n.id,
+            sender_type: 'SYSTEM',
+            sender_name: 'GetHome System',
+            sender_code: 'SYSTEM',
+            recipient_type: 'SA',
+            subject: 'New Inspection Request' + (n.property_title || n.property_location || n.property_address ? ': ' + (n.property_title || n.property_location || n.property_address) : ''),
+            message: (n.customer_name || n.user_name || 'A customer') + ' requested an inspection' + (n.property_title || n.property_location || n.property_address ? ' for ' + (n.property_title || n.property_location || n.property_address) : '') + '.',
+            message_type: 'inspection_request',
+            is_read: !!n.read,
+            created_at: n.created_at,
+            is_notification: true,
+          };
+        });
+        var combined = [...staffMessages, ...notifAsMessages].sort(function(a, b) {
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        setMessages(combined);
         setMessageUnread(data.unread_count || 0);
       }
     } catch(e) { console.error('Fetch messages error:', e.message); }
@@ -8428,6 +8521,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   }
 
   const fetchSAListings = async function() {
+    console.log('fetchSAListings called - token:', localStorage.getItem('gh_staff_token') ? 'EXISTS' : 'NULL');
     setListingsLoading(true);
     try {
       var token = localStorage.getItem('gh_staff_token');
@@ -8515,7 +8609,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     }
     if (saTab === 'ghas') { fetchSaGhas(); fetchAllMyAgents(); fetchInspectionStats(); }
     if (saTab === 'agents') { fetchPendingAgents(); fetchSaGhas(); }
-    if (saTab === 'listings') fetchSAListings();
+    if (saTab === 'listings') { fetchSAListings(); fetchInspections(); }
   }, [saTab, subMonth]);
 
   useEffect(function() {
@@ -10133,25 +10227,66 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {filteredListings.map(function(l) {
+                    var listingInspections = inspections.filter(function(i) { return i.property_id === l.id; });
+                    var imageUrl = null;
+                    if (l.display_image) {
+                      imageUrl = l.display_image;
+                    } else if (l.image_url) {
+                      imageUrl = l.image_url;
+                    } else if (Array.isArray(l.image_urls) && l.image_urls.length > 0) {
+                      imageUrl = l.image_urls[0];
+                    } else if (typeof l.image_urls === 'string') {
+                      try { imageUrl = JSON.parse(l.image_urls)[0]; } catch(e) {}
+                    }
                     return (
                       <div key={l.id} style={{ ...cardSt, padding: '14px 16px' }}>
                         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: '12px' }}>
-                          {l.image_url
-                            ? <img src={l.image_url} alt={l.title} loading="lazy" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display = 'none'; }} />
-                            : <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+                          {imageUrl
+                            ? <img src={imageUrl} alt={l.title} loading="lazy" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display = 'none'; }} />
+                            : <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>🏠</div>
                           }
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{l.title || 'Untitled'}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
+                              <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{l.title || 'Untitled'}</p>
+                              {l.agent_gha_code && <span style={{ fontSize: '0.66rem', padding: '3px 10px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code}</span>}
+                            </div>
                             <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{l.location || '—'}</p>
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '4px' }}>
                               <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#166534', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(l.price)}</span>
                               {listingStatusBadge(l.status)}
-                              {l.agent_gha_code && <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code || '—'}</span>}
                               <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{listingTimeAgo(l.created_at)}</span>
+                              {l.gha_verified ? (
+                                <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700' }}>
+                                  ✓ GHA Verified {l.gha_verified_at ? '· ' + new Date(l.gha_verified_at).toLocaleDateString() : ''}
+                                </span>
+                              ) : (
+                                <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700' }}>
+                                  ⚠ Awaiting GHA Verification
+                                </span>
+                              )}
                             </div>
                             <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem', fontFamily: "'Inter', sans-serif" }}>{l.agent_name || '—'} · {l.agent_email || '—'}</p>
+
+                            {/* Customer inspection requests for this property */}
+                            {listingInspections.length > 0 && (
+                              <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed #e2e8f0' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.66rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.05em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>
+                                  Inspection Requests ({listingInspections.length})
+                                </p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {listingInspections.map(function(insp) {
+                                    return (
+                                      <div key={insp.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>
+                                        <span style={{ color: '#0a2240', fontWeight: '600' }}>{insp.customer_email || insp.customer_name || 'Unknown Customer'}</span>
+                                        <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>{insp.status || 'pending'}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <div style={{ display: 'flex', justifyContent: isMobile ? 'flex-start' : 'flex-end', width: isMobile ? '100%' : undefined }}>
+                          <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', gap: '8px', justifyContent: isMobile ? 'flex-start' : 'flex-end', width: isMobile ? '100%' : undefined, flexWrap: 'wrap' }}>
                             <button onClick={function(){
                                 setComposeForm({
                                   recipient_type: 'GHA',
@@ -10166,6 +10301,32 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                               }}
                               style={{ padding: '7px 14px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
                               Request Verification
+                            </button>
+                            <button onClick={async function() {
+                                if (!window.confirm('Report this property as inaccurate or non-existent? Admin will be notified immediately.')) return;
+                                try {
+                                  var token = localStorage.getItem('gh_staff_token');
+                                  var res = await fetch(API_URL + '/api/staff/send-message', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({
+                                      recipient_type: 'ADMIN',
+                                      recipient_id: 'admin',
+                                      subject: 'Inaccurate Property Report: ' + (l.title || ''),
+                                      message: 'SA has flagged this property as inaccurate or non-existent.\n\nProperty: ' + (l.title || '') + '\nLocation: ' + (l.location || '') + '\nPosted by Agent: ' + (l.agent_name || '') + ' (' + (l.agent_email || '') + ')\nAgent GHA: ' + (l.agent_gha_code || 'N/A') + '\nProperty ID: ' + l.id + '\n\nPlease review and take appropriate action.',
+                                      message_type: 'general',
+                                      related_property_id: l.id,
+                                    }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed to report');
+                                  alert('Property reported to admin successfully. Admin will review and take action.');
+                                } catch(err) {
+                                  alert('Error: ' + err.message);
+                                }
+                              }}
+                              style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '8px', padding: '7px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                              ⚠ Report Inaccurate
                             </button>
                           </div>
                         </div>
@@ -10495,7 +10656,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
                   else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
                 }
-                var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
+                var codeLabel = msg.is_notification ? 'SYSTEM' : (inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || ''));
                 var msgText = msg.message || '';
                 var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
                 return (
@@ -10504,15 +10665,15 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       setSelectedMessage(msg);
                       if (isUnread) {
                         setMessages(function(prev){ return prev.map(function(m){ return m.id === msg.id ? Object.assign({}, m, { read: true, is_read: true }) : m; }); });
-                        setMessageUnread(function(c){ return Math.max(0, c - 1); });
-                        markMessageRead(msg.id);
+                        if (!msg.is_notification) setMessageUnread(function(c){ return Math.max(0, c - 1); });
+                        if (!msg.is_notification) markMessageRead(msg.id);
                       }
                     }}
                     style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: isUnread ? '#f0fff4' : '#fff', borderLeft: isUnread ? '3px solid #27ae60' : '3px solid transparent', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: msg.is_notification ? '#f1f5f9' : '#eff6ff', color: msg.is_notification ? '#64748b' : '#1e40af', border: '1px solid ' + (msg.is_notification ? '#e2e8f0' : '#bfdbfe') }}>{codeLabel}</span>
                           <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{msg.subject || '(no subject)'}</span>
                         </div>
                         <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>{preview}</p>
@@ -10530,13 +10691,15 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
                 : m.message_type === 'new_listing_alert'
                 ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                : m.is_notification
+                ? { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'System Notification' }
                 : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
               return (
                 <div style={{ ...cardSt, padding: '20px 24px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff' }}>
-                        From: {m.sender_code || m.sender_type || 'Unknown'}{m.sender_name ? ' — ' + m.sender_name : ''}
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: m.is_notification ? '#64748b' : '#0a2240', color: '#fff' }}>
+                        From: {m.is_notification ? 'SYSTEM' : (m.sender_code || m.sender_type || 'Unknown')}{m.sender_name ? ' — ' + m.sender_name : ''}
                       </span>
                       <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#334155' }}>
                         To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
@@ -10571,14 +10734,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         </button>
                       </>
                     )}
-                    <button onClick={function(){
-                        setComposeForm({ recipient_type: m.sender_type || 'SA', recipient_id: m.sender_id || '', subject: 'Re: ' + (m.subject || ''), message: '' });
-                        setMessageMsg('');
-                        setShowComposeModal(true);
-                      }}
-                      style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
-                      Reply
-                    </button>
+                    {!m.is_notification && (
+                      <button onClick={function(){
+                          setComposeForm({ recipient_type: m.sender_type || 'SA', recipient_id: m.sender_id || '', subject: 'Re: ' + (m.subject || ''), message: '' });
+                          setMessageMsg('');
+                          setShowComposeModal(true);
+                        }}
+                        style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        Reply
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -10597,6 +10762,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Send To</label>
               <select value={composeForm.recipient_type} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_type: e.target.value, recipient_id: '' }); }); }}
                 style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value=''>Select recipient type...</option>
                 <option value='SA'>Service Agent (SA)</option>
                 <option value='GHA'>GetHome Agent (GHA)</option>
                 <option value='ADMIN'>Admin</option>
@@ -10649,22 +10815,25 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             {messageMsg && <p style={{ color: messageMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{messageMsg}</p>}
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={function() { setShowComposeModal(false); setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); }}
+              <button onClick={function() { setShowComposeModal(false); setComposeForm({ recipient_type: '', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); }}
                 style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
                 Cancel
               </button>
               <button onClick={async function() {
                 if (!composeForm.message.trim()) { setMessageMsg('Error: Message cannot be empty'); return; }
+                if (!composeForm.recipient_type) { setMessageMsg('Error: Please select who to send to'); return; }
                 if (composeForm.recipient_type !== 'ADMIN' && !composeForm.recipient_id) { setMessageMsg('Error: Please select a recipient'); return; }
                 setComposing(true);
                 try {
                   var token = localStorage.getItem('gh_staff_token');
-                  var recipientId = composeForm.recipient_type === 'ADMIN' ? '00000000-0000-0000-0000-000000000000' : composeForm.recipient_id;
+                  var recipientType = composeForm.recipient_type.toUpperCase();
+                  var recipientId = recipientType === 'ADMIN' ? 'admin' : composeForm.recipient_id;
+                  console.log('Sending message - recipient_type:', recipientType, '| recipient_id:', recipientId);
                   var res = await fetch(API_URL + '/api/staff/send-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                     body: JSON.stringify({
-                      recipient_type: composeForm.recipient_type,
+                      recipient_type: recipientType,
                       recipient_id: recipientId,
                       subject: composeForm.subject.trim() || null,
                       message: composeForm.message.trim(),
@@ -10675,7 +10844,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   var data = await res.json();
                   if (!res.ok) throw new Error(data.error || 'Failed to send');
                   setMessageMsg('Message sent successfully');
-                  setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+                  setComposeForm({ recipient_type: '', recipient_id: '', subject: '', message: '' });
                   setTimeout(function() { setShowComposeModal(false); setMessageMsg(''); }, 1500);
                   fetchMessages();
                 } catch(err) { setMessageMsg('Error: ' + err.message); }
