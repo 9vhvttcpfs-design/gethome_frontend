@@ -6799,7 +6799,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
-      setMonthlyHistory(data);
+      var enrichedSnapshots = (data.agent_snapshots || []).map(function(snap) {
+        return Object.assign({}, snap, {
+          agent_email: snap.agent_email || snap.email || '—',
+          gha_code: snap.gha_code || '—',
+        });
+      });
+      setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
@@ -7816,9 +7822,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {snapshots.map(function(a, idx) {
                             return (
-                              <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                              <div key={a.id || a.agent_email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
                                 <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
-                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || '—'}</span>
                                 <span>{tierBadge(a.tier || a.subscription_tier)}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{fmtMoney(a.subscription_amount)}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
@@ -8221,6 +8227,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
+  // Listings tab state
+  const [saListings, setSaListings]                 = useState([]);
+  const [listingsLoading, setListingsLoading]       = useState(false);
+  const [listingSearch, setListingSearch]           = useState('');
   const [messages, setMessages]                     = useState([]);
   const [sentMessages, setSentMessages]             = useState([]);
   const [messageUnread, setMessageUnread]           = useState(0);
@@ -8230,6 +8240,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [composeForm, setComposeForm]               = useState({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
   const [composing, setComposing]                   = useState(false);
   const [messageMsg, setMessageMsg]                 = useState('');
+  const [allSasList, setAllSasList]                 = useState([]);
 
   const fetchSALocations = async function() {
     try {
@@ -8416,6 +8427,30 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     } finally { setHistoryLoading(false); }
   }
 
+  const fetchSAListings = async function() {
+    setListingsLoading(true);
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/sa/my-listings', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setSaListings(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('SA listings error:', e.message); }
+    finally { setListingsLoading(false); }
+  };
+
+  const fetchAllSAs = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/sa/peer-sas', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setAllSasList(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Peer SAs fetch error:', e.message); }
+  };
+
   async function fetchSAEarnings(month, silent) {
     var m = month || selectedMonth;
     var authToken = localStorage.getItem('gh_staff_token');
@@ -8454,7 +8489,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   }
 
   useEffect(function() {
-    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations(); fetchMessages();
+    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations(); fetchMessages(); fetchAllSAs();
     var notifInterval = setInterval(fetchNotifications, 30000);
     var messagesInterval = setInterval(fetchMessages, 30000);
     return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
@@ -8480,6 +8515,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     }
     if (saTab === 'ghas') { fetchSaGhas(); fetchAllMyAgents(); fetchInspectionStats(); }
     if (saTab === 'agents') { fetchPendingAgents(); fetchSaGhas(); }
+    if (saTab === 'listings') fetchSAListings();
   }, [saTab, subMonth]);
 
   useEffect(function() {
@@ -8531,6 +8567,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'overview', label: 'Overview' },
     { id: 'ghas', label: 'My GHAs' },
     { id: 'agents', label: 'Agents' },
+    { id: 'listings', label: 'Listings' },
     { id: 'subscriptions', label: 'Subscriptions' },
     { id: 'payments', label: 'Customer Payments' },
     { id: 'inspections', label: 'Inspections' },
@@ -10053,6 +10090,94 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           );
         })()}
 
+        {/* ── LISTINGS ── */}
+        {saTab === 'listings' && (function() {
+          var filteredListings = saListings.filter(function(l) {
+            if (!listingSearch.trim()) return true;
+            var q = listingSearch.toLowerCase();
+            return (l.title || '').toLowerCase().includes(q) ||
+              (l.location || '').toLowerCase().includes(q) ||
+              (l.agent_name || '').toLowerCase().includes(q) ||
+              (l.agent_email || '').toLowerCase().includes(q);
+          });
+          function listingStatusBadge(status) {
+            var cfg = {
+              active: { bg: '#f0fff4', color: '#166534', border: '#86efac', label: 'ACTIVE' },
+              pending: { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'PENDING' },
+              sold: { bg: '#eff6ff', color: '#0a2240', border: '#bfdbfe', label: 'SOLD' },
+            };
+            var c = cfg[(status || 'active').toLowerCase()] || cfg.active;
+            return <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: c.bg, color: c.color, border: '1px solid ' + c.border, whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>{c.label}</span>;
+          }
+          function listingTimeAgo(dateStr) {
+            if (!dateStr) return '—';
+            var diffMins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return diffMins + 'm ago';
+            if (diffMins < 1440) return Math.floor(diffMins / 60) + 'h ago';
+            return Math.floor(diffMins / 1440) + 'd ago';
+          }
+          return (
+            <div>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Listings</h2>
+              <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 14px 0', fontFamily: "'Inter', sans-serif" }}>{saListings.length} listing{saListings.length === 1 ? '' : 's'} from your agents</p>
+
+              <input type="text" value={listingSearch} onChange={function(e){ setListingSearch(e.target.value); }}
+                placeholder="Search by title, location, agent name…"
+                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '16px', color: '#0a2240', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }} />
+
+              {listingsLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading listings…</p></div>
+              ) : filteredListings.length === 0 ? (
+                <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No listings found.</p></div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filteredListings.map(function(l) {
+                    return (
+                      <div key={l.id} style={{ ...cardSt, padding: '14px 16px' }}>
+                        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: '12px' }}>
+                          {l.image_url
+                            ? <img src={l.image_url} alt={l.title} loading="lazy" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display = 'none'; }} />
+                            : <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+                          }
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{l.title || 'Untitled'}</p>
+                            <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{l.location || '—'}</p>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#166534', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(l.price)}</span>
+                              {listingStatusBadge(l.status)}
+                              {l.agent_gha_code && <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code || '—'}</span>}
+                              <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{listingTimeAgo(l.created_at)}</span>
+                            </div>
+                            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem', fontFamily: "'Inter', sans-serif" }}>{l.agent_name || '—'} · {l.agent_email || '—'}</p>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: isMobile ? 'flex-start' : 'flex-end', width: isMobile ? '100%' : undefined }}>
+                            <button onClick={function(){
+                                setComposeForm({
+                                  recipient_type: 'GHA',
+                                  recipient_id: l.agent_gha_id || '',
+                                  subject: 'Property Verification Request: ' + (l.title || ''),
+                                  message: 'Please verify the property posted by agent ' + (l.agent_name || '') + '.\n\nProperty: ' + (l.title || '') + '\nLocation: ' + (l.location || '') + '\nPrice: NGN ' + (l.price || '') + '\n\nPlease conduct a physical inspection and confirm the property details are accurate.',
+                                  message_type: 'listing_verification',
+                                  related_property_id: l.id,
+                                });
+                                setMessageMsg('');
+                                setShowComposeModal(true);
+                              }}
+                              style={{ padding: '7px 14px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                              Request Verification
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── EARNINGS ── */}
         {saTab === 'earnings' && (function() {
           var ghaRows = (earningsData && earningsData.gha_breakdown) || [];
@@ -10478,20 +10603,34 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               </select>
             </div>
 
-            {composeForm.recipient_type !== 'ADMIN' && (
+            {composeForm.recipient_type === 'SA' && (
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>
-                  Select {composeForm.recipient_type === 'SA' ? 'Service Agent' : 'GHA Agent'}
-                </label>
-                <select value={composeForm.recipient_id} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_id: e.target.value }); }); }}
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Select Service Agent</label>
+                <select value={composeForm.recipient_id}
+                  onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_id: e.target.value }); }); }}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
-                  <option value=''>Select recipient...</option>
-                  {composeForm.recipient_type === 'GHA'
-                    ? (saGhas || []).map(function(g) { return <option key={g.id} value={g.id}>{g.gha_code} — {g.full_name}</option>; })
-                    : []
-                  }
+                  <option value=''>Select Service Agent...</option>
+                  {allSasList.map(function(sa) {
+                    return <option key={sa.id} value={sa.id}>{sa.sa_code} — {sa.full_name}</option>;
+                  })}
                 </select>
               </div>
+            )}
+            {composeForm.recipient_type === 'GHA' && (
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Select GHA Agent</label>
+                <select value={composeForm.recipient_id}
+                  onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_id: e.target.value }); }); }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                  <option value=''>Select GHA Agent...</option>
+                  {saGhas.map(function(gha) {
+                    return <option key={gha.id} value={gha.id}>{gha.gha_code} — {gha.full_name}</option>;
+                  })}
+                </select>
+              </div>
+            )}
+            {composeForm.recipient_type === 'ADMIN' && (
+              <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '4px 0 0 0' }}>Message will be sent directly to GetHome Admin</p>
             )}
 
             <div style={{ marginBottom: '12px' }}>
@@ -10529,6 +10668,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       recipient_id: recipientId,
                       subject: composeForm.subject.trim() || null,
                       message: composeForm.message.trim(),
+                      message_type: composeForm.message_type || undefined,
+                      related_property_id: composeForm.related_property_id || undefined,
                     }),
                   });
                   var data = await res.json();
