@@ -2796,6 +2796,15 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffEarnings, setStaffEarnings]               = useState(null);
   const [earningsLoading, setEarningsLoading]           = useState(false);
   const [markingStaffPaid, setMarkingStaffPaid]         = useState({});
+  const [messages, setMessages]                         = useState([]);
+  const [sentMessages, setSentMessages]                 = useState([]);
+  const [messageUnread, setMessageUnread]               = useState(0);
+  const [inboxTab, setInboxTab]                         = useState('inbox');
+  const [selectedMessage, setSelectedMessage]           = useState(null);
+  const [showComposeModal, setShowComposeModal]         = useState(false);
+  const [composeForm, setComposeForm]                   = useState({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+  const [composing, setComposing]                       = useState(false);
+  const [messageMsg, setMessageMsg]                     = useState('');
   const [agentSearch, setAgentSearch]                   = useState('');
   const [agentSubTab, setAgentSubTab]                   = useState('pending');
   const [earningsSubTab, setEarningsSubTab]             = useState('gha');
@@ -3032,7 +3041,20 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
-      setMonthlyHistory(data);
+      // Enrich agent snapshots with gha_code/gha_name from gha_summaries (agent_snapshots only stores gha_id)
+      var ghaMap = {};
+      (data.gha_summaries || []).forEach(function(g) {
+        if (g.gha_id) ghaMap[g.gha_id] = { gha_code: g.gha_code, gha_name: g.gha_name };
+      });
+      var enrichedSnapshots = (data.agent_snapshots || []).map(function(snap) {
+        var ghaInfo = ghaMap[snap.gha_id] || {};
+        return Object.assign({}, snap, {
+          gha_code: snap.gha_code || ghaInfo.gha_code || '—',
+          gha_name: snap.gha_name || ghaInfo.gha_name || '—',
+          agent_email: snap.agent_email || snap.email || '—',
+        });
+      });
+      setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
@@ -3252,6 +3274,38 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     finally { setGhasAdminLoading(false); }
   };
 
+  const fetchAdminMessages = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/messages', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) {
+        setMessages(data.messages || []);
+        setMessageUnread(data.unread_count || 0);
+      }
+    } catch(e) { console.error('Fetch admin messages error:', e.message); }
+  };
+
+  const fetchAdminSentMessages = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/sent-messages', { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) setSentMessages(data.messages || []);
+    } catch(e) { console.error('Fetch admin sent messages error:', e.message); }
+  };
+
+  const markAdminMessageRead = async function(messageId) {
+    try {
+      var token = localStorage.getItem('gh_token');
+      await fetch(API_URL + '/api/admin/mark-message-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ message_id: messageId }),
+      });
+    } catch(e) { console.error('Mark admin message read error:', e.message); }
+  };
+
   const fetchAdminInspections = async function() {
     setAdminInspLoading(true);
     try {
@@ -3413,8 +3467,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     fetchDeposits();
     fetchAllSAs();
     fetchAllGHAsAdmin();
+    fetchAdminMessages();
     const interval = setInterval(fetchVerifiedPendingAgents, 15000);
-    return () => clearInterval(interval);
+    const messagesInterval = setInterval(fetchAdminMessages, 30000);
+    return () => { clearInterval(interval); clearInterval(messagesInterval); };
   }, [checkingAuth, sessionUser]);
 
   useEffect(function() {
@@ -3708,7 +3764,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
-    ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],
+    ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -3721,6 +3777,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
     if (t === 'staff-payments') fetchStaffPayments();
     if (t === 'performance') fetchKPIs();
+    if (t === 'inbox') { fetchAdminMessages(); if (allSAs.length === 0) fetchAllSAs(); if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }
   }
 
   return (
@@ -3771,7 +3828,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
           {mobileNavOpen && (
             <div style={{ position: 'absolute', left: '16px', right: '16px', top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden' }}>
               {navItems.map(function([t, label]) {
-                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
+                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : t === 'inbox' ? messageUnread : 0;
                 return (
                   <button key={t}
                     onClick={function() { switchTab(t); setMobileNavOpen(false); }}
@@ -3795,7 +3852,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '10px 8px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1px solid #e8edf5' }}>
               {navItems.map(function([t, label]) {
                 var active = adminTab === t;
-                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : 0;
+                var badge = t === 'deposits' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : t === 'agents' ? pendingAgents.length : t === 'inbox' ? messageUnread : 0;
                 return (
                   <div key={t} onClick={function(){ switchTab(t); }}
                     style={{ padding: '10px 16px', borderRadius: '10px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: '600', color: active ? '#fff' : '#64748b', backgroundColor: active ? '#0a2240' : 'transparent', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
@@ -5949,7 +6006,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               var filteredSnapshots = agentSnapshots.filter(function(a) {
                 if (!historyAgentSearch.trim()) return true;
                 var q = historyAgentSearch.toLowerCase();
-                return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
+                return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.agent_email || a.email || '').toLowerCase().includes(q);
               });
               function tierBadgeSm(tier) {
                 var cfg = { free: { bg: '#f1f5f9', color: '#64748b' }, premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
@@ -6054,9 +6111,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {filteredSnapshots.map(function(a, idx) {
                                 return (
-                                  <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                  <div key={a.id || a.agent_email || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
                                     <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
-                                    <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                    <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || a.email || '—'}</span>
                                     <span>{tierBadgeSm(a.tier || a.subscription_tier)}</span>
                                     <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
                                     <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
@@ -6396,6 +6453,127 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               );
             })()}
 
+            {/* ── INBOX ── */}
+            {adminTab === 'inbox' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Inbox</h2>
+                  <button onClick={function(){ setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); setShowComposeModal(true); }}
+                    style={{ padding: '8px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                    + Compose Message
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+                  <button onClick={function(){ setInboxTab('inbox'); }}
+                    style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'inbox' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'inbox' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Inbox
+                    {messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800' }}>{messageUnread}</span>}
+                  </button>
+                  <button onClick={function(){ setInboxTab('sent'); if (sentMessages.length === 0) fetchAdminSentMessages(); }}
+                    style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'sent' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'sent' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                    Sent
+                  </button>
+                </div>
+
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
+                  {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                      <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                      <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0' }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
+                    </div>
+                  ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
+                    var isUnread = inboxTab === 'inbox' && !msg.read && !msg.is_read;
+                    var createdAt = msg.created_at ? new Date(msg.created_at) : null;
+                    var timeAgo = '';
+                    if (createdAt) {
+                      var diffMins = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+                      if (diffMins < 1) timeAgo = 'Just now';
+                      else if (diffMins < 60) timeAgo = diffMins + 'm ago';
+                      else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
+                      else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
+                    }
+                    var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
+                    var msgText = msg.message || '';
+                    var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
+                    return (
+                      <div key={msg.id}
+                        onClick={function(){
+                          setSelectedMessage(msg);
+                          if (isUnread) {
+                            setMessages(function(prev){ return prev.map(function(m){ return m.id === msg.id ? Object.assign({}, m, { read: true, is_read: true }) : m; }); });
+                            setMessageUnread(function(c){ return Math.max(0, c - 1); });
+                            markAdminMessageRead(msg.id);
+                          }
+                        }}
+                        style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: isUnread ? '#f0fff4' : '#fff', borderLeft: isUnread ? '3px solid #27ae60' : '3px solid transparent', cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                              <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{msg.subject || '(no subject)'}</span>
+                            </div>
+                            <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem' }}>{preview}</p>
+                          </div>
+                          <span style={{ color: '#94a3b8', fontSize: '0.70rem', whiteSpace: 'nowrap' }}>{timeAgo}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {selectedMessage && (function() {
+                  var m = selectedMessage;
+                  var typeBadge = m.message_type === 'inspection_note'
+                    ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
+                    : m.message_type === 'new_listing_alert'
+                    ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                    : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
+                  return (
+                    <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', padding: '20px 24px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff' }}>
+                            From: {m.sender_code || m.sender_type || 'Unknown'}{m.sender_name ? ' — ' + m.sender_name : ''}
+                          </span>
+                          <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                            To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
+                          </span>
+                        </div>
+                        <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                      </div>
+                      <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800' }}>{m.subject || '(no subject)'}</h3>
+                      <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
+                      <p style={{ margin: '0 0 18px 0', color: '#334155', fontSize: '0.88rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{m.message}</p>
+
+                      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                        {m.message_type === 'inspection_note' && m.related_inspection_id && (
+                          <button onClick={function(){ switchTab('inspections'); }}
+                            style={{ padding: '8px 16px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                            View Inspection
+                          </button>
+                        )}
+                        {m.message_type === 'new_listing_alert' && m.related_property_id && (
+                          <button onClick={function(){ window.open(window.location.origin + '/?property_id=' + m.related_property_id, '_blank'); }}
+                            style={{ padding: '8px 16px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                            View Property
+                          </button>
+                        )}
+                        <button onClick={function(){
+                            setComposeForm({ recipient_type: m.sender_type === 'GHA' ? 'GHA' : 'SA', recipient_id: m.sender_id || '', subject: 'Re: ' + (m.subject || ''), message: '' });
+                            setMessageMsg('');
+                            setShowComposeModal(true);
+                          }}
+                          style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                          Reply
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -6403,6 +6581,87 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       {/* Modals */}
       {depositViewingProperty && (
         <PricingModal property={depositViewingProperty} onClose={function(){ setDepositViewingProperty(null); }} user={user} onUserChange={function(){}} />
+      )}
+
+      {showComposeModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 16px 0', fontSize: '1rem' }}>Compose Message</h3>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Send To</label>
+              <select value={composeForm.recipient_type} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_type: e.target.value, recipient_id: '' }); }); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value='SA'>Service Agent (SA)</option>
+                <option value='GHA'>GetHome Agent (GHA)</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>
+                Select {composeForm.recipient_type === 'SA' ? 'Service Agent' : 'GHA Agent'}
+              </label>
+              <select value={composeForm.recipient_id} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_id: e.target.value }); }); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value=''>Select recipient...</option>
+                {composeForm.recipient_type === 'SA'
+                  ? (allSAs || []).map(function(s) { return <option key={s.id} value={s.id}>{(s.sa_code || s.staff_id) + ' — ' + (s.full_name || s.name)}</option>; })
+                  : (allGHAsAdmin || []).map(function(g) { return <option key={g.id} value={g.id}>{(g.gha_code || g.staff_id) + ' — ' + (g.full_name || g.name)}</option>; })
+                }
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Subject</label>
+              <input value={composeForm.subject} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { subject: e.target.value }); }); }}
+                placeholder='Message subject...' style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Message *</label>
+              <textarea value={composeForm.message} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { message: e.target.value }); }); }}
+                placeholder='Type your message...' rows={5}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', resize: 'vertical', boxSizing: 'border-box' }} />
+            </div>
+
+            {messageMsg && <p style={{ color: messageMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{messageMsg}</p>}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() { setShowComposeModal(false); setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); }}
+                style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={async function() {
+                if (!composeForm.message.trim()) { setMessageMsg('Error: Message cannot be empty'); return; }
+                if (!composeForm.recipient_id) { setMessageMsg('Error: Please select a recipient'); return; }
+                setComposing(true);
+                try {
+                  var token = localStorage.getItem('gh_token');
+                  var res = await fetch(API_URL + '/api/admin/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      recipient_type: composeForm.recipient_type,
+                      recipient_id: composeForm.recipient_id,
+                      subject: composeForm.subject.trim() || null,
+                      message: composeForm.message.trim(),
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed to send');
+                  setMessageMsg('Message sent successfully');
+                  setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+                  setTimeout(function() { setShowComposeModal(false); setMessageMsg(''); }, 1500);
+                  fetchAdminMessages();
+                } catch(err) { setMessageMsg('Error: ' + err.message); }
+                finally { setComposing(false); }
+              }} disabled={composing}
+                style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: composing ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', cursor: composing ? 'not-allowed' : 'pointer' }}>
+                {composing ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -6464,6 +6723,15 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
+  const [messages, setMessages]                     = useState([]);
+  const [sentMessages, setSentMessages]             = useState([]);
+  const [messageUnread, setMessageUnread]           = useState(0);
+  const [inboxTab, setInboxTab]                     = useState('inbox');
+  const [selectedMessage, setSelectedMessage]       = useState(null);
+  const [showComposeModal, setShowComposeModal]     = useState(false);
+  const [composeForm, setComposeForm]               = useState({ recipient_type: 'SA', recipient_id: staffUser.sa_id || '', subject: '', message: '' });
+  const [composing, setComposing]                   = useState(false);
+  const [messageMsg, setMessageMsg]                 = useState('');
 
   function showMsg(msg) { setActionMsg(msg); setTimeout(function(){ setActionMsg(''); }, 4000); }
 
@@ -6596,12 +6864,49 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     } catch(e) { console.error('GHA profile fetch error:', e.message); }
   };
 
+  const fetchMessages = async function(silent) {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/staff/messages', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) {
+        setMessages(data.messages || []);
+        setMessageUnread(data.unread_count || 0);
+      }
+    } catch(e) { console.error('Fetch messages error:', e.message); }
+  };
+
+  const fetchSentMessages = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/staff/sent-messages', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setSentMessages(data.messages || []);
+    } catch(e) { console.error('Fetch sent messages error:', e.message); }
+  };
+
+  const markMessageRead = async function(messageId) {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/staff/mark-message-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ message_id: messageId }),
+      });
+    } catch(e) { console.error('Mark message read error:', e.message); }
+  };
+
   useEffect(function() { fetchGHAProfile(); }, []);
 
   useEffect(function() {
-    fetchOverview(); fetchAgents(); fetchGHANotifications(); fetchGhaRatings();
+    fetchOverview(); fetchAgents(); fetchGHANotifications(); fetchGhaRatings(); fetchMessages();
     var notifInterval = setInterval(fetchGHANotifications, 20000);
-    return function() { clearInterval(notifInterval); };
+    var messagesInterval = setInterval(fetchMessages, 30000);
+    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
   }, []);
   useEffect(function() {
     if (ghaTab === 'inspections') {
@@ -6660,6 +6965,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'inspections', label: 'Inspections' },
     { id: 'monthly-history', label: 'Monthly History' },
     { id: 'earnings', label: 'Earnings' },
+    { id: 'inbox', label: 'Inbox' },
   ];
 
   return (
@@ -6776,7 +7082,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             {mobileNavOpen && (
               <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
                 {ghaTabs.map(function(tab) {
-                  var tabBadge = tab.id === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
+                  var tabBadge = tab.id === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : tab.id === 'inbox' ? messageUnread : 0;
                   return (
                     <button key={tab.id}
                       onClick={function() {
@@ -6784,6 +7090,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         setMobileNavOpen(false);
                         if (tab.id === 'listings' && listings.length === 0) fetchListings();
                         if (tab.id === 'inspections' && inspections.length === 0) fetchInspections();
+                        if (tab.id === 'inbox') fetchMessages();
                       }}
                       style={{ width: '100%', textAlign: 'left', padding: '13px 16px', border: 'none', borderBottom: '1px solid #f1f5f9', backgroundColor: ghaTab === tab.id ? '#f0fff4' : '#fff', color: ghaTab === tab.id ? '#27ae60' : '#374151', fontWeight: ghaTab === tab.id ? '700' : '500', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>{tab.label}</span>
@@ -6799,12 +7106,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             {ghaTabs.map(function(tab) {
               var t = tab.id, label = tab.label;
               var active = ghaTab === t;
-              var tabBadge = t === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : 0;
+              var tabBadge = t === 'inspections' ? ghaNotifications.filter(function(n){ return !n.read && !n.is_read; }).length : t === 'inbox' ? messageUnread : 0;
               return (
                 <button key={t} onClick={function(){
                   setGhaTab(t);
                   if (t === 'listings' && listings.length === 0) fetchListings();
                   if (t === 'inspections' && inspections.length === 0) fetchInspections();
+                  if (t === 'inbox') fetchMessages();
                 }} style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {label}
                   {tabBadge > 0 && (
@@ -7611,7 +7919,205 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
           );
         })()}
 
+        {/* ── INBOX ── */}
+        {ghaTab === 'inbox' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inbox</h2>
+              <button onClick={function(){ setComposeForm({ recipient_type: 'SA', recipient_id: staffUser.sa_id || '', subject: '', message: '' }); setMessageMsg(''); setShowComposeModal(true); }}
+                style={{ padding: '8px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                + Compose Message
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+              <button onClick={function(){ setInboxTab('inbox'); }}
+                style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'inbox' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'inbox' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: "'Inter', sans-serif" }}>
+                Inbox
+                {messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800' }}>{messageUnread}</span>}
+              </button>
+              <button onClick={function(){ setInboxTab('sent'); if (sentMessages.length === 0) fetchSentMessages(); }}
+                style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'sent' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'sent' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                Sent
+              </button>
+            </div>
+
+            <div style={{ ...cardSt, overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
+              {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
+                </div>
+              ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
+                var isUnread = inboxTab === 'inbox' && !msg.read && !msg.is_read;
+                var createdAt = msg.created_at ? new Date(msg.created_at) : null;
+                var timeAgo = '';
+                if (createdAt) {
+                  var diffMins = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+                  if (diffMins < 1) timeAgo = 'Just now';
+                  else if (diffMins < 60) timeAgo = diffMins + 'm ago';
+                  else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
+                  else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
+                }
+                var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
+                var msgText = msg.message || '';
+                var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
+                return (
+                  <div key={msg.id}
+                    onClick={function(){
+                      setSelectedMessage(msg);
+                      if (isUnread) {
+                        setMessages(function(prev){ return prev.map(function(m){ return m.id === msg.id ? Object.assign({}, m, { read: true, is_read: true }) : m; }); });
+                        setMessageUnread(function(c){ return Math.max(0, c - 1); });
+                        markMessageRead(msg.id);
+                      }
+                    }}
+                    style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: isUnread ? '#f0fff4' : '#fff', borderLeft: isUnread ? '3px solid #27ae60' : '3px solid transparent', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                          <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{msg.subject || '(no subject)'}</span>
+                        </div>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>{preview}</p>
+                      </div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.70rem', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>{timeAgo}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {selectedMessage && (function() {
+              var m = selectedMessage;
+              var typeBadge = m.message_type === 'inspection_note'
+                ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
+                : m.message_type === 'new_listing_alert'
+                ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
+              return (
+                <div style={{ ...cardSt, padding: '20px 24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff' }}>
+                        From: {m.sender_code || m.sender_type || 'Unknown'}{m.sender_name ? ' — ' + m.sender_name : ''}
+                      </span>
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                        To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
+                      </span>
+                    </div>
+                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                  </div>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.subject || '(no subject)'}</h3>
+                  <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
+                  <p style={{ margin: '0 0 18px 0', color: '#334155', fontSize: '0.88rem', lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: "'Inter', sans-serif" }}>{m.message}</p>
+
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {m.message_type === 'inspection_note' && m.related_inspection_id && (
+                      <button onClick={function(){ setGhaTab('inspections'); }}
+                        style={{ padding: '8px 16px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        View Inspection
+                      </button>
+                    )}
+                    {m.message_type === 'new_listing_alert' && m.related_property_id && (
+                      <button onClick={function(){ window.open(window.location.origin + '/?property_id=' + m.related_property_id, '_blank'); }}
+                        style={{ padding: '8px 16px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        View Property
+                      </button>
+                    )}
+                    <button onClick={function(){
+                        setComposeForm({ recipient_type: m.sender_type === 'ADMIN' ? 'ADMIN' : 'SA', recipient_id: m.sender_type === 'ADMIN' ? '' : (staffUser.sa_id || ''), subject: 'Re: ' + (m.subject || ''), message: '' });
+                        setMessageMsg('');
+                        setShowComposeModal(true);
+                      }}
+                      style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                      Reply
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
+
+      {showComposeModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 16px 0', fontSize: '1rem' }}>Compose Message</h3>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Send To</label>
+              <select value={composeForm.recipient_type} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_type: e.target.value, recipient_id: e.target.value === 'SA' ? (staffUser.sa_id || '') : '' }); }); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value='SA'>Your Service Agent (SA)</option>
+                <option value='ADMIN'>Admin</option>
+              </select>
+            </div>
+
+            {composeForm.recipient_type === 'SA' && (
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Your Service Agent</label>
+                <div style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', backgroundColor: '#f8fafc', color: '#0a2240', fontWeight: '700', boxSizing: 'border-box' }}>
+                  {ghaProfile.sa_code || staffUser.sa_code || 'SA'} — {ghaProfile.sa_name || staffUser.sa_name || 'Your Service Agent'}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Subject</label>
+              <input value={composeForm.subject} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { subject: e.target.value }); }); }}
+                placeholder='Message subject...' style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Message *</label>
+              <textarea value={composeForm.message} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { message: e.target.value }); }); }}
+                placeholder='Type your message...' rows={5}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', resize: 'vertical', boxSizing: 'border-box' }} />
+            </div>
+
+            {messageMsg && <p style={{ color: messageMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{messageMsg}</p>}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() { setShowComposeModal(false); setComposeForm({ recipient_type: 'SA', recipient_id: staffUser.sa_id || '', subject: '', message: '' }); setMessageMsg(''); }}
+                style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={async function() {
+                if (!composeForm.message.trim()) { setMessageMsg('Error: Message cannot be empty'); return; }
+                if (composeForm.recipient_type === 'SA' && !composeForm.recipient_id) { setMessageMsg('Error: No Service Agent found on your account'); return; }
+                setComposing(true);
+                try {
+                  var token = localStorage.getItem('gh_staff_token');
+                  var recipientId = composeForm.recipient_type === 'ADMIN' ? '00000000-0000-0000-0000-000000000000' : composeForm.recipient_id;
+                  var res = await fetch(API_URL + '/api/staff/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      recipient_type: composeForm.recipient_type,
+                      recipient_id: recipientId,
+                      subject: composeForm.subject.trim() || null,
+                      message: composeForm.message.trim(),
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed to send');
+                  setMessageMsg('Message sent successfully');
+                  setComposeForm({ recipient_type: 'SA', recipient_id: staffUser.sa_id || '', subject: '', message: '' });
+                  setTimeout(function() { setShowComposeModal(false); setMessageMsg(''); }, 1500);
+                  fetchMessages();
+                } catch(err) { setMessageMsg('Error: ' + err.message); }
+                finally { setComposing(false); }
+              }} disabled={composing}
+                style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: composing ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', cursor: composing ? 'not-allowed' : 'pointer' }}>
+                {composing ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -7715,6 +8221,15 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
+  const [messages, setMessages]                     = useState([]);
+  const [sentMessages, setSentMessages]             = useState([]);
+  const [messageUnread, setMessageUnread]           = useState(0);
+  const [inboxTab, setInboxTab]                     = useState('inbox');
+  const [selectedMessage, setSelectedMessage]       = useState(null);
+  const [showComposeModal, setShowComposeModal]     = useState(false);
+  const [composeForm, setComposeForm]               = useState({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+  const [composing, setComposing]                   = useState(false);
+  const [messageMsg, setMessageMsg]                 = useState('');
 
   const fetchSALocations = async function() {
     try {
@@ -7792,6 +8307,42 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     } catch(e) { console.error(e); }
   }
 
+  const fetchMessages = async function(silent) {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/staff/messages', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) {
+        setMessages(data.messages || []);
+        setMessageUnread(data.unread_count || 0);
+      }
+    } catch(e) { console.error('Fetch messages error:', e.message); }
+  };
+
+  const fetchSentMessages = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/staff/sent-messages', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setSentMessages(data.messages || []);
+    } catch(e) { console.error('Fetch sent messages error:', e.message); }
+  };
+
+  const markMessageRead = async function(messageId) {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/staff/mark-message-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ message_id: messageId }),
+      });
+    } catch(e) { console.error('Mark message read error:', e.message); }
+  };
+
   async function fetchPendingAgents() {
     try {
       var token = localStorage.getItem('gh_staff_token');
@@ -7844,7 +8395,20 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/sa/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
-      setMonthlyHistory(data);
+      // Enrich agent snapshots with gha_code/gha_name from gha_summaries (agent_snapshots only stores gha_id)
+      var ghaMap = {};
+      (data.gha_summaries || []).forEach(function(g) {
+        if (g.gha_id) ghaMap[g.gha_id] = { gha_code: g.gha_code, gha_name: g.gha_name };
+      });
+      var enrichedSnapshots = (data.agent_snapshots || []).map(function(snap) {
+        var ghaInfo = ghaMap[snap.gha_id] || {};
+        return Object.assign({}, snap, {
+          gha_code: snap.gha_code || ghaInfo.gha_code || '—',
+          gha_name: snap.gha_name || ghaInfo.gha_name || '—',
+          agent_email: snap.agent_email || snap.email || '—',
+        });
+      });
+      setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
@@ -7890,9 +8454,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   }
 
   useEffect(function() {
-    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations();
+    fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations(); fetchMessages();
     var notifInterval = setInterval(fetchNotifications, 30000);
-    return function() { clearInterval(notifInterval); };
+    var messagesInterval = setInterval(fetchMessages, 30000);
+    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
   }, []);
   useEffect(function() {
     function handleClickOutside(e) {
@@ -7971,6 +8536,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'inspections', label: 'Inspections' },
     { id: 'monthly-history', label: 'Monthly History' },
     { id: 'earnings', label: 'Earnings' },
+    { id: 'inbox', label: 'Inbox' },
     { id: 'profile', label: 'Profile' },
   ];
 
@@ -8096,7 +8662,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             {mobileNavOpen && (
               <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
                 {saTabs.map(function(tab) {
-                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? notifications.filter(function(n){ return !n.read; }).length : 0;
+                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? notifications.filter(function(n){ return !n.read; }).length : tab.id === 'inbox' ? messageUnread : 0;
                   return (
                     <button key={tab.id}
                       onClick={function() {
@@ -8104,6 +8670,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         setMobileNavOpen(false);
                         if (tab.id === 'payments') fetchDeposits();
                         if (tab.id === 'inspections' && inspections.length === 0) fetchInspections();
+                        if (tab.id === 'inbox') fetchMessages();
                       }}
                       style={{ width: '100%', textAlign: 'left', padding: '13px 16px', border: 'none', borderBottom: '1px solid #f1f5f9', backgroundColor: saTab === tab.id ? '#f0fff4' : '#fff', color: saTab === tab.id ? '#27ae60' : '#374151', fontWeight: saTab === tab.id ? '700' : '500', fontSize: '0.88rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>{tab.label}</span>
@@ -8120,11 +8687,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               var t = tab.id, label = tab.label;
               var active = saTab === t;
               return (
-                <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); }}
+                <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); if (t === 'inbox') fetchMessages(); }}
                   style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {label}
                   {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
                   {t === 'inspections' && notifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{notifications.filter(function(n){ return !n.read; }).length}</span>}
+                  {t === 'inbox' && messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{messageUnread}</span>}
                 </button>
               );
             })}
@@ -9370,7 +9938,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           var filteredSnapshots = agentSnapshots.filter(function(a) {
             if (!historyAgentSearch.trim()) return true;
             var q = historyAgentSearch.toLowerCase();
-            return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q);
+            return (a.agent_name || a.full_name || '').toLowerCase().includes(q) || (a.agent_email || a.email || '').toLowerCase().includes(q);
           });
           function tierBadgeSm(tier) {
             var cfg = { free: { bg: '#f1f5f9', color: '#64748b' }, premium: { bg: '#eff6ff', color: '#1e40af' }, agency: { bg: '#f5f3ff', color: '#7c3aed' } };
@@ -9464,9 +10032,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {filteredSnapshots.map(function(a, idx) {
                             return (
-                              <div key={a.id || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
+                              <div key={a.id || a.agent_email || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
                                 <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
-                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.email || '—'}</span>
+                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || a.email || '—'}</span>
                                 <span>{tierBadgeSm(a.tier || a.subscription_tier)}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
@@ -9762,7 +10330,223 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           </div>
         )}
 
+        {/* ── INBOX ── */}
+        {saTab === 'inbox' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inbox</h2>
+              <button onClick={function(){ setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); setShowComposeModal(true); }}
+                style={{ padding: '8px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                + Compose Message
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+              <button onClick={function(){ setInboxTab('inbox'); }}
+                style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'inbox' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'inbox' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: "'Inter', sans-serif" }}>
+                Inbox
+                {messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800' }}>{messageUnread}</span>}
+              </button>
+              <button onClick={function(){ setInboxTab('sent'); if (sentMessages.length === 0) fetchSentMessages(); }}
+                style={{ padding: '7px 16px', borderRadius: '8px', border: 'none', backgroundColor: inboxTab === 'sent' ? '#0a2240' : '#f1f5f9', color: inboxTab === 'sent' ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                Sent
+              </button>
+            </div>
+
+            <div style={{ ...cardSt, overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
+              {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
+                </div>
+              ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
+                var isUnread = inboxTab === 'inbox' && !msg.read && !msg.is_read;
+                var createdAt = msg.created_at ? new Date(msg.created_at) : null;
+                var timeAgo = '';
+                if (createdAt) {
+                  var diffMins = Math.floor((Date.now() - createdAt.getTime()) / 60000);
+                  if (diffMins < 1) timeAgo = 'Just now';
+                  else if (diffMins < 60) timeAgo = diffMins + 'm ago';
+                  else if (diffMins < 1440) timeAgo = Math.floor(diffMins / 60) + 'h ago';
+                  else timeAgo = Math.floor(diffMins / 1440) + 'd ago';
+                }
+                var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
+                var msgText = msg.message || '';
+                var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
+                return (
+                  <div key={msg.id}
+                    onClick={function(){
+                      setSelectedMessage(msg);
+                      if (isUnread) {
+                        setMessages(function(prev){ return prev.map(function(m){ return m.id === msg.id ? Object.assign({}, m, { read: true, is_read: true }) : m; }); });
+                        setMessageUnread(function(c){ return Math.max(0, c - 1); });
+                        markMessageRead(msg.id);
+                      }
+                    }}
+                    style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', backgroundColor: isUnread ? '#f0fff4' : '#fff', borderLeft: isUnread ? '3px solid #27ae60' : '3px solid transparent', cursor: 'pointer' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                          <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{msg.subject || '(no subject)'}</span>
+                        </div>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif" }}>{preview}</p>
+                      </div>
+                      <span style={{ color: '#94a3b8', fontSize: '0.70rem', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>{timeAgo}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {selectedMessage && (function() {
+              var m = selectedMessage;
+              var typeBadge = m.message_type === 'inspection_note'
+                ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
+                : m.message_type === 'new_listing_alert'
+                ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
+              return (
+                <div style={{ ...cardSt, padding: '20px 24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', gap: '10px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff' }}>
+                        From: {m.sender_code || m.sender_type || 'Unknown'}{m.sender_name ? ' — ' + m.sender_name : ''}
+                      </span>
+                      <span style={{ fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#334155' }}>
+                        To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
+                      </span>
+                    </div>
+                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                  </div>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.subject || '(no subject)'}</h3>
+                  <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
+                  <p style={{ margin: '0 0 18px 0', color: '#334155', fontSize: '0.88rem', lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: "'Inter', sans-serif" }}>{m.message}</p>
+
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {m.message_type === 'inspection_note' && m.related_inspection_id && (
+                      <button onClick={function(){ setSaTab('inspections'); }}
+                        style={{ padding: '8px 16px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        View Inspection
+                      </button>
+                    )}
+                    {m.message_type === 'new_listing_alert' && m.related_property_id && (
+                      <>
+                        <button onClick={function(){ window.open(window.location.origin + '/?property_id=' + m.related_property_id, '_blank'); }}
+                          style={{ padding: '8px 16px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                          View Property
+                        </button>
+                        <button onClick={function(){
+                            setComposeForm({ recipient_type: 'GHA', recipient_id: m.sender_id || '', subject: 'Please verify: ' + (m.subject || 'listing'), message: 'Please verify this listing.\n\n' + (m.message || '') });
+                            setMessageMsg('');
+                            setShowComposeModal(true);
+                          }}
+                          style={{ padding: '8px 16px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                          Send to GHA to Verify
+                        </button>
+                      </>
+                    )}
+                    <button onClick={function(){
+                        setComposeForm({ recipient_type: m.sender_type || 'SA', recipient_id: m.sender_id || '', subject: 'Re: ' + (m.subject || ''), message: '' });
+                        setMessageMsg('');
+                        setShowComposeModal(true);
+                      }}
+                      style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                      Reply
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
       </div>
+
+      {showComposeModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 16px 0', fontSize: '1rem' }}>Compose Message</h3>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Send To</label>
+              <select value={composeForm.recipient_type} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_type: e.target.value, recipient_id: '' }); }); }}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value='SA'>Service Agent (SA)</option>
+                <option value='GHA'>GetHome Agent (GHA)</option>
+                <option value='ADMIN'>Admin</option>
+              </select>
+            </div>
+
+            {composeForm.recipient_type !== 'ADMIN' && (
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>
+                  Select {composeForm.recipient_type === 'SA' ? 'Service Agent' : 'GHA Agent'}
+                </label>
+                <select value={composeForm.recipient_id} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { recipient_id: e.target.value }); }); }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                  <option value=''>Select recipient...</option>
+                  {composeForm.recipient_type === 'GHA'
+                    ? (saGhas || []).map(function(g) { return <option key={g.id} value={g.id}>{g.gha_code} — {g.full_name}</option>; })
+                    : []
+                  }
+                </select>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Subject</label>
+              <input value={composeForm.subject} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { subject: e.target.value }); }); }}
+                placeholder='Message subject...' style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', marginBottom: '4px' }}>Message *</label>
+              <textarea value={composeForm.message} onChange={function(e) { setComposeForm(function(p) { return Object.assign({}, p, { message: e.target.value }); }); }}
+                placeholder='Type your message...' rows={5}
+                style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', resize: 'vertical', boxSizing: 'border-box' }} />
+            </div>
+
+            {messageMsg && <p style={{ color: messageMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontSize: '0.78rem', margin: '0 0 10px 0' }}>{messageMsg}</p>}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() { setShowComposeModal(false); setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' }); setMessageMsg(''); }}
+                style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={async function() {
+                if (!composeForm.message.trim()) { setMessageMsg('Error: Message cannot be empty'); return; }
+                if (composeForm.recipient_type !== 'ADMIN' && !composeForm.recipient_id) { setMessageMsg('Error: Please select a recipient'); return; }
+                setComposing(true);
+                try {
+                  var token = localStorage.getItem('gh_staff_token');
+                  var recipientId = composeForm.recipient_type === 'ADMIN' ? '00000000-0000-0000-0000-000000000000' : composeForm.recipient_id;
+                  var res = await fetch(API_URL + '/api/staff/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      recipient_type: composeForm.recipient_type,
+                      recipient_id: recipientId,
+                      subject: composeForm.subject.trim() || null,
+                      message: composeForm.message.trim(),
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed to send');
+                  setMessageMsg('Message sent successfully');
+                  setComposeForm({ recipient_type: 'SA', recipient_id: '', subject: '', message: '' });
+                  setTimeout(function() { setShowComposeModal(false); setMessageMsg(''); }, 1500);
+                  fetchMessages();
+                } catch(err) { setMessageMsg('Error: ' + err.message); }
+                finally { setComposing(false); }
+              }} disabled={composing}
+                style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: composing ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', cursor: composing ? 'not-allowed' : 'pointer' }}>
+                {composing ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
