@@ -133,6 +133,14 @@ textarea { resize: vertical; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Horizontally-centered variant for fixed-position toasts (e.g. upload success banner) —
+   kept separate from slideDown above since that one is used by non-centered elements
+   and overriding its transform would break them mid-animation. */
+@keyframes toastSlideDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 /* ── Utility Classes ──────────────────────────────────── */
 .gh-card {
   animation: fadeUp 0.32s ease forwards;

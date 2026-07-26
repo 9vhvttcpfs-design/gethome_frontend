@@ -345,6 +345,9 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [customerName, setCustomerName]               = useState('');
   const [customerPhone, setCustomerPhone]             = useState('');
   const [customerIntent, setCustomerIntent]           = useState('rent');
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail]     = useState('');
+  const [showResendVerification, setShowResendVerification] = useState(false);
   const isSignUp = mode === 'signup';
   const countryConfigs = {
     NG: {
@@ -388,6 +391,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setShowResendVerification(false);
     if (mode === 'signup') {
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
       if (!termsAccepted) { setError('Please accept the Terms and Privacy Policy.'); return; }
@@ -460,10 +464,16 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
     setLoading(true);
     try {
       // Step 1: authenticate with Supabase directly
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       if (signInError) {
         if (signInError.message?.toLowerCase().includes('email not confirmed')) {
-          setError('Your email address has not been confirmed yet. Please check your inbox and click the verification link before signing in.');
+          setError('Please verify your email before logging in. Check your inbox for a verification link.');
+          setShowResendVerification(true);
+          setVerificationEmail(email.trim().toLowerCase());
+          return;
+        }
+        if (signInError.message?.toLowerCase().includes('invalid login credentials')) {
+          setError('Incorrect email or password. Please try again.');
           return;
         }
         throw signInError;
@@ -471,9 +481,22 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
       const authUser = signInData?.user;
       if (!authUser) throw new Error('Login failed: no user returned from auth.');
 
-      // Step 2: store fresh token immediately
+      // Belt-and-braces: block sign-in if the account's email isn't confirmed yet,
+      // even if Supabase happened to return a session (e.g. confirmation was
+      // toggled on after the account was created).
+      if (!authUser.email_confirmed_at) {
+        await supabase.auth.signOut().catch(() => {});
+        setError('Your email is not verified yet. Please check your inbox and click the verification link before logging in.');
+        setShowResendVerification(true);
+        setVerificationEmail(email.trim().toLowerCase());
+        return;
+      }
+
+      // Step 2: store fresh token immediately — both access and refresh tokens,
+      // so the session can be restored across devices/app restarts.
       if (signInData.session?.access_token) {
         localStorage.setItem('gh_token', signInData.session.access_token);
+        localStorage.setItem('gh_refresh_token', signInData.session.refresh_token || '');
       }
 
       // Step 3: master admin bypass — skip agents table so a missing/stale row never blocks the admin
@@ -484,6 +507,38 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         onSuccess(adminUser);
         return;
       }
+
+      // Step 3b: customer bypass — customers live in `profiles`, not `agents`,
+      // so they must never hit the agents-only lookup below (it would sign
+      // them out and show an agent-profile error on every customer login).
+      const isCustomerMeta = authUser.user_metadata?.role === 'customer';
+      if (isCustomerMeta) {
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
+        const customerUser = {
+          id: authUser.id,
+          email: authUser.email,
+          role: 'customer',
+          status: profileRow?.status || 'active',
+          full_name: profileRow?.full_name || authUser.user_metadata?.full_name || '',
+          phone: profileRow?.phone || authUser.user_metadata?.phone || '',
+        };
+        localStorage.setItem('gh_user', JSON.stringify(customerUser));
+        onSuccess(customerUser);
+        return;
+      }
+
+      // Only attempt agent profile operations for actual agents — defends against
+      // stale/missing user_metadata that would otherwise slip past the isCustomerMeta
+      // bypass above and surface an agent-only error to a customer.
+      var cachedRole = authUser.user_metadata?.role;
+      if (!cachedRole) {
+        try { cachedRole = JSON.parse(localStorage.getItem('gh_user') || '{}').role; } catch (e) {}
+      }
+      if (cachedRole && cachedRole !== 'agent' && cachedRole !== 'admin') return;
 
       // Step 4: fetch agent profile for status / role
       // select('*') avoids 400s from explicitly naming columns that may not exist
@@ -502,7 +557,17 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         supabase.auth.signOut().catch(() => {});
         localStorage.removeItem('gh_token');
         localStorage.removeItem('gh_user');
-        setError('Unable to load your agent profile. Please contact support or try again.');
+        // cachedRole is undefined here for accounts with no role metadata and no
+        // cached gh_user (e.g. a customer's first login on a fresh device) — the
+        // agents lookup above still runs for them, so only show the agent-specific
+        // message when we know for certain this is an agent account.
+        if (cachedRole === 'agent') {
+          setError('Unable to load your agent account. Please try again.');
+        } else if (!authUser?.email_confirmed_at) {
+          setError('Your email has not been verified yet. Please check your inbox for a verification link.');
+        } else {
+          setError('Login failed. Please check your email and password and try again.');
+        }
         return;
       }
 
@@ -586,18 +651,28 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         status: 'active',
       }], { onConflict: 'id' });
 
-      // Store user session
-      localStorage.setItem('gh_token', authData.session?.access_token || '');
-      localStorage.setItem('gh_user', JSON.stringify({
-        id: authData.user.id,
-        email: email.trim().toLowerCase(),
-        full_name: customerName.trim(),
-        role: 'customer',
-        intent: customerIntent,
-      }));
+      // After successful signUp check if email confirmation is required
+      if (authData?.user && !authData?.session) {
+        // No session means email confirmation required
+        setError('');
+        setShowEmailVerification(true);
+        setVerificationEmail(email.trim().toLowerCase());
+        return;
+      }
 
-      setError('');
-      if (onSuccess) onSuccess(authData.user);
+      // Only auto-login if Supabase returned a session (email confirmation disabled)
+      if (authData?.session) {
+        localStorage.setItem('gh_token', authData.session.access_token);
+        localStorage.setItem('gh_user', JSON.stringify({
+          id: authData.user.id,
+          email: email.trim().toLowerCase(),
+          full_name: customerName.trim(),
+          role: 'customer',
+          intent: customerIntent,
+        }));
+        setError('');
+        if (onSuccess) onSuccess(authData.user);
+      }
 
     } catch(err) {
       setError(err.message || 'Sign up failed. Please try again.');
@@ -672,6 +747,28 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
       </p>
     </div>
   );
+  if (showEmailVerification) {
+    return (
+      <div style={{ textAlign: 'center', padding: '20px 0' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📧</div>
+        <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 8px 0' }}>Verify Your Email</h3>
+        <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px 0', lineHeight: 1.6 }}>
+          We sent a verification link to <strong>{verificationEmail}</strong>. Please check your inbox and click the link to activate your account before logging in.
+        </p>
+        <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0' }}>
+          Did not receive it? Check your spam folder or{' '}
+          <span onClick={async function() {
+            await supabase.auth.resend({ type: 'signup', email: verificationEmail });
+            alert('Verification email resent!');
+          }} style={{ color: '#27ae60', cursor: 'pointer', fontWeight: '600' }}>resend email</span>
+        </p>
+        <button onClick={function() { setShowEmailVerification(false); setMode('login'); }}
+          style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px 28px', fontWeight: '700', cursor: 'pointer' }}>
+          Go to Login
+        </button>
+      </div>
+    );
+  }
   if (mode === 'customer') {
     return (
       <div className="gh-auth-form-inner">
@@ -769,7 +866,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
           var active = mode === m;
           return (
             <button key={m} type="button"
-              onClick={function(){ setMode(m); setError(''); setTermsAccepted(false); setConfirmPassword(''); }}
+              onClick={function(){ setMode(m); setError(''); setShowResendVerification(false); setTermsAccepted(false); setConfirmPassword(''); }}
               style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#374151', fontWeight: active ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>
               {icon ? icon + ' ' : ''}{lbl}
             </button>
@@ -784,6 +881,25 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
       {error && (
         <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px' }}>
           <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.82rem' }}>{error}</p>
+        </div>
+      )}
+
+      {showResendVerification && (
+        <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '12px', marginBottom: '12px', textAlign: 'center' }}>
+          <p style={{ color: '#c2410c', fontSize: '0.78rem', margin: '0 0 8px 0' }}>
+            Verification email sent to {verificationEmail}
+          </p>
+          <button type="button" onClick={async function() {
+            try {
+              var { error: resendError } = await supabase.auth.resend({ type: 'signup', email: verificationEmail });
+              if (resendError) throw resendError;
+              alert('Verification email resent! Please check your inbox.');
+            } catch(err) {
+              alert('Error: ' + err.message);
+            }
+          }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 18px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+            Resend Verification Email
+          </button>
         </div>
       )}
 
@@ -1067,6 +1183,10 @@ function PricingModal({ property, onClose, user, onUserChange }) {
         { label: 'Service / Maintenance',      amount: fmtListingPrice(svcChg),     color: '#e67e22' },
         { label: 'GetHome Escrow Fee (0.75%)', amount: fmtListingPrice(escrowFee),  color: '#27ae60' },
       ];
+  // Determine inspection fee display — falls back to FREE when no SA has set a fee yet
+  const inspectionFeeAmount = parseFloat(property.inspection_fee || 0);
+  const inspectionFeeLabel  = inspectionFeeAmount > 0 ? '₦' + inspectionFeeAmount.toLocaleString() : 'FREE';
+  const inspectionFeeColor  = inspectionFeeAmount > 0 ? '#0a2240' : '#27ae60';
   const loanUrl = `${LOAN_PARTNER_URL}?utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
   const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
   const handleAuthSuccess = (newUser) => { onUserChange(newUser); setAuthWall(null); };
@@ -1101,6 +1221,9 @@ function PricingModal({ property, onClose, user, onUserChange }) {
       'I would like to book a FREE inspection for:\n\n' +
       'Property: ' + property.title + '\n' +
       'Location: ' + (property.location || property.address || '') + '\n' +
+      (inspectionFeeAmount > 0
+        ? 'Inspection Fee: ₦' + inspectionFeeAmount.toLocaleString() + ' (payable before visit)\n'
+        : 'Inspection: FREE\n') +
       (propertyImage ? 'Property Image: ' + propertyImage + '\n' : '') +
       'My Name/Email: ' + (user ? user.email : 'Customer') + '\n\n' +
       '---\n' +
@@ -1248,6 +1371,19 @@ function PricingModal({ property, onClose, user, onUserChange }) {
           <div style={{ border: '1px solid #e8edf3', borderRadius: '14px', overflow: 'hidden', marginTop: '16px', marginBottom: '16px' }}>
             <div style={{ backgroundColor: '#0a2240', padding: '10px 18px' }}><h3 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: 0 }}>Verified Fee Breakdown</h3></div>
             {feeRows.map(function(row, i) { return (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '9px 14px' : '11px 18px', borderBottom: i < feeRows.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }}><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', color: '#374151' }}>{row.label}</span><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', fontWeight: '700', color: row.color }}>{row.amount}</span></div>); })}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+              <div>
+                <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#0a2240', fontSize: '0.84rem' }}>Inspection Fee</p>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>
+                  {inspectionFeeAmount > 0
+                    ? 'Required before physical inspection visit'
+                    : 'Complimentary inspection included'}
+                </p>
+              </div>
+              <p style={{ margin: 0, fontWeight: '800', color: inspectionFeeColor, fontSize: '0.92rem' }}>
+                {inspectionFeeLabel}
+              </p>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '11px 14px' : '13px 18px', backgroundColor: '#f0fff4', borderTop: '2px solid #86efac' }}><span style={{ fontSize: isMobile ? '0.82rem' : '0.9rem', fontWeight: '800', color: '#0a2240' }}>{isShortlet ? 'Total Stay Amount' : 'Total Move-In Amount'}</span><span style={{ fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: '900', color: '#27ae60' }}>{fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal)}</span></div>
           </div>
           <div style={{ marginBottom: '16px' }}>
@@ -1295,7 +1431,11 @@ function PricingModal({ property, onClose, user, onUserChange }) {
                 </div>);
               })}
             </div>
-            {inspectionMode === 'whatsapp' ? <button onClick={handleWhatsAppInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Book Free WhatsApp Inspection</button>
+            {inspectionMode === 'whatsapp' ? <button onClick={handleWhatsAppInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+                {inspectionFeeAmount > 0
+                  ? 'Book Inspection (₦' + inspectionFeeAmount.toLocaleString() + ')'
+                  : 'Book FREE WhatsApp Inspection'}
+              </button>
               : <button onClick={handleProxyInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay and Book Proxy Inspection</button>}
           </div>
           <div style={{ backgroundColor: '#f0fff4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px', pointerEvents: 'none' }}>
@@ -1823,6 +1963,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   const [bankSaving, setBankSaving]                 = useState(false);
   const [soldListings, setSoldListings]             = useState([]);
   const [soldListingsLoading, setSoldListingsLoading] = useState(false);
+  const [uploadSuccess, setUploadSuccess]           = useState(false);
   useEffect(function() {
     if (!user?.id) return;
     if (user?.role === 'admin' || user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase()) {
@@ -2028,7 +2169,8 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       } else {
         const token = localStorage.getItem('gh_token');
         const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) };
-        console.log('[AgentUploadPortal] handleSubmit:', { payload, token, API_URL });
+        console.log('Submitting listing to:', API_URL + '/api/properties');
+        console.log('Token available:', !!token);
         const res = await fetch(`${API_URL}/api/properties`, { method: 'POST', headers, body: JSON.stringify(payload) });
         const data = await safeJson(res);
         responseData = data;
@@ -2038,6 +2180,10 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         }
         if (!res.ok) throw new Error(data.error || 'Publish failed');
         setSuccessMsg('Listing published!'); setAgentListingCount(c => c + 1); onListingPublished && onListingPublished(Object.assign({}, payload, data));
+        // Show success toast — fixed position, so it's visible regardless of scroll position
+        setUploadSuccess(true);
+        setTimeout(function() { setUploadSuccess(false); }, 5000);
+        // Reset form
         setForm(EMPTY_FORM); setWantsFeatured(false); setFeaturedPaid(false);
         try { sessionStorage.removeItem(DRAFT_KEY); } catch(e) {}
       }
@@ -2080,6 +2226,41 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   );
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      {uploadSuccess && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 999999,
+          backgroundColor: '#27ae60',
+          color: '#fff',
+          borderRadius: '14px',
+          padding: '16px 24px',
+          boxShadow: '0 8px 32px rgba(39,174,96,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          minWidth: isMobile ? '85vw' : '320px',
+          maxWidth: '90vw',
+          animation: 'toastSlideDown 0.3s ease',
+        }}>
+          <span style={{ fontSize: '1.6rem' }}>✅</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.95rem' }}>
+              Listing Published Successfully!
+            </p>
+            <p style={{ margin: 0, fontSize: '0.78rem', opacity: 0.9 }}>
+              Your property is now live on GetHome
+            </p>
+          </div>
+          <button
+            onClick={function() { setUploadSuccess(false); }}
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', padding: '0 4px', opacity: 0.8, flexShrink: 0 }}>
+            ×
+          </button>
+        </div>
+      )}
       {showAgreementModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 2000, padding: 0 }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '20px 20px 0 0', maxWidth: '680px', width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
@@ -2770,6 +2951,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [markingSoldId, setMarkingSoldId]               = useState(null);
   const [listingMsg, setListingMsg]                     = useState('');
   const [listingFilter, setListingFilter]               = useState('all');
+  // Inspection Fees tab state
+  const [inspectionFees, setInspectionFees]             = useState([]);
+  const [feeSearch, setFeeSearch]                       = useState('');
+  const [settingAdminFee, setSettingAdminFee]           = useState(null);
+  const [adminFeeInput, setAdminFeeInput]               = useState('');
+  const [adminFeeMsg, setAdminFeeMsg]                   = useState('');
   const [deposits, setDeposits]                         = useState([]);
   const [depositsLoading, setDepositsLoading]           = useState(false);
   const [depositMsg, setDepositMsg]                     = useState('');
@@ -2996,6 +3183,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     } catch(e) {
       console.error('Fetch listings error:', e.message);
     } finally { setListingsLoading(false); }
+  };
+
+  const fetchInspectionFees = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/inspection-fees', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setInspectionFees(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Fetch inspection fees error:', e.message); }
   };
 
   const fetchDeposits = async function() {
@@ -3785,7 +3983,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
   var navItems = [
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
-    ['deposits','Deposits'],['inspections','Inspections'],
+    ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
     ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],
   ];
@@ -3798,6 +3996,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); fetchAllRatings(); }
     if (t === 'earnings') fetchStaffEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
+    if (t === 'inspection-fees') fetchInspectionFees();
     if (t === 'staff-payments') fetchStaffPayments();
     if (t === 'performance') fetchKPIs();
     if (t === 'inbox') { fetchAdminMessages(); if (allSAs.length === 0) fetchAllSAs(); if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }
@@ -4707,6 +4906,130 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       </div>
                     );
                   })()}
+                </div>
+              );
+            })()}
+
+            {/* ── INSPECTION FEES ── */}
+            {adminTab === 'inspection-fees' && (function() {
+              var feeQ = feeSearch.trim().toLowerCase();
+              var filteredFees = inspectionFees.filter(function(prop) {
+                if (!feeQ) return true;
+                return (prop.title || '').toLowerCase().includes(feeQ) ||
+                  (prop.location || '').toLowerCase().includes(feeQ) ||
+                  (prop.agent_name || '').toLowerCase().includes(feeQ) ||
+                  (prop.sa_code || '').toLowerCase().includes(feeQ);
+              });
+              var withFee = inspectionFees.filter(function(p) { return p.inspection_fee > 0; });
+              var withoutFee = inspectionFees.filter(function(p) { return !p.inspection_fee || p.inspection_fee === 0; });
+              var avgFee = withFee.length > 0
+                ? Math.round(withFee.reduce(function(sum, p) { return sum + parseFloat(p.inspection_fee || 0); }, 0) / withFee.length)
+                : 0;
+              return (
+                <div>
+                  <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inspection Fees</h2>
+
+                  {/* Summary stats row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '18px' }}>
+                    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Total Properties</p>
+                      <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1.2rem' }}>{inspectionFees.length}</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>With Fee Set</p>
+                      <p style={{ margin: 0, fontWeight: '800', color: '#27ae60', fontSize: '1.2rem' }}>{withFee.length}</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>No Fee Set</p>
+                      <p style={{ margin: 0, fontWeight: '800', color: '#f59e0b', fontSize: '1.2rem' }}>{withoutFee.length}</p>
+                    </div>
+                    <div style={{ backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px' }}>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase' }}>Average Fee</p>
+                      <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1.2rem' }}>{fmtNGN(avgFee)}</p>
+                    </div>
+                  </div>
+
+                  <input type="text" value={feeSearch} onChange={function(e){ setFeeSearch(e.target.value); }}
+                    placeholder="Search by title, location, agent name, SA code…"
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '16px', color: '#0a2240', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }} />
+
+                  {filteredFees.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 24px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
+                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No properties found.</p>
+                    </div>
+                  ) : (
+                    filteredFees.map(function(prop) {
+                      return (
+                        <div key={prop.id} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '16px', marginBottom: '10px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>{prop.title}</span>
+                                {prop.property_type && <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '600' }}>{prop.property_type.toUpperCase()}</span>}
+                              </div>
+                              <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem' }}>📍 {prop.location}</p>
+                              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Agent: {prop.agent_name || '—'}</span>
+                                {prop.sa_code && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Set by: {prop.sa_code} — {prop.sa_name}</span>}
+                                {prop.inspection_fee_set_at && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{new Date(prop.inspection_fee_set_at).toLocaleDateString()}</span>}
+                              </div>
+                            </div>
+
+                            <div style={{ textAlign: 'right' }}>
+                              <p style={{ margin: '0 0 4px 0', fontWeight: '900', fontSize: '1.1rem', color: prop.inspection_fee > 0 ? '#27ae60' : '#94a3b8' }}>
+                                {prop.inspection_fee > 0 ? '₦' + parseFloat(prop.inspection_fee).toLocaleString() : 'No fee set'}
+                              </p>
+                              <button onClick={function() {
+                                setSettingAdminFee(prop.id);
+                                setAdminFeeInput(prop.inspection_fee > 0 ? String(prop.inspection_fee) : '');
+                              }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                {prop.inspection_fee > 0 ? '✏ Adjust Fee' : '+ Set Fee'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {settingAdminFee === prop.id && (
+                            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                              <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>Set Inspection Fee for this property</p>
+                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
+                                  <input type='number' min='0' placeholder='Enter fee amount'
+                                    value={adminFeeInput}
+                                    onChange={function(e) { setAdminFeeInput(e.target.value); }}
+                                    style={{ width: '100%', padding: '9px 10px 9px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                                </div>
+                                <button onClick={async function() {
+                                  if (adminFeeInput === '') { setAdminFeeMsg('Please enter a fee amount'); return; }
+                                  try {
+                                    var token = localStorage.getItem('gh_token');
+                                    var res = await fetch(API_URL + '/api/admin/set-inspection-fee', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                      body: JSON.stringify({ property_id: prop.id, inspection_fee: parseFloat(adminFeeInput) || 0 }),
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setAdminFeeMsg('Fee updated successfully');
+                                    setSettingAdminFee(null);
+                                    fetchInspectionFees();
+                                    setTimeout(function() { setAdminFeeMsg(''); }, 3000);
+                                  } catch(err) { setAdminFeeMsg('Error: ' + err.message); }
+                                }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                  Save
+                                </button>
+                                <button onClick={function() { setSettingAdminFee(null); setAdminFeeInput(''); }}
+                                  style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                  Cancel
+                                </button>
+                              </div>
+                              {adminFeeMsg && <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', color: adminFeeMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontWeight: '600' }}>{adminFeeMsg}</p>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               );
             })()}
@@ -8350,6 +8673,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [saListings, setSaListings]                 = useState([]);
   const [listingsLoading, setListingsLoading]       = useState(false);
   const [listingSearch, setListingSearch]           = useState('');
+  const [showFeaturedOnly, setShowFeaturedOnly]     = useState(false);
+  const [settingFeeForListing, setSettingFeeForListing] = useState(null);
+  const [feeInput, setFeeInput]                     = useState('');
+  const [feeMsg, setFeeMsg]                         = useState('');
   const [messages, setMessages]                     = useState([]);
   const [sentMessages, setSentMessages]             = useState([]);
   const [messageUnread, setMessageUnread]           = useState(0);
@@ -10257,13 +10584,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         {/* ── LISTINGS ── */}
         {saTab === 'listings' && (function() {
           var filteredListings = saListings.filter(function(l) {
-            if (!listingSearch.trim()) return true;
             var q = listingSearch.toLowerCase();
-            return (l.title || '').toLowerCase().includes(q) ||
+            var matchesSearch = !listingSearch.trim() ||
+              (l.title || '').toLowerCase().includes(q) ||
               (l.location || '').toLowerCase().includes(q) ||
               (l.agent_name || '').toLowerCase().includes(q) ||
               (l.agent_email || '').toLowerCase().includes(q);
+            var matchesFeatured = !showFeaturedOnly || !!l.is_featured;
+            return matchesSearch && matchesFeatured;
           });
+          var featuredCount = saListings.filter(function(l) { return l.is_featured; }).length;
           function listingStatusBadge(status) {
             var cfg = {
               active: { bg: '#f0fff4', color: '#166534', border: '#86efac', label: 'ACTIVE' },
@@ -10283,12 +10613,30 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           }
           return (
             <div>
-              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Listings</h2>
-              <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 14px 0', fontFamily: "'Inter', sans-serif" }}>{saListings.length} listing{saListings.length === 1 ? '' : 's'} from your agents</p>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Listings</h2>
 
-              <input type="text" value={listingSearch} onChange={function(e){ setListingSearch(e.target.value); }}
-                placeholder="Search by title, location, agent name…"
-                style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', marginBottom: '16px', color: '#0a2240', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }} />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <input type="text" value={listingSearch} onChange={function(e){ setListingSearch(e.target.value); }}
+                  placeholder="Search by title, location, agent name…"
+                  style={{ flex: 1, minWidth: '200px', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', color: '#0a2240', fontFamily: "'Inter', sans-serif", boxSizing: 'border-box' }} />
+                <button onClick={function() { setShowFeaturedOnly(function(v) { return !v; }); }}
+                  style={{
+                    backgroundColor: showFeaturedOnly ? '#f59e0b' : 'transparent',
+                    color: showFeaturedOnly ? '#fff' : '#f59e0b',
+                    border: '1.5px solid #f59e0b',
+                    borderRadius: '20px',
+                    padding: '6px 14px',
+                    fontSize: '0.76rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}>
+                  ⭐ {showFeaturedOnly ? 'All Listings' : 'Featured Only'}
+                </button>
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 16px 0', fontFamily: "'Inter', sans-serif" }}>
+                {saListings.length} listing{saListings.length === 1 ? '' : 's'} · {featuredCount} featured
+              </p>
 
               {listingsLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading listings…</p></div>
@@ -10318,6 +10666,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
                               <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{l.title || 'Untitled'}</p>
+                              {l.is_featured && (
+                                <span style={{
+                                  backgroundColor: '#f59e0b',
+                                  color: '#fff',
+                                  borderRadius: '6px',
+                                  padding: '2px 8px',
+                                  fontSize: '0.68rem',
+                                  fontWeight: '800',
+                                  letterSpacing: '0.04em',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                }}>
+                                  ⭐ FEATURED
+                                  {l.featured_until && (
+                                    <span style={{ fontWeight: '500', opacity: 0.9 }}>
+                                      · until {new Date(l.featured_until).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                               {l.agent_gha_code && <span style={{ fontSize: '0.66rem', padding: '3px 10px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code}</span>}
                             </div>
                             <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{l.location || '—'}</p>
@@ -10399,6 +10768,71 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                               ⚠ Report Inaccurate
                             </button>
                           </div>
+                        </div>
+
+                        <div style={{ marginTop: '10px', padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Inspection Fee</p>
+                              <p style={{ margin: 0, fontWeight: '800', color: l.inspection_fee > 0 ? '#0a2240' : '#94a3b8', fontSize: '0.90rem' }}>
+                                {l.inspection_fee > 0 ? '₦' + parseFloat(l.inspection_fee).toLocaleString() : 'Not set'}
+                              </p>
+                            </div>
+                            <button onClick={function() {
+                              setSettingFeeForListing(l.id);
+                              setFeeInput(l.inspection_fee > 0 ? String(l.inspection_fee) : '');
+                              setFeeMsg('');
+                            }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                              {l.inspection_fee > 0 ? 'Edit Fee' : 'Set Fee'}
+                            </button>
+                          </div>
+
+                          {settingFeeForListing === l.id && (
+                            <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <div style={{ position: 'relative', flex: 1 }}>
+                                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
+                                <input
+                                  type='number'
+                                  min='0'
+                                  placeholder='e.g. 5000'
+                                  value={feeInput}
+                                  onChange={function(e) { setFeeInput(e.target.value); }}
+                                  style={{ width: '100%', padding: '8px 10px 8px 26px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                                />
+                              </div>
+                              <button onClick={async function() {
+                                if (!feeInput && feeInput !== '0') { setFeeMsg('Please enter a fee amount'); return; }
+                                try {
+                                  var token = localStorage.getItem('gh_staff_token');
+                                  var res = await fetch(API_URL + '/api/sa/set-inspection-fee', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ property_id: l.id, inspection_fee: parseFloat(feeInput) || 0 }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setFeeMsg('Fee saved successfully');
+                                  setSettingFeeForListing(null);
+                                  setSaListings(function(prev) {
+                                    return prev.map(function(row) {
+                                      return row.id === l.id ? Object.assign({}, row, { inspection_fee: parseFloat(feeInput) }) : row;
+                                    });
+                                  });
+                                  setTimeout(function() { setFeeMsg(''); }, 3000);
+                                } catch(err) { setFeeMsg('Error: ' + err.message); }
+                              }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                Save Fee
+                              </button>
+                              <button onClick={function() { setSettingFeeForListing(null); setFeeInput(''); }}
+                                style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '8px 10px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+
+                          {settingFeeForListing === l.id && feeMsg && (
+                            <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', fontWeight: '600', color: feeMsg.startsWith('Error') ? '#ef4444' : '#166534' }}>{feeMsg}</p>
+                          )}
                         </div>
                       </div>
                     );
@@ -10994,6 +11428,15 @@ function AppContent() {
   const [selectedPropertyType, setSelectedPropertyType] = useState(function() {
     try { return new URLSearchParams(window.location.search).get('type') || ''; } catch(e) { return ''; }
   });
+  const [rentLimit, setRentLimit]               = useState(6);
+  const [saleLimit, setSaleLimit]               = useState(6);
+  const [shortletLimit, setShortletLimit]       = useState(6);
+  const LISTINGS_INCREMENT = 6;
+  useEffect(function() {
+    setRentLimit(6);
+    setSaleLimit(6);
+    setShortletLimit(6);
+  }, [searchQuery, filterCity, selectedPropertyType, currentTab]);
   const [footerModal, setFooterModal]           = useState(null);
   const [menuOpen, setMenuOpen]                 = useState(false);
   const [emailConfirmed, setEmailConfirmed]     = useState(false);
@@ -11068,14 +11511,57 @@ function AppContent() {
         return;
       }
 
-      const savedUser = localStorage.getItem('gh_user');
-      const savedToken = localStorage.getItem('gh_token');
-      if (savedUser && savedToken) {
-        var parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
+      var cachedUser = null;
+      try {
+        var savedUserRaw = localStorage.getItem('gh_user');
+        if (savedUserRaw) cachedUser = JSON.parse(savedUserRaw);
+      } catch(e) {}
+
+      // Ask Supabase for its own live session first — it's backed by its own
+      // storage and tends to survive mobile/PWA reloads more reliably than
+      // relying on gh_token alone. Fall back to the cached gh_token if
+      // Supabase has nothing (e.g. right after a hard app restart).
+      supabase.auth.getSession().then(function(result) {
+        var liveSession = result.data && result.data.session;
+        var token = (liveSession && liveSession.access_token) || localStorage.getItem('gh_token');
+        if (liveSession && liveSession.access_token) {
+          localStorage.setItem('gh_token', liveSession.access_token);
+          if (liveSession.refresh_token) localStorage.setItem('gh_refresh_token', liveSession.refresh_token);
+        }
+
+        var fallbackUser = cachedUser || (liveSession && liveSession.user ? {
+          id: liveSession.user.id,
+          email: liveSession.user.email,
+          role: liveSession.user.user_metadata?.role || 'customer',
+          full_name: liveSession.user.user_metadata?.full_name || '',
+          phone: liveSession.user.user_metadata?.phone || '',
+        } : null);
+
+        // iOS Safari can clear Supabase's own localStorage entry under memory
+        // pressure even though our own gh_refresh_token key survives. If Supabase
+        // has no live session, try restoring it from our saved refresh token
+        // before giving up and treating the visit as logged out.
+        if (!liveSession) {
+          var savedRefreshToken = localStorage.getItem('gh_refresh_token');
+          if (savedRefreshToken) {
+            supabase.auth.refreshSession({ refresh_token: savedRefreshToken }).then(function(refreshResult) {
+              var refreshed = refreshResult.data && refreshResult.data.session;
+              if (refreshed?.access_token) {
+                localStorage.setItem('gh_token', refreshed.access_token);
+                if (refreshed.refresh_token) localStorage.setItem('gh_refresh_token', refreshed.refresh_token);
+              }
+            }).catch(function(err) {
+              console.log('Refresh token expired - user needs to login again:', err?.message);
+              try { localStorage.removeItem('gh_refresh_token'); } catch(e) {}
+            });
+          }
+        }
+
+        if (!token) { setAuthChecked(true); return; }
+        if (fallbackUser) setUser(fallbackUser);
 
         fetch(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: 'Bearer ' + savedToken }
+          headers: { Authorization: 'Bearer ' + token }
         })
         .then(function(r) {
           if (r.status === 401 || r.status === 403) {
@@ -11088,23 +11574,27 @@ function AppContent() {
         })
         .then(function(d) {
           if (d && d.user) {
-            var freshUser = Object.assign({}, parsedUser, {
-              role: d.user.role || parsedUser.role,
-              status: d.user.status || parsedUser.status,
-              is_unlimited: d.user.is_unlimited != null ? d.user.is_unlimited : parsedUser.is_unlimited,
+            var freshUser = Object.assign({}, fallbackUser, {
+              role: d.user.role || fallbackUser?.role,
+              status: d.user.status || fallbackUser?.status,
+              is_unlimited: d.user.is_unlimited != null ? d.user.is_unlimited : fallbackUser?.is_unlimited,
             });
             localStorage.setItem('gh_user', JSON.stringify(freshUser));
             setUser(freshUser);
           }
         })
         .catch(function() {
-          // Network error — keep cached user, don't log out
+          // Network error — keep cached/fallback user, don't log out
         })
         .finally(function() {
           setAuthChecked(true);
         });
-        return;
-      }
+      }).catch(function() {
+        // getSession itself failed — fall back fully to cached credentials
+        if (cachedUser) setUser(cachedUser);
+        setAuthChecked(true);
+      });
+      return;
     } catch (e) {
       console.error('Session restore error:', e);
     }
@@ -11113,8 +11603,23 @@ function AppContent() {
   // ── Supabase token refresh + sign-out monitoring ──────────────────────
   useEffect(function() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(function(event, session) {
-      if (event === 'TOKEN_REFRESHED') {
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
         if (session?.access_token) localStorage.setItem('gh_token', session.access_token);
+        if (session?.refresh_token) localStorage.setItem('gh_refresh_token', session.refresh_token);
+        // A background refresh (e.g. our own mobile session-restore fallback)
+        // can restore auth after the UI already rendered logged-out — sync it.
+        if (event === 'TOKEN_REFRESHED' && session?.user) {
+          setUser(function(prev) {
+            return prev || {
+              id: session.user.id,
+              email: session.user.email,
+              role: session.user.user_metadata?.role || 'customer',
+              full_name: session.user.user_metadata?.full_name || '',
+              phone: session.user.user_metadata?.phone || '',
+            };
+          });
+          console.log('Token auto-refreshed - user stays logged in');
+        }
       }
       if (event === 'SIGNED_OUT') {
         // Clean up credentials only — never close the nav modal here.
@@ -11122,6 +11627,7 @@ function AppContent() {
         // to flush stale sessions, which fires this event. Closing the modal here
         // would destroy the form mid-login before the error can render.
         localStorage.removeItem('gh_token');
+        localStorage.removeItem('gh_refresh_token');
         localStorage.removeItem('gh_user');
         setUser(null);
         navigateTab('rent');
@@ -11629,9 +12135,35 @@ function AppContent() {
                 </div>
                 {searchFiltered(rentProperties).length === 0
                   ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ fontSize: '2.6rem', marginBottom: '12px' }}>🔍</div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
-                  : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                      {searchFiltered(rentProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
-                    </div>}
+                  : <>
+                      <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                        {searchFiltered(rentProperties).slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                      </div>
+                      {searchFiltered(rentProperties).length > LISTINGS_INCREMENT && (
+                        <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
+                          <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 12px 0' }}>
+                            Showing {Math.min(rentLimit, searchFiltered(rentProperties).length)} of {searchFiltered(rentProperties).length} properties
+                          </p>
+                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {searchFiltered(rentProperties).length > rentLimit && (
+                              <button onClick={function() {
+                                setRentLimit(function(prev) { return prev + LISTINGS_INCREMENT; });
+                              }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                                View More ({Math.min(LISTINGS_INCREMENT, searchFiltered(rentProperties).length - rentLimit)} more)
+                              </button>
+                            )}
+                            {rentLimit > LISTINGS_INCREMENT && (
+                              <button onClick={function() {
+                                setRentLimit(LISTINGS_INCREMENT);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                                View Less
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>}
               </div>
             ) : (
               <>
@@ -11687,9 +12219,35 @@ function AppContent() {
                       </div>
                     </div>
                   )
-                  : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                      {rentProperties.map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
-                    </div>}
+                  : <>
+                      <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                        {rentProperties.slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                      </div>
+                      {rentProperties.length > LISTINGS_INCREMENT && (
+                        <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
+                          <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 12px 0' }}>
+                            Showing {Math.min(rentLimit, rentProperties.length)} of {rentProperties.length} properties
+                          </p>
+                          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            {rentProperties.length > rentLimit && (
+                              <button onClick={function() {
+                                setRentLimit(function(prev) { return prev + LISTINGS_INCREMENT; });
+                              }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                                View More ({Math.min(LISTINGS_INCREMENT, rentProperties.length - rentLimit)} more)
+                              </button>
+                            )}
+                            {rentLimit > LISTINGS_INCREMENT && (
+                              <button onClick={function() {
+                                setRentLimit(LISTINGS_INCREMENT);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                                View Less
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>}
               </>
             )}
           </section>
@@ -11769,9 +12327,35 @@ function AppContent() {
                   )}
                 </div>
               )
-              : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                  {searchFiltered(saleProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
-                </div>}
+              : <>
+                  <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                    {searchFiltered(saleProperties).slice(0, saleLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                  </div>
+                  {searchFiltered(saleProperties).length > LISTINGS_INCREMENT && (
+                    <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 12px 0' }}>
+                        Showing {Math.min(saleLimit, searchFiltered(saleProperties).length)} of {searchFiltered(saleProperties).length} properties
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {searchFiltered(saleProperties).length > saleLimit && (
+                          <button onClick={function() {
+                            setSaleLimit(function(prev) { return prev + LISTINGS_INCREMENT; });
+                          }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                            View More ({Math.min(LISTINGS_INCREMENT, searchFiltered(saleProperties).length - saleLimit)} more)
+                          </button>
+                        )}
+                        {saleLimit > LISTINGS_INCREMENT && (
+                          <button onClick={function() {
+                            setSaleLimit(LISTINGS_INCREMENT);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                            View Less
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>}
           </section>
         )}
         {currentTab === 'shortlet' && (
@@ -11836,9 +12420,35 @@ function AppContent() {
                   )}
                 </div>
               )
-              : <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                  {searchFiltered(shortletProperties).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
-                </div>}
+              : <>
+                  <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                    {searchFiltered(shortletProperties).slice(0, shortletLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                  </div>
+                  {searchFiltered(shortletProperties).length > LISTINGS_INCREMENT && (
+                    <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
+                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 12px 0' }}>
+                        Showing {Math.min(shortletLimit, searchFiltered(shortletProperties).length)} of {searchFiltered(shortletProperties).length} properties
+                      </p>
+                      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {searchFiltered(shortletProperties).length > shortletLimit && (
+                          <button onClick={function() {
+                            setShortletLimit(function(prev) { return prev + LISTINGS_INCREMENT; });
+                          }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                            View More ({Math.min(LISTINGS_INCREMENT, searchFiltered(shortletProperties).length - shortletLimit)} more)
+                          </button>
+                        )}
+                        {shortletLimit > LISTINGS_INCREMENT && (
+                          <button onClick={function() {
+                            setShortletLimit(LISTINGS_INCREMENT);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '10px', padding: '11px 28px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
+                            View Less
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>}
           </section>
         )}
         {currentTab === 'services' && (
@@ -12012,6 +12622,15 @@ function AppContent() {
               <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Quick Links</h4>
               {[['rent','For Rent'],['sale','For Sale'],['shortlet','Shortlets'],['services','Services'],['agent','Agent Portal']].map(function([tab, label]){ return <button key={tab} onClick={function(){ navigateTab(tab); }} className="gh-footer-link" style={{ display: 'block', background: 'none', border: 'none', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', cursor: 'pointer', textAlign: 'left', padding: '4px 0', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{label}</button>; })}
               <button onClick={function(){ setShowStaffLogin(true); }} className="gh-footer-link" style={{ display: 'block', background: 'none', border: 'none', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', cursor: 'pointer', textAlign: 'left', padding: '4px 0', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>Staff Login</button>
+              <p
+                onClick={function() {
+                  window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
+                }}
+                style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.80rem', cursor: 'pointer', margin: '4px 0' }}
+                onMouseEnter={function(e) { e.target.style.color = '#27ae60'; }}
+                onMouseLeave={function(e) { e.target.style.color = 'rgba(255,255,255,0.7)'; }}>
+                Work With Us
+              </p>
             </div>
             <div>
               <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Services</h4>
@@ -12033,23 +12652,6 @@ function AppContent() {
             <div style={{ display: 'flex', gap: '20px' }}>
               {[{ label: 'About Us', type: 'about' }, { label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
             </div>
-          </div>
-
-          <div style={{
-            borderTop: '1px solid rgba(255,255,255,0.1)',
-            paddingTop: '24px',
-            marginTop: '24px',
-            textAlign: 'center',
-          }}>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', margin: '0 0 6px 0', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: '600' }}>Join Our Team</p>
-            <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.84rem', margin: '0 0 12px 0' }}>
-              Interested in working with GetHome as a field agent or partner?
-            </p>
-            <button onClick={function() {
-              window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
-            }} style={{ backgroundColor: 'transparent', color: '#27ae60', border: '1.5px solid #27ae60', borderRadius: '20px', padding: '8px 22px', fontSize: '0.80rem', fontWeight: '700', cursor: 'pointer' }}>
-              Work With Us
-            </button>
           </div>
         </div>
       </footer>
@@ -12154,6 +12756,17 @@ function AppContent() {
                 >{staffLoading ? 'Signing in…' : 'Sign In'}</button>
               </form>
             )}
+
+            <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.76rem', color: 'rgba(255,255,255,0.5)' }}>
+              Interested in joining our team?{' '}
+              <span
+                onClick={function() {
+                  window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
+                }}
+                style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
+                Work With Us
+              </span>
+            </p>
           </div>
         </div>
       )}
