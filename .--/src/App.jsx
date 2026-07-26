@@ -7141,7 +7141,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     try {
       var res = await fetch(API_URL + '/api/gha/my-listings', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      setListings(Array.isArray(data) ? data : []);
+      var listings = Array.isArray(data) ? data : [];
+      setListings(listings.filter(function(l) { return !l.is_deleted; }));
     } catch(e) { console.error(e); }
     finally { setListingsLoading(false); }
   }
@@ -8932,7 +8933,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
-      if (res.ok) setSaListings(Array.isArray(data) ? data : []);
+      if (res.ok) {
+        var listings = Array.isArray(data) ? data : [];
+        setSaListings(listings.filter(function(l) { return !l.is_deleted; }));
+      }
     } catch(e) { console.error('SA listings error:', e.message); }
     finally { setListingsLoading(false); }
   };
