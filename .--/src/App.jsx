@@ -10680,11 +10680,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                   gap: '3px',
                                 }}>
                                   ⭐ FEATURED
-                                  {l.featured_until && (
-                                    <span style={{ fontWeight: '500', opacity: 0.9 }}>
-                                      · until {new Date(l.featured_until).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}
-                                    </span>
-                                  )}
                                 </span>
                               )}
                               {l.agent_gha_code && <span style={{ fontSize: '0.66rem', padding: '3px 10px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code}</span>}
