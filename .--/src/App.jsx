@@ -4959,73 +4959,91 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   ) : (
                     filteredFees.map(function(prop) {
+                      var propImage = null;
+                      if (Array.isArray(prop.image_urls) && prop.image_urls.length > 0) {
+                        propImage = prop.image_urls[0];
+                      } else if (typeof prop.image_urls === 'string') {
+                        try { propImage = JSON.parse(prop.image_urls)[0]; } catch(e) {}
+                      }
                       return (
                         <div key={prop.id} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '16px', marginBottom: '10px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                          <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                            {propImage ? (
+                              <img src={propImage} alt={prop.title}
+                                style={{ width: '72px', height: '72px', borderRadius: '10px', objectFit: 'cover', flexShrink: 0 }}
+                                onError={function(e) { e.target.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div style={{ width: '72px', height: '72px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0 }}>🏠</div>
+                            )}
                             <div style={{ flex: 1 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>{prop.title}</span>
-                                {prop.property_type && <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '600' }}>{prop.property_type.toUpperCase()}</span>}
-                              </div>
-                              <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem' }}>📍 {prop.location}</p>
-                              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Agent: {prop.agent_name || '—'}</span>
-                                {prop.sa_code && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Set by: {prop.sa_code} — {prop.sa_name}</span>}
-                                {prop.inspection_fee_set_at && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{new Date(prop.inspection_fee_set_at).toLocaleDateString()}</span>}
-                              </div>
-                            </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>{prop.title}</span>
+                                    {prop.property_type && <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '600' }}>{prop.property_type.toUpperCase()}</span>}
+                                  </div>
+                                  <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem' }}>📍 {prop.location}</p>
+                                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Agent: {prop.agent_name || '—'}</span>
+                                    {prop.sa_code && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Set by: {prop.sa_code} — {prop.sa_name}</span>}
+                                    {prop.inspection_fee_set_at && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{new Date(prop.inspection_fee_set_at).toLocaleDateString()}</span>}
+                                  </div>
+                                </div>
 
-                            <div style={{ textAlign: 'right' }}>
-                              <p style={{ margin: '0 0 4px 0', fontWeight: '900', fontSize: '1.1rem', color: prop.inspection_fee > 0 ? '#27ae60' : '#94a3b8' }}>
-                                {prop.inspection_fee > 0 ? '₦' + parseFloat(prop.inspection_fee).toLocaleString() : 'No fee set'}
-                              </p>
-                              <button onClick={function() {
-                                setSettingAdminFee(prop.id);
-                                setAdminFeeInput(prop.inspection_fee > 0 ? String(prop.inspection_fee) : '');
-                              }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                {prop.inspection_fee > 0 ? '✏ Adjust Fee' : '+ Set Fee'}
-                              </button>
+                                <div style={{ textAlign: 'right' }}>
+                                  <p style={{ margin: '0 0 4px 0', fontWeight: '900', fontSize: '1.1rem', color: prop.inspection_fee > 0 ? '#27ae60' : '#94a3b8' }}>
+                                    {prop.inspection_fee > 0 ? '₦' + parseFloat(prop.inspection_fee).toLocaleString() : 'No fee set'}
+                                  </p>
+                                  <button onClick={function() {
+                                    setSettingAdminFee(prop.id);
+                                    setAdminFeeInput(prop.inspection_fee > 0 ? String(prop.inspection_fee) : '');
+                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    {prop.inspection_fee > 0 ? '✏ Adjust Fee' : '+ Set Fee'}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {settingAdminFee === prop.id && (
+                                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                  <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>Set Inspection Fee for this property</p>
+                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <div style={{ position: 'relative', flex: 1 }}>
+                                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
+                                      <input type='number' min='0' placeholder='Enter fee amount'
+                                        value={adminFeeInput}
+                                        onChange={function(e) { setAdminFeeInput(e.target.value); }}
+                                        style={{ width: '100%', padding: '9px 10px 9px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                                    </div>
+                                    <button onClick={async function() {
+                                      if (adminFeeInput === '') { setAdminFeeMsg('Please enter a fee amount'); return; }
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/set-inspection-fee', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ property_id: prop.id, inspection_fee: parseFloat(adminFeeInput) || 0 }),
+                                        });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        setAdminFeeMsg('Fee updated successfully');
+                                        setSettingAdminFee(null);
+                                        fetchInspectionFees();
+                                        setTimeout(function() { setAdminFeeMsg(''); }, 3000);
+                                      } catch(err) { setAdminFeeMsg('Error: ' + err.message); }
+                                    }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                      Save
+                                    </button>
+                                    <button onClick={function() { setSettingAdminFee(null); setAdminFeeInput(''); }}
+                                      style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                      Cancel
+                                    </button>
+                                  </div>
+                                  {adminFeeMsg && <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', color: adminFeeMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontWeight: '600' }}>{adminFeeMsg}</p>}
+                                </div>
+                              )}
                             </div>
                           </div>
-
-                          {settingAdminFee === prop.id && (
-                            <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                              <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>Set Inspection Fee for this property</p>
-                              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <div style={{ position: 'relative', flex: 1 }}>
-                                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
-                                  <input type='number' min='0' placeholder='Enter fee amount'
-                                    value={adminFeeInput}
-                                    onChange={function(e) { setAdminFeeInput(e.target.value); }}
-                                    style={{ width: '100%', padding: '9px 10px 9px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
-                                </div>
-                                <button onClick={async function() {
-                                  if (adminFeeInput === '') { setAdminFeeMsg('Please enter a fee amount'); return; }
-                                  try {
-                                    var token = localStorage.getItem('gh_token');
-                                    var res = await fetch(API_URL + '/api/admin/set-inspection-fee', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                      body: JSON.stringify({ property_id: prop.id, inspection_fee: parseFloat(adminFeeInput) || 0 }),
-                                    });
-                                    var data = await res.json();
-                                    if (!res.ok) throw new Error(data.error || 'Failed');
-                                    setAdminFeeMsg('Fee updated successfully');
-                                    setSettingAdminFee(null);
-                                    fetchInspectionFees();
-                                    setTimeout(function() { setAdminFeeMsg(''); }, 3000);
-                                  } catch(err) { setAdminFeeMsg('Error: ' + err.message); }
-                                }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                  Save
-                                </button>
-                                <button onClick={function() { setSettingAdminFee(null); setAdminFeeInput(''); }}
-                                  style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', cursor: 'pointer' }}>
-                                  Cancel
-                                </button>
-                              </div>
-                              {adminFeeMsg && <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', color: adminFeeMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontWeight: '600' }}>{adminFeeMsg}</p>}
-                            </div>
-                          )}
                         </div>
                       );
                     })
