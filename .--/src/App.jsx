@@ -1187,7 +1187,7 @@ function PricingModal({ property, onClose, user, onUserChange }) {
   const inspectionFeeAmount = parseFloat(property.inspection_fee || 0);
   const inspectionFeeLabel  = inspectionFeeAmount > 0 ? '₦' + inspectionFeeAmount.toLocaleString() : 'FREE';
   const inspectionFeeColor  = inspectionFeeAmount > 0 ? '#0a2240' : '#27ae60';
-  const loanUrl = `${LOAN_PARTNER_URL}?utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
+  const loanUrl = `${LOAN_PARTNER_URL}${LOAN_PARTNER_URL && LOAN_PARTNER_URL.includes('?') ? '&' : '?'}utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
   const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
   const handleAuthSuccess = (newUser) => { onUserChange(newUser); setAuthWall(null); };
   const handleWhatsAppInspection = async function() {
