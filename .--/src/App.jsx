@@ -323,6 +323,10 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [fullName, setFullName]                       = useState('');
   const [phone, setPhone]                             = useState('');
   const [nin, setNin]                                 = useState('');
+  const [ninVerified, setNinVerified]                 = useState(false);
+  const [ninVerifying, setNinVerifying]               = useState(false);
+  const [ninVerifiedName, setNinVerifiedName]         = useState('');
+  const [ninError, setNinError]                       = useState('');
   const [address, setAddress]                         = useState('');
   const [experience, setExperience]                   = useState('');
   const [specialty, setSpecialty]                     = useState('');
@@ -349,6 +353,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [verificationEmail, setVerificationEmail]     = useState('');
   const [showResendVerification, setShowResendVerification] = useState(false);
   const isSignUp = mode === 'signup';
+  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const countryConfigs = {
     NG: {
       identityLabel:      'NIN (National Identification Number)',
@@ -396,6 +401,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
       if (!termsAccepted) { setError('Please accept the Terms and Privacy Policy.'); return; }
       if (!config.identityValidate(nin)) { setError(config.identityError); return; }
+      if (country !== 'GH' && !ninVerified) { setError('Please verify your NIN before completing registration.'); return; }
       setLoading(true);
       try {
         // Step 1 — create the auth account
@@ -429,6 +435,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
             address,
             nin: isGhana ? null : nin,
             nin_number: isGhana ? null : nin,
+            nin_verified: isGhana ? null : ninVerified,
             ghana_card_number: isGhana ? (nin.trim() || null) : null,
             experience,
             specialty,
@@ -919,26 +926,133 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
             <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Full Legal Name *" required
               value={fullName} onChange={function(e){ setFullName(e.target.value); setError(''); }} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>Phone *</label>
-                <div style={{ display: 'flex', alignItems: 'stretch', border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#fff' }}>
-                  <span style={{ padding: '11px 10px', backgroundColor: '#f1f5f9', borderRight: '1.5px solid #e2e8f0', fontSize: '0.78rem', fontWeight: '700', color: '#374151', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>{config.phonePrefix}</span>
-                  <input style={{ flex: 1, padding: '11px 12px', border: 'none', outline: 'none', fontSize: '16px', color: '#0a2240', backgroundColor: '#fff' }} placeholder={config.phonePlaceholder} required
-                    value={phone} onChange={function(e){ setPhone(e.target.value); setError(''); }} />
+                <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#fff', boxSizing: 'border-box' }}>
+                  <span style={{ flexShrink: 0, padding: '11px 10px', backgroundColor: '#f1f5f9', borderRight: '1.5px solid #e2e8f0', fontSize: '0.78rem', fontWeight: '700', color: '#374151', display: 'flex', alignItems: 'center', whiteSpace: 'nowrap' }}>{config.phonePrefix}</span>
+                  <input
+                    type='tel'
+                    inputMode='numeric'
+                    pattern='[0-9]*'
+                    style={{ flex: 1, minWidth: 0, width: '100%', padding: '11px 12px', border: 'none', outline: 'none', fontSize: '16px', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', WebkitAppearance: 'none' }}
+                    placeholder={config.phonePlaceholder} required
+                    value={phone} onChange={function(e){ setPhone(e.target.value.replace(/\D/g, '')); setError(''); }} />
                 </div>
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.identityLabel} *</label>
-                <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.identityPlaceholder} required
-                  maxLength={config.identityMaxLength}
-                  inputMode={config.identityNumeric ? 'numeric' : 'text'}
-                  value={nin}
-                  onChange={function(e){
-                    setNin(config.identityNumeric ? e.target.value.replace(/\D/g, '') : e.target.value);
-                    setError('');
-                  }} />
-              </div>
+              {country === 'GH' ? (
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.identityLabel} *</label>
+                  <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.identityPlaceholder} required
+                    maxLength={config.identityMaxLength}
+                    inputMode={config.identityNumeric ? 'numeric' : 'text'}
+                    value={nin}
+                    onChange={function(e){
+                      setNin(config.identityNumeric ? e.target.value.replace(/\D/g, '') : e.target.value);
+                      setError('');
+                    }} />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                    NIN (National Identity Number) *
+                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
+                    <input
+                      type='tel'
+                      inputMode='numeric'
+                      pattern='[0-9]*'
+                      maxLength={11}
+                      placeholder='Enter your 11-digit NIN'
+                      value={nin}
+                      required
+                      onChange={function(e) {
+                        var val = e.target.value.replace(/\D/g, '');
+                        setNin(val);
+                        setNinVerified(false);
+                        setNinVerifiedName('');
+                        setNinError('');
+                        setError('');
+                      }}
+                      disabled={ninVerified}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '11px 14px',
+                        borderRadius: '10px',
+                        border: '1.5px solid ' + (ninVerified ? '#27ae60' : ninError ? '#ef4444' : '#e2e8f0'),
+                        fontSize: '16px',
+                        backgroundColor: ninVerified ? '#f0fff4' : '#fff',
+                        boxSizing: 'border-box',
+                        WebkitAppearance: 'none',
+                      }}
+                    />
+                    <button
+                      type='button'
+                      onClick={async function() {
+                        if (!nin || nin.length !== 11) {
+                          setNinError('Please enter your complete 11-digit NIN');
+                          return;
+                        }
+                        setNinVerifying(true);
+                        setNinError('');
+                        try {
+                          var res = await fetch(API_URL + '/api/verify-nin', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ nin: nin }),
+                          });
+                          var data = await res.json();
+                          if (!res.ok || !data.verified) {
+                            setNinError(data.error || 'NIN verification failed. Please check your NIN.');
+                            return;
+                          }
+                          setNinVerified(true);
+                          setNinVerifiedName(data.verified_name || '');
+                        } catch(err) {
+                          setNinError('Verification service unavailable. Please try again.');
+                        } finally {
+                          setNinVerifying(false);
+                        }
+                      }}
+                      disabled={ninVerifying || ninVerified || nin.length !== 11}
+                      style={{
+                        flexShrink: 0,
+                        padding: '11px 12px',
+                        width: 'auto',
+                        whiteSpace: 'nowrap',
+                        backgroundColor: ninVerified ? '#27ae60' : nin.length === 11 ? '#0a2240' : '#94a3b8',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontWeight: '700',
+                        fontSize: '0.76rem',
+                        cursor: ninVerified || nin.length !== 11 ? 'not-allowed' : 'pointer',
+                      }}>
+                      {ninVerified ? '✓ Done' : ninVerifying ? '...' : 'Verify'}
+                    </button>
+                  </div>
+
+                  {ninVerified && ninVerifiedName && (
+                    <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                      <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
+                        ✓ Identity confirmed: {ninVerifiedName}
+                      </p>
+                    </div>
+                  )}
+
+                  {ninError && (
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: '#ef4444', fontWeight: '600' }}>
+                      {ninError}
+                    </p>
+                  )}
+
+                  <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                    Your NIN is verified against NIMC records and securely stored for identity purposes only.
+                  </p>
+                </div>
+              )}
             </div>
 
             <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Office / Business Address *" required
@@ -968,7 +1082,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
 
             <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Professional Details</p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px' }}>
               <select style={{ ...inputStyle, fontSize: '16px' }} required
                 value={experience} onChange={function(e){ setExperience(e.target.value); setError(''); }}>
                 <option value="">Years of Experience *</option>
