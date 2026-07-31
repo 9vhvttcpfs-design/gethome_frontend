@@ -411,8 +411,9 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
       if (!termsAccepted) { setError('Please accept the Terms and Privacy Policy.'); return; }
       if (agentType === 'agency') {
         if (!agencyName.trim()) { setError('Please enter your agency name.'); return; }
-        if (!cacNumber.trim()) { setError('CAC registration number is required for agency accounts.'); return; }
-        if (!cacVerified) { setError('Please verify your CAC number before completing registration.'); return; }
+        if (!cacNumber.trim()) { setError(country === 'GH' ? 'Please enter your ORC registration number.' : 'CAC registration number is required for agency accounts.'); return; }
+        if (country !== 'GH' && !cacVerified) { setError('Please verify your CAC number before completing registration.'); return; }
+        // Ghana ORC numbers cannot be auto-verified — registration proceeds to manual review.
       } else {
         if (!config.identityValidate(nin)) { setError(config.identityError); return; }
         if (country !== 'GH' && !ninVerified) { setError('Please verify your NIN before completing registration.'); return; }
@@ -459,7 +460,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
             cac: agentType === 'agency' ? (cacNumber.trim() || null) : (isGhana ? null : (cac.trim() || null)),
             cac_number: agentType === 'agency' ? (cacNumber.trim() || null) : (isGhana ? null : (cac.trim() || null)),
             cac_verified: agentType === 'agency' ? cacVerified : false,
-            orc_number: isGhana ? (cac.trim() || null) : null,
+            orc_number: isGhana ? (agentType === 'agency' ? (cacNumber.trim() || null) : (cac.trim() || null)) : null,
             about_self: about,
             about,
             country,
@@ -961,7 +962,18 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
             <p style={{ margin: '0 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Personal Information</p>
 
             <select style={{ ...inputStyle, fontSize: '16px' }} required
-              value={country} onChange={function(e){ setCountry(e.target.value); setError(''); }}>
+              value={country} onChange={function(e){
+                setCountry(e.target.value);
+                setError('');
+                setNin('');
+                setNinVerified(false);
+                setNinVerifiedName('');
+                setNinError('');
+                setCacNumber('');
+                setCacVerified(false);
+                setCacVerifiedName('');
+                setCacError('');
+              }}>
               <option value="">Select Country *</option>
               {SUPPORTED_COUNTRIES.map(function(c){ return <option key={c.code} value={c.code}>{c.flag} {c.name}</option>; })}
             </select>
@@ -990,15 +1002,94 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
               </div>
               {agentType === 'agent' && (country === 'GH' ? (
                 <div>
-                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.identityLabel} *</label>
-                  <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.identityPlaceholder} required
-                    maxLength={config.identityMaxLength}
-                    inputMode={config.identityNumeric ? 'numeric' : 'text'}
-                    value={nin}
-                    onChange={function(e){
-                      setNin(config.identityNumeric ? e.target.value.replace(/\D/g, '') : e.target.value);
-                      setError('');
-                    }} />
+                  <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                    {config.identityLabel} *
+                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
+                    <input
+                      type='text'
+                      placeholder={config.identityPlaceholder}
+                      required
+                      maxLength={config.identityMaxLength}
+                      inputMode={config.identityNumeric ? 'numeric' : 'text'}
+                      value={nin}
+                      onChange={function(e){
+                        setNin(config.identityNumeric ? e.target.value.replace(/\D/g, '') : e.target.value);
+                        setNinVerified(false);
+                        setNinVerifiedName('');
+                        setNinError('');
+                        setError('');
+                      }}
+                      disabled={ninVerified}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        padding: '11px 14px',
+                        borderRadius: '10px',
+                        border: '1.5px solid ' + (ninVerified ? '#27ae60' : ninError ? '#ef4444' : '#e2e8f0'),
+                        fontSize: '16px',
+                        backgroundColor: ninVerified ? '#f0fff4' : '#fff',
+                        boxSizing: 'border-box',
+                        WebkitAppearance: 'none',
+                      }}
+                    />
+                    <button
+                      type='button'
+                      onClick={async function() {
+                        if (!nin.trim()) { setNinError('Please enter your Ghana Card number'); return; }
+                        setNinVerifying(true);
+                        setNinError('');
+                        try {
+                          var res = await fetch(API_URL + '/api/verify-ghana-card', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ card_number: nin.trim() }),
+                          });
+                          var data = await res.json();
+                          if (!res.ok || !data.verified) {
+                            setNinError(data.error || 'Verification failed. Please check your Ghana Card number.');
+                            return;
+                          }
+                          setNinVerified(true);
+                          setNinVerifiedName(data.verified_name || '');
+                        } catch(err) {
+                          setNinError('Verification service unavailable. Please try again.');
+                        } finally {
+                          setNinVerifying(false);
+                        }
+                      }}
+                      disabled={ninVerifying || ninVerified || !nin.trim()}
+                      style={{
+                        flexShrink: 0,
+                        padding: '11px 12px',
+                        width: 'auto',
+                        whiteSpace: 'nowrap',
+                        backgroundColor: ninVerified ? '#27ae60' : nin.trim() ? '#0a2240' : '#94a3b8',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        fontWeight: '700',
+                        fontSize: '0.76rem',
+                        cursor: ninVerifying || ninVerified || !nin.trim() ? 'not-allowed' : 'pointer',
+                      }}>
+                      {ninVerified ? '✓ Done' : ninVerifying ? '...' : 'Verify'}
+                    </button>
+                  </div>
+
+                  {ninVerified && ninVerifiedName && (
+                    <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                      <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
+                        ✓ Identity confirmed: {ninVerifiedName}
+                      </p>
+                    </div>
+                  )}
+
+                  {ninError && (
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: '#ef4444', fontWeight: '600' }}>
+                      {ninError}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -1155,6 +1246,20 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                   placeholder="Tell us about yourself — experience, areas covered, why you want to join GetHome *" required
                   value={about} onChange={function(e){ setAbout(e.target.value); setError(''); }} />
               </>
+            ) : country === 'GH' ? (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                  ORC Registration Number *
+                </label>
+                <input type='text' placeholder='Enter your ORC registration number' required
+                  value={cacNumber} onChange={function(e) { setCacNumber(e.target.value); setError(''); }}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
+                <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600' }}>
+                    ⚠ ORC numbers cannot be automatically verified. Your registration will be manually reviewed by our team within 24-48 hours before approval.
+                  </p>
+                </div>
+              </div>
             ) : (
               <div>
                 <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
@@ -4429,7 +4534,20 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 {(agent.email || 'A')[0].toUpperCase()}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{agent.full_name || 'Name not provided'}</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', margin: '0 0 1px 0' }}>
+                                  <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>
+                                    {agent.agent_type === 'agency' ? (agent.agency_name || agent.full_name || 'Name not provided') : (agent.full_name || 'Name not provided')}
+                                  </p>
+                                  {agent.agent_type === 'agency' ? (
+                                    <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                      🏢 AGENCY
+                                    </span>
+                                  ) : (
+                                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                      👤 AGENT
+                                    </span>
+                                  )}
+                                </div>
                                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{agent.email || 'No email'}</p>
                                 {!isPending && (
                                   <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem' }}>
