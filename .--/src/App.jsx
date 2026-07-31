@@ -1470,8 +1470,22 @@ function PropertyCard({ house, onSelect }) {
             {(PROPERTY_TYPES.find(function(t) { return t.value === house.property_type; }) || {}).icon || ''} {(house.property_type || '').toUpperCase()}
           </div>
         )}
-        {(house.agent_tier || house.verification_level) && (
-          <div style={{ position: 'absolute', top: '7px', right: '7px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: (house.agent_tier || house.verification_level) === 'premium' ? '#f59e0b' : (house.agent_tier || house.verification_level) === 'verified' ? '#94a3b8' : '#cd7f32', border: '2px solid rgba(255,255,255,0.85)', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+        {house.gha_verified && (
+          <div style={{
+            position: 'absolute',
+            top: '8px',
+            right: '8px',
+            backgroundColor: 'rgba(10,34,64,0.88)',
+            borderRadius: '8px',
+            padding: '3px 8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            backdropFilter: 'blur(4px)',
+          }}>
+            <span style={{ fontSize: '0.78rem' }}>👑</span>
+            <span style={{ color: '#fff', fontSize: '0.64rem', fontWeight: '800', letterSpacing: '0.04em' }}>VERIFIED</span>
+          </div>
         )}
         {house.is_sold && (
           <div style={{ position: 'absolute', bottom: '7px', left: '7px', backgroundColor: '#ef4444', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontSize: '0.60rem', fontWeight: 800, letterSpacing: '0.5px' }}>SOLD</div>
@@ -1727,20 +1741,30 @@ function PricingModal({ property, onClose, user, onUserChange }) {
           <div style={{ border: '1px solid #e8edf3', borderRadius: '14px', overflow: 'hidden', marginTop: '16px', marginBottom: '16px' }}>
             <div style={{ backgroundColor: '#0a2240', padding: '10px 18px' }}><h3 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: 0 }}>Verified Fee Breakdown</h3></div>
             {(property.agent_display_name || property.created_by) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderBottom: '1px solid #f1f5f9', marginBottom: '4px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                  {property.agent_type === 'agency' ? '🏢' : '👤'}
-                </div>
-                <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 18px', borderBottom: '1px solid #f1f5f9', marginBottom: '4px' }}>
+                {property.agent_photo_url ? (
+                  <img src={property.agent_photo_url} alt='Agent'
+                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #27ae60', flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
+                    {property.agent_type === 'agency' ? '🏢' : '👤'}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Listed By</p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                     <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
                       {property.agent_display_name || 'Verified Agent'}
                     </p>
-                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800' }}>
                       ✓ Verified
                     </span>
                   </div>
+                  {property.agent_phone && (
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#64748b' }}>
+                      📞 {property.agent_phone}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -1952,232 +1976,6 @@ function PricingModal({ property, onClose, user, onUserChange }) {
     </div>
   );
 }
-function AgentVerificationForm({ user, onComplete }) {
-  var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  var { activeCountry } = useCountry();
-  var isGhana = activeCountry && activeCountry.code === 'GH';
-  var premiumFee    = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
-  var enterpriseFee = isGhana ? 'GH₵ 108.59' : '₦ 12,500';
-  var [step, setStep]                   = useState(1);
-  var [submitting, setSubmitting]       = useState(false);
-  var [successMsg, setSuccessMsg]       = useState('');
-  var [errorMsg, setErrorMsg]           = useState('');
-  var [showPassword, setShowPass]       = useState(false);
-  var [showConfirm, setShowConfirm]     = useState(false);
-  // Tier 1 fields
-  var [phone, setPhone]                 = useState('');
-  var [nin, setNin]                     = useState('');
-  var [selfieFile, setSelfieFile]       = useState(null);
-  var [selfiePreview, setSelfiePreview] = useState(null);
-  // Tier 2 fields
-  var [cacFile, setCacFile]             = useState(null);
-  var [govIdFile, setGovIdFile]         = useState(null);
-  var [propAuthFile, setPropAuthFile]   = useState(null);
-  var [references, setReferences]       = useState([{ name: '', phone: '', relationship: '' }]);
-  // Tier 3 fields
-  var [officeAddress, setOfficeAddress] = useState('');
-  var [emergencyName, setEmergencyName] = useState('');
-  var [emergencyPhone, setEmergencyPhone] = useState('');
-  var [emergencyRel, setEmergencyRel]   = useState('');
-  var [guarantorName, setGuarantorName] = useState('');
-  var [guarantorPhone, setGuarantorPhone] = useState('');
-  var [guarantorWork, setGuarantorWork] = useState('');
-  var [targetTier, setTargetTier]       = useState('basic');
-  var inputS = { width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', outline: 'none', color: '#0a2240', boxSizing: 'border-box' };
-  var labelS = { display: 'block', marginBottom: '5px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' };
-  function handleFileChange(setter, previewSetter, maxMB, e) {
-    var file = e.target.files[0]; if (!file) return;
-    if (file.size > maxMB * 1024 * 1024) { alert(`File must be under ${maxMB}MB`); return; }
-    setter(file);
-    if (previewSetter && file.type.startsWith('image/')) {
-      var reader = new FileReader();
-      reader.onload = function(ev) { previewSetter(ev.target.result); };
-      reader.readAsDataURL(file);
-    }
-  }
-  async function uploadKYCFile(file, fileName) {
-    var fd = new FormData();
-    fd.append('file', file);
-    fd.append('fileName', fileName);
-    fd.append('userId', user.id);
-    var token = localStorage.getItem('gh_token');
-    var res = await fetch(`${API_URL}/api/upload-kyc`, {
-      method: 'POST', body: fd,
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Upload failed');
-    return data.url;
-  }
-  async function handleSubmit() {
-    setSubmitting(true); setErrorMsg('');
-    try {
-      // ── Verify active session — fixes 'Unauthorized' on stale localStorage token ──
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Your session has expired. Please log in again.');
-      var token = session.access_token;
-      if (token) localStorage.setItem('gh_token', token);
-      var userId = session.user.id;
-
-      // ── Selfie: upload directly to Supabase Storage ──────────────────
-      var selfieUrl = null;
-      if (selfieFile) {
-        try {
-          const ext = selfieFile.name.split('.').pop().toLowerCase();
-          const selfiePath = `selfies/${userId}-${Date.now()}.${ext}`;
-          const { data: selfieData, error: selfieError } = await supabase.storage
-            .from('verification')
-            .upload(selfiePath, selfieFile, { cacheControl: '3600', upsert: true });
-          if (selfieError) throw new Error(selfieError.message);
-          selfieUrl = supabase.storage.from('verification').getPublicUrl(selfieData.path).data.publicUrl;
-        } catch (se) {
-          throw new Error('Selfie upload failed: ' + se.message);
-        }
-      }
-
-      // ── Other KYC documents: backend API ─────────────────────────────
-      var cacUrl      = cacFile      ? await uploadKYCFile(cacFile,      'cac')       : null;
-      var govIdUrl    = govIdFile    ? await uploadKYCFile(govIdFile,    'gov_id')    : null;
-      var propAuthUrl = propAuthFile ? await uploadKYCFile(propAuthFile, 'prop_auth') : null;
-
-      // ── Write NIN / Ghana Card / CAC / status to agents row immediately ──
-      const { error: updateError } = await supabase.from('agents').update({
-        nin:                 isGhana ? null : nin,
-        nin_number:          isGhana ? null : nin,
-        ghana_card_number:   isGhana ? nin.trim() || null : null,
-        cac:                 cacUrl || null,
-        cac_number:          cacUrl || null,
-        verification_status: 'pending',
-      }).eq('id', userId);
-      if (updateError) throw new Error('Agent record update failed: ' + updateError.message);
-
-      // ── Full verification submission to backend ───────────────────────
-      var payload = {
-        userId,
-        targetTier,
-        phone,
-        nin:               isGhana ? null : nin,
-        nin_number:        isGhana ? null : nin,
-        ghana_card_number: isGhana ? nin.trim() || null : null,
-        selfieUrl,
-        cacUrl,        cac_number:          cacUrl || null,
-        govIdUrl,      propAuthUrl,
-        references,
-        officeAddress,
-        emergencyContact:    { name: emergencyName, phone: emergencyPhone, relationship: emergencyRel },
-        guarantorInfo:       { name: guarantorName, phone: guarantorPhone, workplace: guarantorWork },
-        verification_status: 'pending',
-      };
-      var res = await fetch(`${API_URL}/api/agent/submit-verification`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload),
-      });
-      var data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Submission failed');
-      setSuccessMsg('Verification documents submitted! Admin will review within 24-48 hours.');
-      onComplete && onComplete();
-    } catch(e) { setErrorMsg(e.message); }
-    finally { setSubmitting(false); }
-  }
-  var fileBtn = function(label, file, setter, accept) {
-    var btnId = 'kyc-' + label.replace(/[^a-zA-Z0-9]/g, '-');
-    return (
-      <div>
-        <label style={labelS}>{label}</label>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <input type="file" accept={accept || 'image/*,.pdf'} id={btnId} style={{ display: 'none' }}
-            onChange={function(e){ handleFileChange(setter, null, 10, e); }} />
-          <button type="button"
-            onClick={function(){ var el = document.getElementById(btnId); if (el) el.click(); }}
-            style={{ padding: '8px 14px', backgroundColor: file ? '#f0fff4' : '#f1f5f9', color: file ? '#166534' : '#374151', border: '1.5px solid ' + (file ? '#86efac' : '#e2e8f0'), borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
-            {file ? ('OK - ' + file.name.substring(0, 18)) : ('+ Upload ' + label)}
-          </button>
-        </div>
-      </div>
-    );
-  };
-  if (successMsg) return (
-    <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '16px', padding: '24px', textAlign: 'center' }}>
-      <p style={{ color: '#166534', fontWeight: '700', fontSize: '0.92rem', margin: 0 }}>{successMsg}</p>
-    </div>
-  );
-  return (
-    <div style={{ ...cardStyle, padding: isMobile ? '18px' : '28px' }}>
-      <h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 4px 0' }}>Agent Verification</h3>
-      <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 20px 0' }}>Submit documents to unlock higher tier status and build trust with customers.</p>
-      {errorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px', marginBottom: '12px' }}><p style={{ margin: 0, color: '#b91c1c', fontSize: '0.82rem' }}>{errorMsg}</p></div>}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div>
-          <label style={labelS}>Verification Tier</label>
-          <select style={{ ...inputS, fontSize: '16px' }} value={targetTier} onChange={function(e){ setTargetTier(e.target.value); }}>
-            <option value="basic">{isGhana ? 'Bronze (Phone + Ghana Card) — Free' : 'Bronze (Phone + NIN) — Free'}</option>
-            <option value="verified">{isGhana ? 'Silver (+ ORC + Gov ID + References)' : 'Silver (+ CAC + Gov ID + References)'} — {premiumFee}</option>
-            <option value="premium">Gold (Full verification) — {enterpriseFee}</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelS}>Phone Number *</label>
-          <input style={{ ...inputS, fontSize: '16px' }} placeholder={isGhana ? '+233...' : '+234...'} value={phone} onChange={function(e){ setPhone(e.target.value); }} />
-        </div>
-        <div>
-          <label style={labelS}>{isGhana ? 'Ghana Card Number *' : 'NIN Number *'}</label>
-          <input style={{ ...inputS, fontSize: '16px' }} placeholder={isGhana ? 'GHA-XXXXXXXXX-X' : '11-digit NIN'} maxLength={isGhana ? 15 : 11} value={nin} onChange={function(e){ setNin(e.target.value); }} />
-        </div>
-        <div>
-          <label style={labelS}>Selfie Photo *</label>
-          <input type="file" accept="image/*" style={{ fontSize: '0.82rem' }}
-            onChange={function(e){ handleFileChange(setSelfieFile, setSelfiePreview, 5, e); }} />
-          {selfiePreview && <img src={selfiePreview} alt="Selfie" style={{ width: '72px', height: '72px', objectFit: 'cover', borderRadius: '8px', marginTop: '8px' }} />}
-        </div>
-        {(targetTier === 'verified' || targetTier === 'premium') && (
-          <>
-            {fileBtn(isGhana ? 'ORC Business Registration Document' : 'CAC Certificate', cacFile, setCacFile, 'image/*,.pdf')}
-            {fileBtn('Government ID', govIdFile, setGovIdFile, 'image/*,.pdf')}
-            {fileBtn('Property Authorization', propAuthFile, setPropAuthFile, 'image/*,.pdf')}
-            <div>
-              <label style={labelS}>Reference (Name, Phone, Relationship)</label>
-              {references.map(function(ref, i) {
-                return (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '6px' }}>
-                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Name" value={ref.name}
-                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],name:e.target.value}; return n; }); }} />
-                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Phone" value={ref.phone}
-                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],phone:e.target.value}; return n; }); }} />
-                    <input style={{ ...inputS, fontSize: '14px' }} placeholder="Relationship" value={ref.relationship}
-                      onChange={function(e){ setReferences(function(r){ var n=[...r]; n[i]={...n[i],relationship:e.target.value}; return n; }); }} />
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-        {targetTier === 'premium' && (
-          <>
-            <div>
-              <label style={labelS}>Office Address</label>
-              <input style={{ ...inputS, fontSize: '16px' }} value={officeAddress} onChange={function(e){ setOfficeAddress(e.target.value); }} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-              <div><label style={labelS}>Emergency Name</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyName} onChange={function(e){ setEmergencyName(e.target.value); }} /></div>
-              <div><label style={labelS}>Emergency Phone</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyPhone} onChange={function(e){ setEmergencyPhone(e.target.value); }} /></div>
-              <div><label style={labelS}>Relationship</label><input style={{ ...inputS, fontSize: '14px' }} value={emergencyRel} onChange={function(e){ setEmergencyRel(e.target.value); }} /></div>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-              <div><label style={labelS}>Guarantor Name</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorName} onChange={function(e){ setGuarantorName(e.target.value); }} /></div>
-              <div><label style={labelS}>Guarantor Phone</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorPhone} onChange={function(e){ setGuarantorPhone(e.target.value); }} /></div>
-              <div><label style={labelS}>Guarantor Workplace</label><input style={{ ...inputS, fontSize: '14px' }} value={guarantorWork} onChange={function(e){ setGuarantorWork(e.target.value); }} /></div>
-            </div>
-          </>
-        )}
-      </div>
-      <button onClick={handleSubmit} disabled={submitting}
-        style={{ width: '100%', marginTop: '20px', padding: '13px', backgroundColor: submitting ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.92rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
-        {submitting ? 'Submitting...' : 'Submit Verification Documents'}
-      </button>
-    </div>
-  );
-}
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
 function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
@@ -2314,19 +2112,6 @@ function RenewalBanner({ user, agentTier, isMobile }) {
     </div>
   );
 }
-// =========================================================
-// VERIFICATION TIER CONSTANTS
-// =========================================================
-var VERIFICATION_TIERS = {
-  basic:    { label: 'Basic Agent',            badge: 'BRONZE',  color: '#cd7f32', bg: '#fdf6ec', priceNGN: 0,     requirements: ['Phone Verification', 'NIN Verification'] },
-  verified: { label: 'Verified Agent',         badge: 'SILVER',  color: '#94a3b8', bg: '#f8fafc', priceNGN: 8500,  requirements: ['CAC Certificate', 'Government ID', 'Reference Checks'] },
-  premium:  { label: 'Premium Verified Agent', badge: 'GOLD',    color: '#f59e0b', bg: '#fffbeb', priceNGN: 12500, requirements: ['Physical Office Verification', 'Track Record', 'Transaction History'] },
-};
-// =========================================================
-// AGENT KYC VERIFICATION FORM
-
-
-// =========================================================
 function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished, onListingUpdated, onListingDeleted }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry, fmtCurrency, fmtListingPrice, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
@@ -2353,6 +2138,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
     }
     supabase.from('agents').select('status').eq('id', user.id).single()
       .then(function({ data }) { setLocalIsApproved(data?.status === 'approved'); })
+      .catch(function() {});
+  }, [user?.id]);
+  const [agentProfile, setAgentProfile] = useState({ phone: user?.phone || '', profile_photo_url: user?.profile_photo_url || null });
+  useEffect(function() {
+    if (!user?.id) return;
+    supabase.from('agents').select('phone, profile_photo_url').eq('id', user.id).single()
+      .then(function({ data }) { if (data) setAgentProfile(function(prev){ return Object.assign({}, prev, data); }); })
       .catch(function() {});
   }, [user?.id]);
   const DRAFT_KEY = 'gh_upload_draft_' + (user?.id || 'guest');
@@ -2670,15 +2462,10 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.1rem' : '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Agent Portal</h2>
           <p style={{ color: '#64748b', fontSize: '0.80rem', margin: 0 }}>Logged in as <strong style={{ color: '#27ae60' }}>{user?.email}</strong></p>
         </div>
-        {user?.verification_level && (
-          <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '800', backgroundColor: VERIFICATION_TIERS[user.verification_level]?.bg || '#f1f5f9', color: VERIFICATION_TIERS[user.verification_level]?.color || '#64748b', border: '1.5px solid ' + (VERIFICATION_TIERS[user.verification_level]?.color || '#e2e8f0') }}>
-            {VERIFICATION_TIERS[user.verification_level]?.badge || 'BASIC'}
-          </span>
-        )}
       </div>
       {/* Portal sub-tabs */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
-        {[['listings', 'My Listings'], ['verify', 'Get Verified'], ['account', 'Account Details']].map(function([t, label]) {
+        {[['listings', 'My Listings'], ['verify', 'Complete Profile'], ['account', 'Account Details']].map(function([t, label]) {
           var active = (portalTab || 'listings') === t;
           return (
             <button key={t} onClick={function(){
@@ -2700,7 +2487,93 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         })}
       </div>
       {portalTab === 'verify' ? (
-        <AgentVerificationForm user={user} onComplete={function(){ setPortalTab('listings'); }} />
+        <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #e2e8f0', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
+          <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', margin: '0 0 6px 0' }}>
+            Complete Your Profile
+          </h3>
+          <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 18px 0' }}>
+            Add your phone number and profile photo so customers can recognize and trust you when they see your listings.
+          </p>
+
+          {/* Phone number */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+              Phone Number
+              {agentProfile?.phone && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <span style={{ flexShrink: 0, padding: '11px 10px', backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '0.84rem', color: '#374151', fontWeight: '600' }}>+234</span>
+              <input
+                type='tel'
+                inputMode='numeric'
+                placeholder='08012345678'
+                defaultValue={agentProfile?.phone || ''}
+                id='agent-phone-input'
+                style={{ flex: 1, padding: '11px 14px', borderRadius: '10px', border: '1.5px solid ' + (agentProfile?.phone ? '#27ae60' : '#e2e8f0'), fontSize: '16px', boxSizing: 'border-box', backgroundColor: agentProfile?.phone ? '#f0fff4' : '#fff' }}
+              />
+            </div>
+          </div>
+
+          {/* Profile photo */}
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+              Profile Photo
+              {agentProfile?.profile_photo_url && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {agentProfile?.profile_photo_url ? (
+                <img src={agentProfile.profile_photo_url} alt='Profile'
+                  style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #27ae60' }} />
+              ) : (
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', border: '2px dashed #e2e8f0' }}>👤</div>
+              )}
+              <div>
+                <input type='file' accept='image/*' id='profile-photo-input' style={{ display: 'none' }}
+                  onChange={async function(e) {
+                    var file = e.target.files[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5MB'); return; }
+                    try {
+                      var fileExt = file.name.split('.').pop();
+                      var fileName = 'agent-' + user.id + '-' + Date.now() + '.' + fileExt;
+                      var { data: uploadData, error: uploadErr } = await supabase.storage
+                        .from('agent-photos')
+                        .upload(fileName, file, { upsert: true });
+                      if (uploadErr) throw uploadErr;
+                      var { data: urlData } = supabase.storage.from('agent-photos').getPublicUrl(fileName);
+                      var photoUrl = urlData.publicUrl;
+                      // Save to database
+                      await supabase.from('profiles').update({ profile_photo_url: photoUrl }).eq('id', user.id);
+                      await supabase.from('agents').update({ profile_photo_url: photoUrl }).eq('id', user.id);
+                      setAgentProfile(function(prev) { return Object.assign({}, prev, { profile_photo_url: photoUrl }); });
+                      alert('Profile photo updated successfully!');
+                    } catch(err) {
+                      alert('Upload failed: ' + err.message);
+                    }
+                  }} />
+                <button onClick={function() { document.getElementById('profile-photo-input').click(); }}
+                  style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'block', marginBottom: '4px' }}>
+                  {agentProfile?.profile_photo_url ? 'Change Photo' : 'Upload Photo'}
+                </button>
+                <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8' }}>JPG, PNG under 5MB</p>
+              </div>
+            </div>
+          </div>
+
+          <button onClick={async function() {
+            var phoneInput = document.getElementById('agent-phone-input');
+            var phoneVal = phoneInput?.value?.trim();
+            if (!phoneVal) { alert('Please enter your phone number'); return; }
+            try {
+              await supabase.from('profiles').update({ phone: phoneVal }).eq('id', user.id);
+              await supabase.from('agents').update({ phone: phoneVal }).eq('id', user.id);
+              setAgentProfile(function(prev) { return Object.assign({}, prev, { phone: phoneVal }); });
+              alert('Profile updated successfully!');
+            } catch(err) { alert('Update failed: ' + err.message); }
+          }} style={{ width: '100%', padding: '12px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+            Save Profile
+          </button>
+        </div>
       ) : null}
       {portalTab === 'account' && (
         <>
@@ -12261,14 +12134,6 @@ function AppContent() {
           var props = Array.isArray(data) ? data : (data.properties || []);
           var createdByIds = [...new Set(props.map(function(p){ return p.created_by; }).filter(Boolean))];
           if (createdByIds.length > 0) {
-            try {
-              var { data: profiles } = await supabase.from('profiles').select('id, verification_level').in('id', createdByIds);
-              if (profiles && profiles.length > 0) {
-                var tierMap = {};
-                profiles.forEach(function(prof){ tierMap[prof.id] = prof.verification_level || 'basic'; });
-                props = props.map(function(p){ return Object.assign({}, p, { agent_tier: tierMap[p.created_by] || 'basic' }); });
-              }
-            } catch(te) { console.warn('[fetchData] tier fetch error:', te); }
             try {
               var { data: agentRows } = await supabase.from('agents').select('id, full_name, name, agency_name, agent_type').in('id', createdByIds);
               if (agentRows && agentRows.length > 0) {
