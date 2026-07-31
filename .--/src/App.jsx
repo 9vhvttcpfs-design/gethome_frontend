@@ -313,8 +313,8 @@ function RateGHAModal({ ghaId, ghaName, inspectionId, customerEmail, onClose, on
     </div>
   );
 }
-function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
-  const [mode, setMode]                               = useState('login');
+function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
+  const [mode, setMode]                               = useState(initialMode || 'login');
   const [email, setEmail]                             = useState('');
   const [password, setPassword]                       = useState('');
   const [confirmPassword, setConfirmPassword]         = useState('');
@@ -340,7 +340,9 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [showPrivacyModal, setShowPrivacyModal]       = useState(false);
   const [emailSent, setEmailSent]                     = useState(false);
   const [agentCity, setAgentCity]                     = useState('');
-  const [agentRequestedGha, setAgentRequestedGha]     = useState('');
+  const [agentRequestedGha, setAgentRequestedGha]     = useState(function() {
+    try { return localStorage.getItem('gh_referral_code') || ''; } catch(e) { return ''; }
+  });
   const [showForgotPassword, setShowForgotPassword]   = useState(false);
   const [resetEmail, setResetEmail]                   = useState('');
   const [resetSent, setResetSent]                     = useState(false);
@@ -352,6 +354,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [verificationEmail, setVerificationEmail]     = useState('');
   const [showResendVerification, setShowResendVerification] = useState(false);
+  const [agentType, setAgentType]                     = useState('agent');
+  const [agencyName, setAgencyName]                   = useState('');
+  const [cacNumber, setCacNumber]                     = useState('');
+  const [cacVerified, setCacVerified]                 = useState(false);
+  const [cacVerifying, setCacVerifying]               = useState(false);
+  const [cacVerifiedName, setCacVerifiedName]         = useState('');
+  const [cacError, setCacError]                       = useState('');
   const isSignUp = mode === 'signup';
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const countryConfigs = {
@@ -400,8 +409,14 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
     if (mode === 'signup') {
       if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
       if (!termsAccepted) { setError('Please accept the Terms and Privacy Policy.'); return; }
-      if (!config.identityValidate(nin)) { setError(config.identityError); return; }
-      if (country !== 'GH' && !ninVerified) { setError('Please verify your NIN before completing registration.'); return; }
+      if (agentType === 'agency') {
+        if (!agencyName.trim()) { setError('Please enter your agency name.'); return; }
+        if (!cacNumber.trim()) { setError('CAC registration number is required for agency accounts.'); return; }
+        if (!cacVerified) { setError('Please verify your CAC number before completing registration.'); return; }
+      } else {
+        if (!config.identityValidate(nin)) { setError(config.identityError); return; }
+        if (country !== 'GH' && !ninVerified) { setError('Please verify your NIN before completing registration.'); return; }
+      }
       setLoading(true);
       try {
         // Step 1 — create the auth account
@@ -427,20 +442,23 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
           body: JSON.stringify({
             id: newUserId,
             email,
-            full_name: fullName,
-            name: fullName,
+            full_name: agentType === 'agency' ? agencyName.trim() : fullName,
+            name: agentType === 'agency' ? agencyName.trim() : fullName,
+            agency_name: agentType === 'agency' ? agencyName.trim() : null,
+            agent_type: agentType,
             phone,
             phone_number: phone,
             office_address: address,
             address,
-            nin: isGhana ? null : nin,
-            nin_number: isGhana ? null : nin,
-            nin_verified: isGhana ? null : ninVerified,
-            ghana_card_number: isGhana ? (nin.trim() || null) : null,
+            nin: agentType === 'agency' ? null : (isGhana ? null : nin),
+            nin_number: agentType === 'agency' ? null : (isGhana ? null : nin),
+            nin_verified: agentType === 'agency' ? false : (isGhana ? null : ninVerified),
+            ghana_card_number: agentType === 'agency' ? null : (isGhana ? (nin.trim() || null) : null),
             experience,
             specialty,
-            cac: isGhana ? null : (cac.trim() || null),
-            cac_number: isGhana ? null : (cac.trim() || null),
+            cac: agentType === 'agency' ? (cacNumber.trim() || null) : (isGhana ? null : (cac.trim() || null)),
+            cac_number: agentType === 'agency' ? (cacNumber.trim() || null) : (isGhana ? null : (cac.trim() || null)),
+            cac_verified: agentType === 'agency' ? cacVerified : false,
             orc_number: isGhana ? (cac.trim() || null) : null,
             about_self: about,
             about,
@@ -459,6 +477,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         // Step 5 — push fresh session into Supabase client when email confirmation is off
         if (authData?.session) await supabase.auth.setSession(authData.session);
 
+        try { localStorage.removeItem('gh_referral_code'); } catch(e) {}
         setEmailSent(true);
       } catch (err) {
         setError(err.message || 'Registration failed. Please try again.');
@@ -605,6 +624,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         is_unlimited: agentProfile?.is_unlimited || false,
         full_name:    agentProfile?.full_name || agentProfile?.name || '',
         phone:        agentProfile?.phone || agentProfile?.phone_number || '',
+        agent_type:   agentProfile?.agent_type || 'agent',
       };
       localStorage.setItem('gh_user', JSON.stringify(freshUser));
       onSuccess(freshUser);
@@ -915,6 +935,29 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
         {/* ── SIGNUP-ONLY FIELDS ───────────────────────── */}
         {mode === 'signup' && (
           <>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', backgroundColor: '#f1f5f9', borderRadius: '12px', padding: '4px' }}>
+              <button
+                type='button'
+                onClick={function() { setAgentType('agent'); setNinVerified(false); setNin(''); setCacVerified(false); setCacVerifiedName(''); setCacNumber(''); setCacError(''); setError(''); }}
+                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agent' ? '#0a2240' : 'transparent', color: agentType === 'agent' ? '#fff' : '#64748b', transition: 'all 0.2s' }}>
+                👤 As Agent
+              </button>
+              <button
+                type='button'
+                onClick={function() { setAgentType('agency'); setNinVerified(false); setNin(''); setCacVerified(false); setCacVerifiedName(''); setCacNumber(''); setCacError(''); setError(''); }}
+                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agency' ? '#0a2240' : 'transparent', color: agentType === 'agency' ? '#fff' : '#64748b', transition: 'all 0.2s' }}>
+                🏢 As Agency
+              </button>
+            </div>
+
+            {agentType === 'agency' && (
+              <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #bfdbfe' }}>
+                <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.5 }}>
+                  <strong>Agency accounts</strong> list properties under your company name, have access to the Agency plan (₦35,000/month — up to 100 listings), and do not require NIN verification.
+                </p>
+              </div>
+            )}
+
             <p style={{ margin: '0 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Personal Information</p>
 
             <select style={{ ...inputStyle, fontSize: '16px' }} required
@@ -923,10 +966,15 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
               {SUPPORTED_COUNTRIES.map(function(c){ return <option key={c.code} value={c.code}>{c.flag} {c.name}</option>; })}
             </select>
 
-            <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Full Legal Name *" required
-              value={fullName} onChange={function(e){ setFullName(e.target.value); setError(''); }} />
+            {agentType === 'agency' ? (
+              <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Agency Name — e.g. Prestige Properties Ltd *" required
+                value={agencyName} onChange={function(e){ setAgencyName(e.target.value); setError(''); }} />
+            ) : (
+              <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Full Legal Name *" required
+                value={fullName} onChange={function(e){ setFullName(e.target.value); setError(''); }} />
+            )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: agentType === 'agency' ? '1fr' : (isMobile ? '1fr' : '1fr 1fr'), gap: '8px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>Phone *</label>
                 <div style={{ display: 'flex', alignItems: 'stretch', width: '100%', border: '1.5px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#fff', boxSizing: 'border-box' }}>
@@ -940,7 +988,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
                     value={phone} onChange={function(e){ setPhone(e.target.value.replace(/\D/g, '')); setError(''); }} />
                 </div>
               </div>
-              {country === 'GH' ? (
+              {agentType === 'agent' && (country === 'GH' ? (
                 <div>
                   <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.identityLabel} *</label>
                   <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.identityPlaceholder} required
@@ -1052,7 +1100,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
                     Your NIN is verified against NIMC records and securely stored for identity purposes only.
                   </p>
                 </div>
-              )}
+              ))}
             </div>
 
             <input style={{ ...inputStyle, fontSize: '16px' }} placeholder="Office / Business Address *" required
@@ -1080,30 +1128,119 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue' }) {
               <p style={{ margin: '3px 0 0 2px', fontSize: '0.72rem', color: '#94a3b8' }}>Leave blank if you were not referred by a specific GHA agent</p>
             </div>
 
-            <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Professional Details</p>
+            {agentType === 'agent' ? (
+              <>
+                <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Professional Details</p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px' }}>
-              <select style={{ ...inputStyle, fontSize: '16px' }} required
-                value={experience} onChange={function(e){ setExperience(e.target.value); setError(''); }}>
-                <option value="">Years of Experience *</option>
-                {['Less than 1 year','1-2 years','3-5 years','5-10 years','10+ years'].map(function(y){ return <option key={y} value={y}>{y}</option>; })}
-              </select>
-              <select style={{ ...inputStyle, fontSize: '16px' }} required
-                value={specialty} onChange={function(e){ setSpecialty(e.target.value); setError(''); }}>
-                <option value="">Specialty *</option>
-                {['Residential Rentals','Property Sales','Commercial','Land','Short Lets','All Types'].map(function(s){ return <option key={s} value={s}>{s}</option>; })}
-              </select>
-            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px' }}>
+                  <select style={{ ...inputStyle, fontSize: '16px' }} required
+                    value={experience} onChange={function(e){ setExperience(e.target.value); setError(''); }}>
+                    <option value="">Years of Experience *</option>
+                    {['Less than 1 year','1-2 years','3-5 years','5-10 years','10+ years'].map(function(y){ return <option key={y} value={y}>{y}</option>; })}
+                  </select>
+                  <select style={{ ...inputStyle, fontSize: '16px' }} required
+                    value={specialty} onChange={function(e){ setSpecialty(e.target.value); setError(''); }}>
+                    <option value="">Specialty *</option>
+                    {['Residential Rentals','Property Sales','Commercial','Land','Short Lets','All Types'].map(function(s){ return <option key={s} value={s}>{s}</option>; })}
+                  </select>
+                </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.businessLabel} <span style={{ fontWeight: '400', color: '#94a3b8' }}>(optional)</span></label>
-              <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.businessPlaceholder}
-                value={cac} onChange={function(e){ setCac(e.target.value); }} />
-            </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.78rem', fontWeight: '600', color: '#374151' }}>{config.businessLabel} <span style={{ fontWeight: '400', color: '#94a3b8' }}>(optional)</span></label>
+                  <input style={{ ...inputStyle, fontSize: '16px' }} placeholder={config.businessPlaceholder}
+                    value={cac} onChange={function(e){ setCac(e.target.value); }} />
+                </div>
 
-            <textarea style={{ ...inputStyle, fontSize: '16px', minHeight: '72px', resize: 'vertical' }}
-              placeholder="Tell us about yourself — experience, areas covered, why you want to join GetHome *" required
-              value={about} onChange={function(e){ setAbout(e.target.value); setError(''); }} />
+                <textarea style={{ ...inputStyle, fontSize: '16px', minHeight: '72px', resize: 'vertical' }}
+                  placeholder="Tell us about yourself — experience, areas covered, why you want to join GetHome *" required
+                  value={about} onChange={function(e){ setAbout(e.target.value); setError(''); }} />
+              </>
+            ) : (
+              <div>
+                <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                  CAC Registration Number *
+                  {cacVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                </label>
+                <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
+                  <input
+                    type='text'
+                    placeholder='e.g. RC1234567 or BN123456'
+                    value={cacNumber}
+                    onChange={function(e) {
+                      setCacNumber(e.target.value);
+                      setCacVerified(false);
+                      setCacVerifiedName('');
+                      setCacError('');
+                    }}
+                    disabled={cacVerified}
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      border: '1.5px solid ' + (cacVerified ? '#27ae60' : cacError ? '#ef4444' : '#e2e8f0'),
+                      fontSize: '16px',
+                      backgroundColor: cacVerified ? '#f0fff4' : '#fff',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <button
+                    type='button'
+                    onClick={async function() {
+                      if (!cacNumber.trim()) { setCacError('Please enter your CAC registration number'); return; }
+                      setCacVerifying(true);
+                      setCacError('');
+                      try {
+                        var res = await fetch(API_URL + '/api/verify-cac', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ rc_number: cacNumber.trim(), company_name: agencyName.trim() || undefined }),
+                        });
+                        var data = await res.json();
+                        if (!res.ok || !data.verified) {
+                          setCacError(data.error || 'CAC verification failed. Please check your RC number.');
+                          return;
+                        }
+                        setCacVerified(true);
+                        setCacVerifiedName(data.company_name || '');
+                      } catch(err) {
+                        setCacError('Verification service unavailable. Please try again.');
+                      } finally {
+                        setCacVerifying(false);
+                      }
+                    }}
+                    disabled={cacVerifying || cacVerified || !cacNumber.trim()}
+                    style={{
+                      flexShrink: 0,
+                      padding: '12px 12px',
+                      backgroundColor: cacVerified ? '#27ae60' : cacNumber.trim() ? '#0a2240' : '#94a3b8',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: '700',
+                      fontSize: '0.76rem',
+                      cursor: cacVerified || !cacNumber.trim() ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}>
+                    {cacVerified ? '✓ Done' : cacVerifying ? '...' : 'Verify'}
+                  </button>
+                </div>
+
+                {cacVerified && cacVerifiedName && (
+                  <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                    <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
+                      ✓ Business confirmed: {cacVerifiedName}
+                    </p>
+                  </div>
+                )}
+
+                {cacError && <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: '#ef4444' }}>{cacError}</p>}
+
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                  Your CAC number is verified against the Corporate Affairs Commission registry.
+                </p>
+              </div>
+            )}
 
             <p style={{ margin: '4px 0 2px', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>Account Credentials</p>
           </>
@@ -1484,6 +1621,24 @@ function PricingModal({ property, onClose, user, onUserChange }) {
           )}
           <div style={{ border: '1px solid #e8edf3', borderRadius: '14px', overflow: 'hidden', marginTop: '16px', marginBottom: '16px' }}>
             <div style={{ backgroundColor: '#0a2240', padding: '10px 18px' }}><h3 style={{ color: '#fff', fontSize: '0.88rem', fontWeight: '700', margin: 0 }}>Verified Fee Breakdown</h3></div>
+            {(property.agent_display_name || property.created_by) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', borderBottom: '1px solid #f1f5f9', marginBottom: '4px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
+                  {property.agent_type === 'agency' ? '🏢' : '👤'}
+                </div>
+                <div>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Listed By</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                      {property.agent_display_name || 'Verified Agent'}
+                    </p>
+                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      ✓ Verified
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
             {feeRows.map(function(row, i) { return (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '9px 14px' : '11px 18px', borderBottom: i < feeRows.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }}><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', color: '#374151' }}>{row.label}</span><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', fontWeight: '700', color: row.color }}>{row.amount}</span></div>); })}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div>
@@ -1919,10 +2074,11 @@ function AgentVerificationForm({ user, onComplete }) {
   );
 }
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
-function AgentUpgradePanel({ currentTier, agentEmail, agentId }) {
+function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
+  var isAgencyAccount = agentType === 'agency';
   var premiumPriceText = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
   var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ 35,000';
   var tierPriceDisplay = { premium: premiumPriceText, agency: agencyPriceText };
@@ -1958,8 +2114,15 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId }) {
     <div style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
       <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: isMobile ? '0.9rem' : '1rem' }}>{currentTier === 'free' ? 'Upgrade Your Agent Tier' : 'Renew Your Subscription'}</p>
       <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Current plan: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[currentTier]?.label}</strong></p>
+      {isAgencyAccount && (
+        <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #bfdbfe' }}>
+          <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.5 }}>
+            As an agency you have access to our Agency Plan which allows up to 100 property listings.
+          </p>
+        </div>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-        {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free').map(function([tierKey, tier]) {
+        {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
           return (<div key={tierKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
             <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
             <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
@@ -2968,7 +3131,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         </div>
         {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
         </form>
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} />
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -7219,6 +7382,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [composeForm, setComposeForm]               = useState({ recipient_type: 'SA', recipient_id: staffUser.sa_id || '', subject: '', message: '' });
   const [composing, setComposing]                   = useState(false);
   const [messageMsg, setMessageMsg]                 = useState('');
+  // Referrals tab state
+  const [ghaReferrals, setGhaReferrals]             = useState([]);
+  const [referralStats, setReferralStats]           = useState({ total: 0, approved: 0, subscribed: 0 });
+  const [referralLinkCopied, setReferralLinkCopied] = useState(false);
 
   function showMsg(msg) { setActionMsg(msg); setTimeout(function(){ setActionMsg(''); }, 4000); }
 
@@ -7327,6 +7494,20 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       setEarningsData(null);
     } finally { setEarningsLoading(false); }
   }
+
+  const fetchGHAReferrals = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/gha/my-referrals', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) {
+        setGhaReferrals(data.referrals || []);
+        setReferralStats(data.stats || { total: 0, approved: 0, subscribed: 0 });
+      }
+    } catch(e) { console.error('Fetch referrals error:', e.message); }
+  };
 
   const fetchGHANotifications = async function() {
     try {
@@ -7460,6 +7641,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     if (ghaTab === 'earnings') fetchGHAEarnings(selectedMonth);
   }, [ghaTab, selectedMonth]);
   useEffect(function() {
+    if (ghaTab === 'referrals') fetchGHAReferrals();
+  }, [ghaTab]);
+  useEffect(function() {
     function handleClickOutside(e) {
       if (notifBellRef.current && !notifBellRef.current.contains(e.target)) {
         setShowNotifDropdown(false);
@@ -7499,6 +7683,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'monthly-history', label: 'Monthly History' },
     { id: 'earnings', label: 'Earnings' },
     { id: 'inbox', label: 'Inbox' },
+    { id: 'referrals', label: 'Referrals' },
   ];
 
   return (
@@ -8619,6 +8804,115 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             })()}
           </div>
         )}
+
+        {ghaTab === 'referrals' && (function() {
+          var ghaCode = staffUser?.code || staffUser?.gha_code || '';
+          var referralLink = 'https://trygethome.online/?ref=' + ghaCode + '&role=agent';
+          return (
+          <div>
+            {/* Referral link card */}
+            <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
+              <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', margin: '0 0 6px 0' }}>
+                🔗 Your Agent Referral Link
+              </h3>
+              <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 14px 0' }}>
+                Share this link with potential agents. When they register using your link your GHA code is automatically attached to their account.
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 14px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#374151', flex: 1, wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                  {referralLink}
+                </p>
+                <button onClick={async function() {
+                  try {
+                    await navigator.clipboard.writeText(referralLink);
+                    setReferralLinkCopied(true);
+                    setTimeout(function() { setReferralLinkCopied(false); }, 3000);
+                  } catch(e) {
+                    var el = document.createElement('textarea');
+                    el.value = referralLink;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    setReferralLinkCopied(true);
+                    setTimeout(function() { setReferralLinkCopied(false); }, 3000);
+                  }
+                }} style={{ flexShrink: 0, backgroundColor: referralLinkCopied ? '#27ae60' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {referralLinkCopied ? '✓ Copied!' : 'Copy Link'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={function() {
+                  var whatsappMsg = 'Join GetHome as a verified property agent! 🏠\n\nList your properties, get them physically verified, and connect with serious buyers and renters across Nigeria.\n\n✅ Free to join\n✅ Dedicated support agent (me!)\n✅ Verified listings build customer trust\n✅ Secure payment handling\n\nRegister here using my link:\n' + referralLink + '\n\nYour GHA code ' + ghaCode + ' will be automatically linked to your account.';
+                  window.open('https://wa.me/?text=' + encodeURIComponent(whatsappMsg), '_blank');
+                }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>📱</span> Share on WhatsApp
+                </button>
+                <button onClick={function() {
+                  var smsText = 'Join GetHome as a property agent! Register at ' + referralLink + ' — your account will be linked to my GHA code ' + ghaCode + ' for dedicated support.';
+                  window.open('sms:?body=' + encodeURIComponent(smsText), '_blank');
+                }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
+                  📩 Share via SMS
+                </button>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px' }}>
+              {[
+                { label: 'Total Referred', value: referralStats.total, color: '#0a2240' },
+                { label: 'Approved', value: referralStats.approved, color: '#27ae60' },
+                { label: 'Subscribed', value: referralStats.subscribed, color: '#f59e0b' },
+              ].map(function(stat) {
+                return (
+                  <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: '900', fontSize: '1.4rem', color: stat.color }}>{stat.value}</p>
+                    <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Referrals list */}
+            <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.90rem', margin: '0 0 10px 0' }}>
+              Agents You Referred ({ghaReferrals.length})
+            </h3>
+
+            {ghaReferrals.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px' }}>
+                <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>🔗</p>
+                <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0' }}>No referrals yet</p>
+                <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0 }}>Share your referral link with agents to start building your network</p>
+              </div>
+            ) : (
+              ghaReferrals.map(function(ref) {
+                return (
+                  <div key={ref.id} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px 16px', marginBottom: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <div>
+                      <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>
+                        {ref.referred_agent_name || ref.referred_agent_email || 'Unknown Agent'}
+                      </p>
+                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.74rem' }}>
+                        {ref.referred_agent_email} · {new Date(ref.registered_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span style={{
+                      borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700',
+                      backgroundColor: ref.status === 'subscribed' ? '#fef3c7' : ref.status === 'approved' ? '#f0fff4' : '#f1f5f9',
+                      color: ref.status === 'subscribed' ? '#92400e' : ref.status === 'approved' ? '#166534' : '#64748b',
+                      border: '1px solid ' + (ref.status === 'subscribed' ? '#fde68a' : ref.status === 'approved' ? '#bbf7d0' : '#e2e8f0'),
+                    }}>
+                      {ref.status === 'subscribed' ? '⭐ Subscribed' : ref.status === 'approved' ? '✓ Approved' : '⏳ Registered'}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+          );
+        })()}
 
       </div>
 
@@ -11532,6 +11826,7 @@ function AppContent() {
   const [user, setUser]                         = useState(null);
   const [authChecked, setAuthChecked]           = useState(false);
   const [showNavAuth, setShowNavAuth]           = useState(false);
+  const [authInitialMode, setAuthInitialMode]   = useState(null);
   const [properties, setProperties]             = useState([]);
   const [isLoading, setIsLoading]               = useState(true);
   const [isError, setIsError]                   = useState(false);
@@ -11609,6 +11904,19 @@ function AppContent() {
         setRatingGhaId(ratingParams.get('gha'));
         setRatingInspectionId(ratingParams.get('insp') || null);
         setShowRatingModal(true);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+      var refCode = ratingParams.get('ref');
+      var refRole = ratingParams.get('role');
+      if (refCode) {
+        // Save referral code to localStorage so it persists through registration
+        try { localStorage.setItem('gh_referral_code', refCode.toUpperCase()); } catch(e) {}
+        // If role=agent open the agent registration modal automatically
+        if (refRole === 'agent') {
+          setShowNavAuth(true);
+          setAuthInitialMode('signup');
+        }
+        // Clean URL
         window.history.replaceState(null, '', window.location.pathname);
       }
       const hash = window.location.hash;
@@ -11843,6 +12151,19 @@ function AppContent() {
                 props = props.map(function(p){ return Object.assign({}, p, { agent_tier: tierMap[p.created_by] || 'basic' }); });
               }
             } catch(te) { console.warn('[fetchData] tier fetch error:', te); }
+            try {
+              var { data: agentRows } = await supabase.from('agents').select('id, full_name, name, agency_name, agent_type').in('id', createdByIds);
+              if (agentRows && agentRows.length > 0) {
+                var agentMap = {};
+                agentRows.forEach(function(a){
+                  agentMap[a.id] = {
+                    agent_display_name: (a.agent_type === 'agency' ? a.agency_name : (a.full_name || a.name)) || '',
+                    agent_type: a.agent_type || 'agent',
+                  };
+                });
+                props = props.map(function(p){ return Object.assign({}, p, agentMap[p.created_by] || {}); });
+              }
+            } catch(ae) { console.warn('[fetchData] agent display fetch error:', ae); }
           }
           setProperties(props);
           return;
@@ -12075,7 +12396,7 @@ function AppContent() {
                 <p style={{ margin: 0, color: '#15803d', fontSize: '0.82rem', lineHeight: '1.5' }}>Your GetHome account is now active. Sign in below to continue.</p>
               </div>
             )}
-            <InlineAuthForm actionLabel="continue" onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); setShowNavAuth(false); setEmailConfirmed(false); if (u.role === 'agent' && u.status === 'approved') { navigateTab('upload'); } else if (u.role === 'admin') { navigateTab('admin'); } }} />
+            <InlineAuthForm actionLabel="continue" initialMode={authInitialMode} onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); setShowNavAuth(false); setEmailConfirmed(false); setAuthInitialMode(null); if (u.role === 'agent' && u.status === 'approved') { navigateTab('upload'); } else if (u.role === 'admin') { navigateTab('admin'); } }} />
           </div>
         </div>
       )}
