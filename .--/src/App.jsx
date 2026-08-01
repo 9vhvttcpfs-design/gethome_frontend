@@ -5530,7 +5530,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       onChange={function(e) { setNewLocationCity(e.target.value); }}
                                       style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem' }}>
                                       <option value=''>Select city to add...</option>
-                                      {['Abuja', 'Lagos', 'Kano', 'Kaduna', 'Port Harcourt', 'Ibadan', 'Benin City', 'Enugu', 'Aba', 'Onitsha', 'Warri', 'Calabar', 'Uyo', 'Jos', 'Ilorin', 'Maiduguri', 'Abeokuta', 'Akure', 'Owerri', 'Asaba'].map(function(city) {
+                                      {['Abuja', 'Lagos', 'Kano', 'Kaduna', 'Port Harcourt', 'Ibadan', 'Ile-Ife', 'Ilesa', 'Benin City', 'Enugu', 'Aba', 'Onitsha', 'Osogbo', 'Warri', 'Calabar', 'Ede', 'Uyo', 'Jos', 'Ilorin', 'Ila-Orangun', 'Maiduguri', 'Abeokuta', 'Akure', 'Owerri', 'Asaba'].map(function(city) {
                                         return <option key={city} value={city}>{city}</option>;
                                       })}
                                     </select>
@@ -7875,6 +7875,46 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Referral link card */}
+                <div style={{ backgroundColor: '#0a2240', borderRadius: '14px', padding: '16px 18px', marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#fff', fontSize: '0.88rem' }}>
+                      🔗 Invite Agents to GetHome
+                    </p>
+                    <p style={{ margin: 0, color: 'rgba(255,255,255,0.65)', fontSize: '0.74rem' }}>
+                      Share your link — earn when they subscribe
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={async function() {
+                      var ghaCode = staffUser?.code || staffUser?.gha_code || '';
+                      var link = 'https://trygethome.online/?ref=' + ghaCode + '&role=agent';
+                      try {
+                        await navigator.clipboard.writeText(link);
+                        alert('Referral link copied!');
+                      } catch(e) {
+                        var el = document.createElement('textarea');
+                        el.value = link;
+                        document.body.appendChild(el);
+                        el.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(el);
+                        alert('Referral link copied!');
+                      }
+                    }} style={{ backgroundColor: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+                      Copy Link
+                    </button>
+                    <button onClick={function() {
+                      var ghaCode = staffUser?.code || staffUser?.gha_code || '';
+                      var link = 'https://trygethome.online/?ref=' + ghaCode + '&role=agent';
+                      var msg = 'Join GetHome as a verified property agent! 🏠\n\nList your properties, get them physically verified, and connect with serious buyers and renters.\n\n✅ Free to join\n✅ I will be your dedicated support agent\n✅ Verified listings build customer trust\n\nRegister here:\n' + link;
+                      window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+                    }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+                      📱 WhatsApp
+                    </button>
+                  </div>
                 </div>
 
                 {/* Earnings card */}

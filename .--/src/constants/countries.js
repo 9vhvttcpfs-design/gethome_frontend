@@ -6,7 +6,7 @@ export const SUPPORTED_COUNTRIES = [
     currency: 'NGN',
     currencySymbol: '₦',
     locale: 'en-NG',
-    cities: ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Enugu', 'Kaduna', 'Kano'],
+    cities: ['Lagos', 'Abuja', 'Port Harcourt', 'Ibadan', 'Ede', 'Ila-Orangun', 'Ile-Ife', 'Ilesa', 'Osogbo', 'Enugu', 'Kaduna', 'Kano'],
   },
   {
     code: 'GH',
