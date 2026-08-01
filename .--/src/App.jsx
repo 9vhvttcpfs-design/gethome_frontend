@@ -49,6 +49,96 @@ var PROPERTY_TYPES = [
   { value: 'commercial', label: 'Commercial Space', icon: '🏬' },
 ];
 const fmtNGN = (n) => { const num = Number(n); if (!num || isNaN(num)) return 'NGN 0'; return 'NGN ' + num.toLocaleString('en-NG'); };
+var NIGERIAN_STATES_CITIES = {
+  'Abuja': ['Abuja', 'Garki', 'Wuse', 'Maitama', 'Gwarinpa', 'Kubwa', 'Lugbe', 'Karu', 'Nyanya', 'Gwagwalada', 'Other'],
+  'Lagos': ['Lagos Island', 'Lagos Mainland', 'Ikeja', 'Lekki', 'Victoria Island', 'Surulere', 'Ikorodu', 'Alimosho', 'Badagry', 'Epe', 'Other'],
+  'Kano': ['Kano Municipal', 'Nasarawa', 'Fagge', 'Dala', 'Gwale', 'Tarauni', 'Ungogo', 'Kumbotso', 'Other'],
+  'Kaduna': ['Kaduna North', 'Kaduna South', 'Chikun', 'Igabi', 'Zaria', 'Kafanchan', 'Other'],
+  'Port Harcourt': ['Port Harcourt', 'Obio-Akpor', 'Eleme', 'Oyigbo', 'Ikwerre', 'Etche', 'Other'],
+  'Ibadan': ['Ibadan North', 'Ibadan South', 'Egbeda', 'Oluyole', 'Ona-Ara', 'Lagelu', 'Other'],
+  'Osun': ['Osogbo', 'Ile-Ife', 'Ilesa', 'Ede', 'Ila-Orangun', 'Iwo', 'Ejigbo', 'Ikire', 'Ikirun', 'Inisa', 'Other'],
+  'Enugu': ['Enugu', 'Awgu', 'Udi', 'Igbo-Eze', 'Nsukka', 'Agwu', 'Other'],
+  'Benin City': ['Benin City', 'Ikpoba-Okha', 'Oredo', 'Egor', 'Ovia North-East', 'Other'],
+  'Aba': ['Aba North', 'Aba South', 'Osisioma', 'Ugwunagbo', 'Other'],
+  'Onitsha': ['Onitsha', 'Ogbaru', 'Oyi', 'Anambra East', 'Anambra West', 'Other'],
+  'Warri': ['Warri', 'Uvwie', 'Udu', 'Sapele', 'Ethiope East', 'Other'],
+  'Calabar': ['Calabar Municipal', 'Calabar South', 'Akpabuyo', 'Odukpani', 'Other'],
+  'Uyo': ['Uyo', 'Eket', 'Ikot Ekpene', 'Abak', 'Oron', 'Other'],
+  'Jos': ['Jos North', 'Jos South', 'Bukuru', 'Barkin Ladi', 'Riyom', 'Other'],
+  'Ilorin': ['Ilorin East', 'Ilorin West', 'Ilorin South', 'Offa', 'Omu-Aran', 'Other'],
+  'Abeokuta': ['Abeokuta North', 'Abeokuta South', 'Ijebu Ode', 'Sagamu', 'Other'],
+  'Akure': ['Akure', 'Ondo', 'Ore', 'Okitipupa', 'Owo', 'Other'],
+  'Owerri': ['Owerri Municipal', 'Owerri North', 'Owerri West', 'Orlu', 'Okigwe', 'Other'],
+  'Asaba': ['Asaba', 'Agbor', 'Ughelli', 'Kwale', 'Ogwashi-Uku', 'Other'],
+};
+var NIGERIAN_STATES = Object.keys(NIGERIAN_STATES_CITIES);
+// Fuzzy state/city resolver for pre-populating the two-level dropdown from a stored free-text location
+var resolveStateCity = function(locationString) {
+  if (!locationString) return { state: '', city: '' };
+
+  var loc = locationString.toLowerCase().trim();
+
+  // Try exact city match first
+  for (var stateName of NIGERIAN_STATES) {
+    var cities = NIGERIAN_STATES_CITIES[stateName] || [];
+    for (var cityName of cities) {
+      if (loc === cityName.toLowerCase() || loc.includes(cityName.toLowerCase())) {
+        return { state: stateName, city: cityName };
+      }
+    }
+  }
+
+  // Try state name match
+  for (var stateName2 of NIGERIAN_STATES) {
+    if (loc.includes(stateName2.toLowerCase())) {
+      return { state: stateName2, city: 'Other' };
+    }
+  }
+
+  // Common aliases not in the dropdown
+  var aliases = {
+    'lekki': { state: 'Lagos', city: 'Lekki' },
+    'yaba': { state: 'Lagos', city: 'Lagos Mainland' },
+    'victoria island': { state: 'Lagos', city: 'Victoria Island' },
+    'v.i': { state: 'Lagos', city: 'Victoria Island' },
+    'vi ': { state: 'Lagos', city: 'Victoria Island' },
+    'ajah': { state: 'Lagos', city: 'Lekki' },
+    'ikoyi': { state: 'Lagos', city: 'Lagos Island' },
+    'festac': { state: 'Lagos', city: 'Surulere' },
+    'mushin': { state: 'Lagos', city: 'Lagos Mainland' },
+    'agege': { state: 'Lagos', city: 'Alimosho' },
+    'ojodu': { state: 'Lagos', city: 'Ikeja' },
+    'berger': { state: 'Lagos', city: 'Ikeja' },
+    'gbagada': { state: 'Lagos', city: 'Lagos Mainland' },
+    'magodo': { state: 'Lagos', city: 'Ikeja' },
+    'ojota': { state: 'Lagos', city: 'Lagos Mainland' },
+    'maryland': { state: 'Lagos', city: 'Ikeja' },
+    'garki': { state: 'Abuja', city: 'Garki' },
+    'wuse': { state: 'Abuja', city: 'Wuse' },
+    'maitama': { state: 'Abuja', city: 'Maitama' },
+    'gwarinpa': { state: 'Abuja', city: 'Gwarinpa' },
+    'kubwa': { state: 'Abuja', city: 'Kubwa' },
+    'lugbe': { state: 'Abuja', city: 'Lugbe' },
+    'nyanya': { state: 'Abuja', city: 'Nyanya' },
+    'karu': { state: 'Abuja', city: 'Karu' },
+    'fct': { state: 'Abuja', city: 'Abuja' },
+    'ph ': { state: 'Port Harcourt', city: 'Port Harcourt' },
+    'port harcourt': { state: 'Port Harcourt', city: 'Port Harcourt' },
+    'rumuola': { state: 'Port Harcourt', city: 'Port Harcourt' },
+    'osogbo': { state: 'Osun', city: 'Osogbo' },
+    'ile-ife': { state: 'Osun', city: 'Ile-Ife' },
+    'ilesa': { state: 'Osun', city: 'Ilesa' },
+  };
+
+  for (var alias of Object.keys(aliases)) {
+    if (loc.includes(alias)) {
+      return aliases[alias];
+    }
+  }
+
+  // Cannot resolve - return Other so field shows with original value in customCity
+  return { state: '', city: 'Other' };
+};
 var NIGERIAN_BANKS = [
   { code: '044', name: 'Access Bank' },
   { code: '063', name: 'Access Bank (Diamond)' },
@@ -340,6 +430,8 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
   const [showPrivacyModal, setShowPrivacyModal]       = useState(false);
   const [emailSent, setEmailSent]                     = useState(false);
   const [agentCity, setAgentCity]                     = useState('');
+  const [agentState, setAgentState]                   = useState('');
+  const [customCity, setCustomCity]                   = useState('');
   const [agentRequestedGha, setAgentRequestedGha]     = useState(function() {
     try { return localStorage.getItem('gh_referral_code') || ''; } catch(e) { return ''; }
   });
@@ -464,7 +556,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
             about_self: about,
             about,
             country,
-            city: agentCity.trim() || null,
+            city: (agentCity === 'Other' ? customCity : agentCity).trim() || null,
             requested_gha_code: agentRequestedGha.trim() || null,
             role: 'agent',
             status: 'pending',
@@ -1198,15 +1290,43 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
               value={address} onChange={function(e){ setAddress(e.target.value); setError(''); }} />
 
             <div>
-              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>City *</label>
-              <input
+              <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>State *</label>
+              <select
                 style={{ ...inputStyle, fontSize: '16px' }}
-                placeholder='e.g. Lagos, Abuja, Port Harcourt'
-                value={agentCity}
-                onChange={function(e){ setAgentCity(e.target.value); }}
-                required
-              />
+                value={agentState}
+                onChange={function(e){ setAgentState(e.target.value); setAgentCity(''); }}
+                required>
+                <option value=''>Select state...</option>
+                {NIGERIAN_STATES.map(function(state) {
+                  return <option key={state} value={state}>{state}</option>;
+                })}
+              </select>
             </div>
+
+            {agentState && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>City / Area *</label>
+                <select
+                  style={{ ...inputStyle, fontSize: '16px' }}
+                  value={agentCity}
+                  onChange={function(e){ setAgentCity(e.target.value); }}
+                  required>
+                  <option value=''>Select city...</option>
+                  {(NIGERIAN_STATES_CITIES[agentState] || []).map(function(city) {
+                    return <option key={city} value={city}>{city}</option>;
+                  })}
+                </select>
+                {agentCity === 'Other' && (
+                  <input
+                    type='text'
+                    placeholder='Enter your city name'
+                    value={customCity}
+                    onChange={function(e) { setCustomCity(e.target.value); }}
+                    style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                  />
+                )}
+              </div>
+            )}
 
             <div>
               <label style={{ display: 'block', marginBottom: '4px', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>Preferred GHA Code (Optional)</label>
@@ -2140,13 +2260,26 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       .then(function({ data }) { setLocalIsApproved(data?.status === 'approved'); })
       .catch(function() {});
   }, [user?.id]);
-  const [agentProfile, setAgentProfile] = useState({ phone: user?.phone || '', profile_photo_url: user?.profile_photo_url || null });
+  const [agentProfile, setAgentProfile] = useState({ phone: user?.phone || '', profile_photo_url: user?.profile_photo_url || null, city: user?.city || '' });
   useEffect(function() {
     if (!user?.id) return;
-    supabase.from('agents').select('phone, profile_photo_url').eq('id', user.id).single()
+    supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single()
       .then(function({ data }) { if (data) setAgentProfile(function(prev){ return Object.assign({}, prev, data); }); })
       .catch(function() {});
   }, [user?.id]);
+  const [profileState, setProfileState]         = useState('');
+  const [profileCity, setProfileCity]           = useState('');
+  const [profileCustomCity, setProfileCustomCity] = useState('');
+  useEffect(function() {
+    if (!agentProfile?.city) return;
+    var resolved = resolveStateCity(agentProfile.city);
+    setProfileState(resolved.state);
+    setProfileCity(resolved.city);
+    if (resolved.city === 'Other') {
+      // stored city doesn't match any dropdown option — keep it visible via the Other field
+      setProfileCustomCity(agentProfile.city);
+    }
+  }, [agentProfile.city]);
   const DRAFT_KEY = 'gh_upload_draft_' + (user?.id || 'guest');
   const EMPTY_FORM = { title: '', description: '', property_type: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
   const [form, setForm]                           = useState(function() {
@@ -2159,6 +2292,8 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
     } catch(e) {}
     return EMPTY_FORM;
   });
+  const [uploadLocationState, setUploadLocationState] = useState('');
+  const [customCity, setCustomCity]               = useState('');
   const [editingProperty, setEditingProperty]     = useState(null);
   const [submitting, setSubmitting]               = useState(false);
   const [successMsg, setSuccessMsg]               = useState('');
@@ -2237,11 +2372,14 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   }, [form, editingProperty]);
   const enterEditMode = (property) => {
     setEditingProperty(property);
-    setForm({ title: property.title || '', property_type: property.property_type || '', location: property.location || '', country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
+    var resolved = resolveStateCity(property.location);
+    setForm({ title: property.title || '', property_type: property.property_type || '', location: resolved.city, country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
+    setUploadLocationState(resolved.state);
+    setCustomCity(resolved.city === 'Other' ? (property.location || '') : '');
     setWantsFeatured(property.is_featured || false); setFeaturedPaid(property.is_featured || false);
     window.scrollTo({ top: 0, behavior: 'smooth' }); clearMessages();
   };
-  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); setWantsFeatured(false); setFeaturedPaid(false); setForm(function(f){ return Object.assign({}, f, { video_url: null, videoFile: null }); }); clearMessages(); };
+  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); setUploadLocationState(''); setCustomCity(''); setWantsFeatured(false); setFeaturedPaid(false); setForm(function(f){ return Object.assign({}, f, { video_url: null, videoFile: null }); }); clearMessages(); };
   const handleFeaturedPayment = async () => {
     try {
       const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
@@ -2330,7 +2468,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       if (form.purpose === 'sale') purposeLabel = ' (For SALE)';
       else if (form.purpose === 'shortlet') purposeLabel = ' (Shortlet)';
       else purposeLabel = ' (For RENT)';
-      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: form.location.trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
+      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: (form.location === 'Other' ? customCity : form.location).trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
       if (isEditMode) {
         const { data: updData, error: updateError } = await supabase
           .from('properties')
@@ -2492,7 +2630,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
             Complete Your Profile
           </h3>
           <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 18px 0' }}>
-            Add your phone number and profile photo so customers can recognize and trust you when they see your listings.
+            Add your phone number, profile photo and city so customers can recognize and trust you when they see your listings.
           </p>
 
           {/* Phone number */}
@@ -2560,14 +2698,48 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
             </div>
           </div>
 
+          {/* City */}
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+              City
+              {agentProfile?.city && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+            </label>
+            <select
+              value={profileState}
+              onChange={function(e) { setProfileState(e.target.value); setProfileCity(''); setProfileCustomCity(''); }}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#fff', marginBottom: profileState ? '8px' : 0 }}>
+              <option value=''>Select state...</option>
+              {NIGERIAN_STATES.map(function(state) { return <option key={state} value={state}>{state}</option>; })}
+            </select>
+            {profileState && (
+              <select
+                value={profileCity}
+                onChange={function(e) { setProfileCity(e.target.value); }}
+                style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box', backgroundColor: '#fff' }}>
+                <option value=''>Select city...</option>
+                {(NIGERIAN_STATES_CITIES[profileState] || []).map(function(city) { return <option key={city} value={city}>{city}</option>; })}
+              </select>
+            )}
+            {profileCity === 'Other' && (
+              <input
+                type='text'
+                placeholder='Enter your city name'
+                value={profileCustomCity}
+                onChange={function(e) { setProfileCustomCity(e.target.value); }}
+                style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+              />
+            )}
+          </div>
+
           <button onClick={async function() {
             var phoneInput = document.getElementById('agent-phone-input');
             var phoneVal = phoneInput?.value?.trim();
             if (!phoneVal) { alert('Please enter your phone number'); return; }
+            var cityVal = (profileCity === 'Other' ? profileCustomCity : profileCity).trim();
             try {
-              await supabase.from('profiles').update({ phone: phoneVal }).eq('id', user.id);
-              await supabase.from('agents').update({ phone: phoneVal }).eq('id', user.id);
-              setAgentProfile(function(prev) { return Object.assign({}, prev, { phone: phoneVal }); });
+              await supabase.from('profiles').update({ phone: phoneVal, city: cityVal || null }).eq('id', user.id);
+              await supabase.from('agents').update({ phone: phoneVal, city: cityVal || null }).eq('id', user.id);
+              setAgentProfile(function(prev) { return Object.assign({}, prev, { phone: phoneVal, city: cityVal }); });
               alert('Profile updated successfully!');
             } catch(err) { alert('Update failed: ' + err.message); }
           }} style={{ width: '100%', padding: '12px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
@@ -2745,7 +2917,33 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
             </select>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap: '14px' }}>
-            {field('location', 'Location / Area', 'text', 'e.g., Lekki Phase 1, Lagos')}
+            <div>
+              <label style={ls2}>State</label>
+              <select style={is2} required value={uploadLocationState}
+                onChange={function(e){ setUploadLocationState(e.target.value); setForm(function(f){ return Object.assign({}, f, { location: '' }); }); clearMessages(); }}>
+                <option value=''>Select state...</option>
+                {NIGERIAN_STATES.map(function(state){ return <option key={state} value={state}>{state}</option>; })}
+              </select>
+            </div>
+            {uploadLocationState && (
+              <div>
+                <label style={ls2}>City / Area</label>
+                <select style={is2} required value={form.location || ''}
+                  onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { location: e.target.value }); }); clearMessages(); }}>
+                  <option value=''>Select city...</option>
+                  {(NIGERIAN_STATES_CITIES[uploadLocationState] || []).map(function(city){ return <option key={city} value={city}>{city}</option>; })}
+                </select>
+                {form.location === 'Other' && (
+                  <input
+                    type='text'
+                    placeholder='Enter your city name'
+                    value={customCity}
+                    onChange={function(e) { setCustomCity(e.target.value); }}
+                    style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                  />
+                )}
+              </div>
+            )}
             <div>
               <label style={ls2}>Country</label>
               <select style={is2} value={form.country || activeCountry.code} onChange={function(e){ setForm(function(f){ return Object.assign({}, f, { country: e.target.value }); }); }}>
@@ -3229,6 +3427,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [saLocations, setSaLocations]                   = useState([]);
   const [expandedSaLocations, setExpandedSaLocations]   = useState(null);
   const [newLocationCity, setNewLocationCity]           = useState('');
+  const [newLocationState, setNewLocationState]         = useState('');
+  const [customCity, setCustomCity]                     = useState('');
   const [locationMsg, setLocationMsg]                   = useState('');
   const [expandedSAGhas, setExpandedSAGhas]             = useState(null);
   const [saSalaryMonths, setSaSalaryMonths]             = useState({});
@@ -5504,9 +5704,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
                                     {(saLocations.find(function(s){ return s.id === sa.id; })?.locations || []).map(function(loc) {
+                                      var resolvedLoc = resolveStateCity(loc.city);
                                       return (
                                         <div key={loc.city} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '20px', padding: '4px 10px' }}>
-                                          <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#1e40af' }}>{loc.city}</span>
+                                          <span style={{ fontSize: '0.78rem', fontWeight: '600', color: '#1e40af' }}>{loc.city}{resolvedLoc.state ? ' · ' + resolvedLoc.state : ''}</span>
                                           <button onClick={async function() {
                                             var token = localStorage.getItem('gh_token');
                                             var res = await fetch(API_URL + '/api/admin/sa-remove-location', {
@@ -5524,29 +5725,42 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     )}
                                   </div>
 
-                                  <div style={{ display: 'flex', gap: '8px' }}>
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                     <select
-                                      value={newLocationCity}
-                                      onChange={function(e) { setNewLocationCity(e.target.value); }}
-                                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem' }}>
-                                      <option value=''>Select city to add...</option>
-                                      {['Abuja', 'Lagos', 'Kano', 'Kaduna', 'Port Harcourt', 'Ibadan', 'Ile-Ife', 'Ilesa', 'Benin City', 'Enugu', 'Aba', 'Onitsha', 'Osogbo', 'Warri', 'Calabar', 'Ede', 'Uyo', 'Jos', 'Ilorin', 'Ila-Orangun', 'Maiduguri', 'Abeokuta', 'Akure', 'Owerri', 'Asaba'].map(function(city) {
-                                        return <option key={city} value={city}>{city}</option>;
+                                      value={newLocationState}
+                                      onChange={function(e) { setNewLocationState(e.target.value); setNewLocationCity(''); }}
+                                      style={{ flex: 1, minWidth: '140px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem' }}>
+                                      <option value=''>Select state...</option>
+                                      {NIGERIAN_STATES.map(function(state) {
+                                        return <option key={state} value={state}>{state}</option>;
                                       })}
                                     </select>
+                                    {newLocationState && (
+                                      <select
+                                        value={newLocationCity}
+                                        onChange={function(e) { setNewLocationCity(e.target.value); }}
+                                        style={{ flex: 1, minWidth: '140px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem' }}>
+                                        <option value=''>Select city to add...</option>
+                                        {(NIGERIAN_STATES_CITIES[newLocationState] || []).map(function(city) {
+                                          return <option key={city} value={city}>{city}</option>;
+                                        })}
+                                      </select>
+                                    )}
                                     <button onClick={async function() {
-                                      if (!newLocationCity) return;
+                                      var cityToAdd = newLocationCity === 'Other' ? customCity : newLocationCity;
+                                      if (!cityToAdd) return;
                                       var token = localStorage.getItem('gh_token');
                                       var res = await fetch(API_URL + '/api/admin/sa-add-location', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                        body: JSON.stringify({ sa_id: sa.id, city: newLocationCity }),
+                                        body: JSON.stringify({ sa_id: sa.id, city: cityToAdd }),
                                       });
                                       var data = await res.json();
                                       if (res.ok) {
                                         setNewLocationCity('');
+                                        setCustomCity('');
                                         fetchSALocations();
-                                        setLocationMsg(newLocationCity + ' added to ' + sa.sa_code);
+                                        setLocationMsg(cityToAdd + ' added to ' + sa.sa_code);
                                         setTimeout(function() { setLocationMsg(''); }, 3000);
                                       } else {
                                         setLocationMsg('Error: ' + data.error);
@@ -5555,6 +5769,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       Add City
                                     </button>
                                   </div>
+
+                                  {newLocationCity === 'Other' && (
+                                    <input
+                                      type='text'
+                                      placeholder='Enter your city name'
+                                      value={customCity}
+                                      onChange={function(e) { setCustomCity(e.target.value); }}
+                                      style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                                    />
+                                  )}
 
                                   {locationMsg && <p style={{ color: '#27ae60', fontSize: '0.78rem', marginTop: '8px', fontWeight: '600' }}>{locationMsg}</p>}
 
@@ -11882,6 +12106,8 @@ function AppContent() {
   const [filterCity, setFilterCity]             = useState(function() {
     try { return new URLSearchParams(window.location.search).get('city') || 'All'; } catch(e) { return 'All'; }
   });
+  const [filterState, setFilterState]           = useState('');
+  const [customCity, setCustomCity]             = useState('');
   const [selectedPropertyType, setSelectedPropertyType] = useState(function() {
     try { return new URLSearchParams(window.location.search).get('type') || ''; } catch(e) { return ''; }
   });
@@ -12143,6 +12369,8 @@ function AppContent() {
   };
   const clearAllFilters = function() {
     updateSearch('');
+    setFilterState('');
+    setCustomCity('');
     updateCity('All');
     updatePropertyType('');
   };
@@ -12232,7 +12460,7 @@ function AppContent() {
     return function() { supabase.removeChannel(channel); };
   }, []);
 
-  useEffect(function() { setFilterCity('All'); }, [activeCountry.code]);
+  useEffect(function() { setFilterCity('All'); setFilterState(''); }, [activeCountry.code]);
   const handleLogout = async function() {
     try { await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' }); } catch (e) {}
     localStorage.removeItem('gh_user'); localStorage.removeItem('gh_token');
@@ -12298,7 +12526,8 @@ function AppContent() {
           || String(p.description || '').toLowerCase().includes(q);
       });
     }
-    if (filterCity !== 'All') { result = result.filter(function(p) { return String(p.location || '').toLowerCase().includes(filterCity.toLowerCase()); }); }
+    var effectiveFilterCity = filterCity === 'Other' ? customCity : filterCity;
+    if (filterCity !== 'All' && effectiveFilterCity) { result = result.filter(function(p) { return String(p.location || '').toLowerCase().includes(effectiveFilterCity.toLowerCase()); }); }
     if (selectedPropertyType) {
       var t = selectedPropertyType.toLowerCase();
       result = result.filter(function(p) {
@@ -12545,12 +12774,36 @@ function AppContent() {
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: isMobile ? '10px' : '12px 14px', boxShadow: '0 20px 40px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                     <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '140px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.88rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }} />
-                    <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
-                      <option value="All">All Cities</option>
-                      {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
-                    </select>
+                    {activeCountry.code === 'NG' ? (
+                      <>
+                        <select value={filterState} onChange={function(e){ setFilterState(e.target.value); updateCity('All'); setCustomCity(''); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
+                          <option value=''>All States</option>
+                          {NIGERIAN_STATES.map(function(state){ return <option key={state} value={state}>{state}</option>; })}
+                        </select>
+                        {filterState && (
+                          <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
+                            <option value="All">All Cities</option>
+                            {(NIGERIAN_STATES_CITIES[filterState] || []).map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                          </select>
+                        )}
+                      </>
+                    ) : (
+                      <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }}>
+                        <option value="All">All Cities</option>
+                        {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                      </select>
+                    )}
                     {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>Clear</button>}
                   </div>
+                  {filterCity === 'Other' && (
+                    <input
+                      type='text'
+                      placeholder='Enter your city name'
+                      value={customCity}
+                      onChange={function(e) { setCustomCity(e.target.value); }}
+                      style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                    />
+                  )}
                   <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
                     <select
                       value={selectedPropertyType}
