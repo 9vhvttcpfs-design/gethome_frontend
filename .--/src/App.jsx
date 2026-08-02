@@ -13289,7 +13289,7 @@ function AppContent() {
                   {isAgencyAccount && (
                     <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #bfdbfe' }}>
                       <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e40af', fontWeight: '600' }}>
-                        🏢 Agency accounts have access to the Agency Plan only — up to 100 listings per month.
+                        🏢 Agency accounts have access to the Agency Plan only, up to 100 listings per month.
                       </p>
                     </div>
                   )}
