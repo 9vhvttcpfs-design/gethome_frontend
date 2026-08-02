@@ -2097,7 +2097,7 @@ function PricingModal({ property, onClose, user, onUserChange }) {
   );
 }
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
-function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType }) {
+function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
@@ -2105,8 +2105,12 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType }) {
   var premiumPriceText = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
   var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ 35,000';
   var tierPriceDisplay = { premium: premiumPriceText, agency: agencyPriceText };
+  var canSubscribe  = agentStatus === 'approved';
+  var isDisapproved = agentStatus === 'disapproved' || agentStatus === 'rejected';
+  var isPending      = !canSubscribe && !isDisapproved;
   const [upgrading, setUpgrading] = useState(null);
   const handleUpgrade = async (tierKey) => {
+    if (!canSubscribe) return;
     const tier = AGENT_TIERS[tierKey];
     setUpgrading(tierKey);
     try {
@@ -2144,18 +2148,29 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType }) {
           </p>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-        {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
-          return (<div key={tierKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
-            <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
-            <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
-            <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
-            <button onClick={() => handleUpgrade(tierKey)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
-              {upgrading === tierKey ? 'Processing...' : (currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`)}
-            </button>
-          </div>);
-        })}
-      </div>
+      {isDisapproved ? (
+        <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+          <p style={{ color: '#c2410c', fontWeight: '700', fontSize: '0.84rem', margin: 0 }}>Your agent account has been suspended. Contact support to resolve this before subscribing.</p>
+        </div>
+      ) : isPending ? (
+        <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px', textAlign: 'center' }}>
+          <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 4px 0' }}>⏳ Account pending approval</p>
+          <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: 0 }}>You'll be able to subscribe once your account is approved.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+          {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
+            return (<div key={tierKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+              <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
+              <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
+              <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
+              <button onClick={() => handleUpgrade(tierKey)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+                {upgrading === tierKey ? 'Processing...' : (currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`)}
+              </button>
+            </div>);
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2242,6 +2257,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   const [featuredPaid, setFeaturedPaid]             = useState(false);
   const [portalTab, setPortalTab]                   = useState('listings');
   const [localIsApproved, setLocalIsApproved]       = useState(isApproved);
+  const [agentStatus, setAgentStatus]               = useState(null);
   const [agentBankName, setAgentBankName]           = useState(user?.bank_name || '');
   const [agentAccountNumber, setAgentAccountNumber] = useState(user?.account_number || '');
   const [agentAccountName, setAgentAccountName]     = useState(user?.account_name || '');
@@ -2254,10 +2270,10 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   useEffect(function() {
     if (!user?.id) return;
     if (user?.role === 'admin' || user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase()) {
-      setLocalIsApproved(true); return;
+      setLocalIsApproved(true); setAgentStatus('approved'); return;
     }
     supabase.from('agents').select('status').eq('id', user.id).single()
-      .then(function({ data }) { setLocalIsApproved(data?.status === 'approved'); })
+      .then(function({ data }) { setLocalIsApproved(data?.status === 'approved'); setAgentStatus(data?.status || null); })
       .catch(function() {});
   }, [user?.id]);
   const [agentProfile, setAgentProfile] = useState({ phone: user?.phone || '', profile_photo_url: user?.profile_photo_url || null, city: user?.city || '' });
@@ -3307,7 +3323,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         </div>
         {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
         </form>
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} />
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -12502,6 +12518,7 @@ function AppContent() {
   const isAgent    = user?.role === 'agent' || user?.role === 'admin' || isMasterAdmin;
   const isApproved = user?.role === 'admin' || user?.status === 'approved' || isMasterAdmin;
   const isAdmin    = user?.role === 'admin' || isMasterAdmin;
+  const isAgencyAccount = user?.agent_type === 'agency';
   useEffect(function() {
     if (currentTab === 'admin' && user && !isMasterAdmin && !isAdmin) {
       navigateTab(isAgent ? 'upload' : 'rent');
@@ -12770,7 +12787,7 @@ function AppContent() {
                   <span style={{ color: '#4ade80', fontSize: '0.72rem', fontWeight: '600', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>VERIFIED LISTINGS</span>
                 </div>
                 <h1 style={{ color: '#fff', fontSize: isMobile ? '1.55rem' : '3rem', fontWeight: '800', margin: '0 0 12px 0', lineHeight: '1.12', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif", letterSpacing: '-0.04em' }}>Find Your Next Home<br /><span style={{ color: '#22c55e' }}>with Confidence.</span></h1>
-                <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: isMobile ? '0.82rem' : '0.95rem', margin: '0 0 22px 0', lineHeight: '1.65', maxWidth: '520px', fontFamily: "'Inter', sans-serif" }}>Browse verified listings in {activeCountry.flag} {activeCountry.name} — full fee breakdown, escrow protection, and no hidden charges.</p>
+                <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: isMobile ? '0.82rem' : '0.95rem', margin: '0 0 22px 0', lineHeight: '1.65', maxWidth: '520px', fontFamily: "'Inter', sans-serif" }}>Browse verified listings in {activeCountry.flag} {activeCountry.name} full fee breakdown, escrow protection, and no hidden charges.</p>
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: isMobile ? '10px' : '12px 14px', boxShadow: '0 20px 40px rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                     <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '140px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.88rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", background: '#f8fafc' }} />
@@ -13256,7 +13273,7 @@ function AppContent() {
               <p style={{ color: '#64748b', fontSize: isMobile ? '0.85rem' : '0.92rem', margin: '0 auto', maxWidth: '460px', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>
                 {user && isApproved
                   ? `You're currently on the ${AGENT_TIERS[agentTier]?.label || 'Free'} plan. ${agentTier === 'free' ? 'Upgrade anytime to list more properties.' : 'Renew your plan to keep your listings active.'}`
-                  : `Join verified agents on GetHome's transparent platform — serving ${activeCountry.flag} ${activeCountry.name} and expanding across Africa.`}
+                  : `Join verified agents on GetHome's transparent platform, serving ${activeCountry.flag} ${activeCountry.name} and expanding across Africa.`}
               </p>
             </div>
             {user && isApproved ? (
@@ -13269,8 +13286,15 @@ function AppContent() {
                 </div>
               ) : (
                 <div style={{ maxWidth: '780px', margin: '0 auto' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : agentTier === 'premium' ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '14px' : '20px' }}>
-                    {Object.entries(AGENT_TIERS).filter(function([k]){ return k !== agentTier && k !== 'free'; }).map(function([tierKey, tier]) {
+                  {isAgencyAccount && (
+                    <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #bfdbfe' }}>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e40af', fontWeight: '600' }}>
+                        🏢 Agency accounts have access to the Agency Plan only — up to 100 listings per month.
+                      </p>
+                    </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (agentTier === 'premium' || isAgencyAccount) ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '14px' : '20px' }}>
+                    {Object.entries(AGENT_TIERS).filter(function([k]){ return k !== agentTier && k !== 'free' && (!isAgencyAccount || k === 'agency'); }).map(function([tierKey, tier]) {
                       var isGhana = activeCountry && activeCountry.code === 'GH';
                       var priceText = tierKey === 'premium' ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500') : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
                       var isPrimary = tierKey === 'premium' || agentTier === 'premium';
@@ -13313,20 +13337,11 @@ function AppContent() {
                 </div>
               )
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? '14px' : '20px', maxWidth: '780px', margin: '0 auto' }}>
-                {plans.map(function(plan){
-                  return (
-                    <div key={plan.key} style={{ ...cardStyle, padding: isMobile ? '22px 18px' : '28px 24px', textAlign: 'center', position: 'relative', border: plan.popular ? '2px solid #22c55e' : '1px solid #e8edf5', boxShadow: plan.popular ? '0 8px 32px rgba(34,197,94,0.12)' : cardStyle.boxShadow }}>
-                      {plan.popular && (
-                        <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#22c55e', color: '#fff', fontSize: '0.65rem', fontWeight: '800', padding: '4px 14px', borderRadius: '20px', whiteSpace: 'nowrap', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>MOST POPULAR</div>
-                      )}
-                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 6px 0', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{plan.label}</p>
-                      <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{plan.price}</p>
-                      <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>Up to {plan.listingLimit} listings</p>
-                      <button onClick={function(){ navigateTab('upload'); }} style={{ width: '100%', padding: '11px', backgroundColor: plan.popular ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: plan.popular ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>Get Started</button>
-                    </div>
-                  );
-                })}
+              <div style={{ maxWidth: '480px', margin: '0 auto', ...cardStyle, padding: isMobile ? '28px 22px' : '40px 36px', textAlign: 'center' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🏠</div>
+                <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '1.15rem', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upload Your First {plans[0].listingLimit} Properties for Free</p>
+                <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 24px 0', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>Create your agent account to start listing on GetHome, no cost, no card required. Upgrade anytime to list more.</p>
+                <button onClick={function(){ navigateTab('upload'); }} style={{ padding: '13px 30px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 14px rgba(34,197,94,0.28)' }}>Create Free Agent Account</button>
               </div>
             )}
           </section>
