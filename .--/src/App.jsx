@@ -13004,8 +13004,36 @@ function AppContent() {
               <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Verified properties available to buy in {activeCountry.flag} {activeCountry.name}</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
+                {activeCountry.code === 'NG' ? (
+                  <>
+                    <select value={filterState} onChange={function(e){ setFilterState(e.target.value); updateCity('All'); setCustomCity(''); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                      <option value=''>All States</option>
+                      {NIGERIAN_STATES.map(function(state){ return <option key={state} value={state}>{state}</option>; })}
+                    </select>
+                    {filterState && (
+                      <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                        <option value="All">All Cities</option>
+                        {(NIGERIAN_STATES_CITIES[filterState] || []).map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                      </select>
+                    )}
+                  </>
+                ) : (
+                  <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                    <option value="All">All Cities</option>
+                    {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                  </select>
+                )}
                 {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
+              {filterCity === 'Other' && (
+                <input
+                  type='text'
+                  placeholder='Enter your city name'
+                  value={customCity}
+                  onChange={function(e) { setCustomCity(e.target.value); }}
+                  style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                />
+              )}
               <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
                 <select
                   value={selectedPropertyType}
@@ -13107,11 +13135,39 @@ function AppContent() {
           <section>
             <div style={{ marginBottom: '22px' }}>
               <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.05rem' : '1.35rem', fontWeight: '700', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Shortlet Properties</h2>
-              <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Furnished short-stay rentals — book by the night</p>
+              <p style={{ color: '#64748b', margin: '0 0 14px 0', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>Furnished short-stay rentals, book by the night</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <input type="text" placeholder="Search by title or location..." value={searchQuery} onChange={function(e){ updateSearch(e.target.value); }} style={{ flex: 2, minWidth: '160px', padding: '10px 14px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.86rem', outline: 'none', color: '#0f172a', fontFamily: "'Inter', sans-serif", backgroundColor: '#fff' }} />
+                {activeCountry.code === 'NG' ? (
+                  <>
+                    <select value={filterState} onChange={function(e){ setFilterState(e.target.value); updateCity('All'); setCustomCity(''); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                      <option value=''>All States</option>
+                      {NIGERIAN_STATES.map(function(state){ return <option key={state} value={state}>{state}</option>; })}
+                    </select>
+                    {filterState && (
+                      <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                        <option value="All">All Cities</option>
+                        {(NIGERIAN_STATES_CITIES[filterState] || []).map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                      </select>
+                    )}
+                  </>
+                ) : (
+                  <select value={filterCity} onChange={function(e){ updateCity(e.target.value); }} style={{ flex: 1, minWidth: '110px', padding: '10px 12px', borderRadius: '9px', border: '1.5px solid #e8edf5', fontSize: '0.84rem', outline: 'none', color: '#0f172a', cursor: 'pointer', fontFamily: "'Inter', sans-serif", background: '#fff' }}>
+                    <option value="All">All Cities</option>
+                    {activeCountry.cities.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+                  </select>
+                )}
                 {(searchQuery || filterCity !== 'All' || selectedPropertyType) && <button onClick={clearAllFilters} style={{ padding: '10px 16px', borderRadius: '9px', border: 'none', backgroundColor: '#22c55e', color: '#fff', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>}
               </div>
+              {filterCity === 'Other' && (
+                <input
+                  type='text'
+                  placeholder='Enter your city name'
+                  value={customCity}
+                  onChange={function(e) { setCustomCity(e.target.value); }}
+                  style={{ width: '100%', marginTop: '8px', padding: '11px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }}
+                />
+              )}
               <div style={{ marginTop: '10px', position: 'relative', minWidth: isMobile ? '100%' : '200px' }}>
                 <select
                   value={selectedPropertyType}
