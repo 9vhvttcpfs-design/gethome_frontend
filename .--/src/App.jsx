@@ -5200,6 +5200,23 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               </div>
                             )}
 
+                            {status === 'cancelled' && (
+                              <div style={{ marginTop: '6px', marginBottom: '10px', padding: '6px 10px', backgroundColor: '#fff7ed', borderRadius: '6px', border: '1px solid #fed7aa' }}>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#c2410c', fontWeight: '600' }}>
+                                  Cancelled {insp.cancelled_at ? '· ' + new Date(insp.cancelled_at).toLocaleDateString() : ''}
+                                  {insp.cancellation_reason ? ' · ' + insp.cancellation_reason : ''}
+                                </p>
+                              </div>
+                            )}
+
+                            {insp.rescheduled_date && status !== 'cancelled' && (
+                              <div style={{ marginTop: '6px', marginBottom: '10px', padding: '6px 10px', backgroundColor: '#fefce8', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#92400e', fontWeight: '600' }}>
+                                  📅 Rescheduled to: {new Date(insp.rescheduled_date).toLocaleDateString()}
+                                </p>
+                              </div>
+                            )}
+
                             {/* Action buttons */}
                             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '7px', flexWrap: 'wrap', alignItems: isMobile ? 'stretch' : 'center', width: isMobile ? '100%' : undefined }}>
                               {rawPhone && (
@@ -5219,6 +5236,47 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   style={{ padding: '6px 14px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: '8px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer' }}>
                                   {isReassigning ? 'Cancel' : 'Reassign'}
                                 </button>
+                              )}
+                              {(status === 'assigned' || status === 'pending') && (
+                                <>
+                                  <button onClick={async function() {
+                                    var reason = window.prompt('Reason for cancellation (optional):');
+                                    if (reason === null) return;
+                                    try {
+                                      var token = localStorage.getItem('gh_token');
+                                      var res = await fetch(API_URL + '/api/admin/cancel-inspection', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ inspection_id: insp.id, cancellation_reason: reason || null }),
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      setActionMsg('Inspection cancelled successfully');
+                                      fetchAdminInspections();
+                                    } catch(err) { setActionMsg('Error: ' + err.message); }
+                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    ✕ Cancel
+                                  </button>
+
+                                  <button onClick={async function() {
+                                    var newDate = window.prompt('Enter new inspection date (YYYY-MM-DD):');
+                                    if (!newDate) return;
+                                    try {
+                                      var token = localStorage.getItem('gh_token');
+                                      var res = await fetch(API_URL + '/api/admin/reschedule-inspection', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ inspection_id: insp.id, rescheduled_date: newDate }),
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      setActionMsg('Inspection rescheduled successfully');
+                                      fetchAdminInspections();
+                                    } catch(err) { setActionMsg('Error: ' + err.message); }
+                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #f59e0b', color: '#f59e0b', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    📅 Reschedule
+                                  </button>
+                                </>
                               )}
                               {status === 'gha_done' && (
                                 <button onClick={async function() {
@@ -11073,6 +11131,65 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             </div>
                             <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
                             {insp.created_at && <p style={{ margin: 0, fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
+
+                            {(insp.status === 'assigned' || insp.status === 'pending' || !insp.status) && (
+                              <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+                                <button onClick={async function() {
+                                  var reason = window.prompt('Reason for cancellation (optional):');
+                                  if (reason === null) return;
+                                  try {
+                                    var token = localStorage.getItem('gh_staff_token');
+                                    var res = await fetch(API_URL + '/api/sa/cancel-inspection', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                      body: JSON.stringify({ inspection_id: insp.id, cancellation_reason: reason || null }),
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setInspMsg('Inspection cancelled successfully');
+                                    fetchInspections();
+                                  } catch(err) { setInspMsg('Error: ' + err.message); }
+                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                  ✕ Cancel
+                                </button>
+
+                                <button onClick={async function() {
+                                  var newDate = window.prompt('Enter new inspection date (YYYY-MM-DD):');
+                                  if (!newDate) return;
+                                  try {
+                                    var token = localStorage.getItem('gh_staff_token');
+                                    var res = await fetch(API_URL + '/api/sa/reschedule-inspection', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                      body: JSON.stringify({ inspection_id: insp.id, rescheduled_date: newDate }),
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    setInspMsg('Inspection rescheduled successfully');
+                                    fetchInspections();
+                                  } catch(err) { setInspMsg('Error: ' + err.message); }
+                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #f59e0b', color: '#f59e0b', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                  📅 Reschedule
+                                </button>
+                              </div>
+                            )}
+
+                            {insp.status === 'cancelled' && (
+                              <div style={{ marginTop: '6px', padding: '6px 10px', backgroundColor: '#fff7ed', borderRadius: '6px', border: '1px solid #fed7aa' }}>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#c2410c', fontWeight: '600' }}>
+                                  Cancelled {insp.cancelled_at ? '· ' + new Date(insp.cancelled_at).toLocaleDateString() : ''}
+                                  {insp.cancellation_reason ? ' · ' + insp.cancellation_reason : ''}
+                                </p>
+                              </div>
+                            )}
+
+                            {insp.rescheduled_date && insp.status !== 'cancelled' && (
+                              <div style={{ marginTop: '6px', padding: '6px 10px', backgroundColor: '#fefce8', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#92400e', fontWeight: '600' }}>
+                                  📅 Rescheduled to: {new Date(insp.rescheduled_date).toLocaleDateString()}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
