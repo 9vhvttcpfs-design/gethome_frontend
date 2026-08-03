@@ -2138,7 +2138,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
     }
   };
   return (
-    <div style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
+    <div id="agent-upgrade-panel" style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
       <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: isMobile ? '0.9rem' : '1rem' }}>{currentTier === 'free' ? 'Upgrade Your Agent Tier' : 'Renew Your Subscription'}</p>
       <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Current plan: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[currentTier]?.label}</strong></p>
       {isAgencyAccount && (
@@ -2552,6 +2552,24 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   const myListings = (allProperties || []).filter(p =>
     isAdmin ? true : p.created_by === user?.id || p.agent_id === user?.id
   );
+  // Plan status — derived from the realtime-synced subscription state above
+  var subTier = agentTier || 'free';
+  var subEnd = subscriptionExpiresAt ? new Date(subscriptionExpiresAt) : null;
+  var isExpired = subscriptionStatus === 'expired' || (!!subEnd && subEnd < new Date());
+  var daysLeft = subEnd && !isExpired ? Math.ceil((subEnd - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+  var planColors = {
+    free: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
+    premium: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' },
+    agency: { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' },
+  };
+  var planColor = planColors[subTier] || planColors.free;
+  var goToUpgrade = function() {
+    setPortalTab('listings');
+    setTimeout(function() {
+      var el = document.getElementById('agent-upgrade-panel');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
       {uploadSuccess && (
@@ -2617,8 +2635,36 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           <p style={{ color: '#64748b', fontSize: '0.80rem', margin: 0 }}>Logged in as <strong style={{ color: '#27ae60' }}>{user?.email}</strong></p>
         </div>
       </div>
+      {/* Plan status card */}
+      <div style={{ backgroundColor: planColor.bg, borderRadius: '14px', padding: '16px 18px', marginBottom: '16px', border: '1px solid ' + planColor.border, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div>
+          <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', fontWeight: '600', color: planColor.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Plan</p>
+          <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: planColor.color, fontSize: '1.1rem' }}>
+            {subTier === 'free' ? 'Free Plan' : subTier === 'premium' ? 'Premium Plan' : 'Agency Plan'}
+          </p>
+          {subTier !== 'free' && subEnd && (
+            <p style={{ margin: 0, fontSize: '0.74rem', color: planColor.color, opacity: 0.8 }}>
+              {isExpired ? '⚠ Expired on ' + subEnd.toLocaleDateString() : '✓ Active · ' + daysLeft + ' days remaining · Expires ' + subEnd.toLocaleDateString()}
+            </p>
+          )}
+          {subTier === 'free' && (
+            <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>Upgrade to list more properties</p>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {subTier !== 'free' && !isExpired && (
+            <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: '800' }}>ACTIVE</span>
+          )}
+          {(subTier === 'free' || isExpired) && (
+            <button onClick={goToUpgrade}
+              style={{ backgroundColor: isExpired ? '#ef4444' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '8px 18px', fontWeight: '800', fontSize: '0.82rem', cursor: 'pointer' }}>
+              {isExpired ? '🔄 Renew Plan' : '⬆ Upgrade Plan'}
+            </button>
+          )}
+        </div>
+      </div>
       {/* Portal sub-tabs */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {[['listings', 'My Listings'], ['verify', 'Complete Profile'], ['account', 'Account Details']].map(function([t, label]) {
           var active = (portalTab || 'listings') === t;
           return (
@@ -2634,8 +2680,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
                   .finally(function(){ setSoldListingsLoading(false); });
               }
             }}
-              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.80rem', cursor: 'pointer' }}>
+              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontWeight: '600', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
               {label}
+              {t === 'listings' && (
+                <span style={{ backgroundColor: active ? 'rgba(255,255,255,0.18)' : planColor.bg, color: active ? '#fff' : planColor.color, border: '1px solid ' + (active ? 'rgba(255,255,255,0.3)' : planColor.border), borderRadius: '20px', padding: '1px 8px', fontSize: '0.62rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  {subTier === 'free' ? 'Free' : subTier === 'premium' ? 'Premium' : 'Agency'}
+                </span>
+              )}
             </button>
           );
         })}
@@ -3553,7 +3604,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [calculatingScores, setCalculatingScores]       = useState(false);
   const [calcMsg, setCalcMsg]                           = useState('');
   const [showTargets, setShowTargets]                   = useState(false);
-  const [targetsForm, setTargetsForm]                   = useState({ inspections_target: 10, response_time_target_hours: 48, agent_verifications_target: 5, csat_target: 4.7 });
+  const [targetsSubTab, setTargetsSubTab]               = useState('GHA');
+  const [ghaTargetsForm, setGhaTargetsForm]             = useState({ inspections_target: 10, response_time_target_hours: 48, agent_verifications_target: 5, csat_target: 4.7 });
+  const [saTargetsForm, setSaTargetsForm]               = useState({ agent_approvals_target: 20, response_time_target_hours: 24, csat_target: 4.7 });
   const [savingTargets, setSavingTargets]               = useState(false);
   const [targetsMsg, setTargetsMsg]                     = useState('');
 
@@ -3624,19 +3677,20 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     }
   };
 
-  const handleSaveTargets = async function() {
+  const handleSaveTargets = async function(staffType) {
     setSavingTargets(true);
     setTargetsMsg('');
     try {
       var token = localStorage.getItem('gh_token');
+      var form = staffType === 'SA' ? saTargetsForm : ghaTargetsForm;
       var res = await fetch(API_URL + '/api/admin/staff-targets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-        body: JSON.stringify(targetsForm),
+        body: JSON.stringify(Object.assign({ staff_type: staffType }, form)),
       });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
-      setTargetsMsg('Targets saved successfully.');
+      setTargetsMsg(staffType + ' targets saved successfully.');
       setTimeout(function() { setTargetsMsg(''); }, 4000);
     } catch(err) {
       setTargetsMsg('Error: ' + err.message);
@@ -7159,19 +7213,23 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
               return (
                 <div>
+                  {/* Prominent Recalculate Scores banner */}
+                  <div style={{ background: 'linear-gradient(135deg, #0a2240, #133a67)', borderRadius: '14px', padding: isMobile ? '16px' : '20px 24px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 6px 20px rgba(10,34,64,0.25)' }}>
+                    <div>
+                      <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '800', fontSize: '0.98rem' }}>⚡ Scores may be out of date</p>
+                      <p style={{ margin: 0, color: 'rgba(255,255,255,0.75)', fontSize: '0.80rem' }}>Recalculate to refresh KPI scores from the latest inspection, rating and agent activity data.</p>
+                    </div>
+                    <button onClick={handleAutoCalculate} disabled={calculatingScores}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 28px', backgroundColor: calculatingScores ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.94rem', fontWeight: '800', cursor: calculatingScores ? 'not-allowed' : 'pointer', boxShadow: calculatingScores ? 'none' : '0 4px 16px rgba(34,197,94,0.35)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>🔄</span>
+                      {calculatingScores ? 'Calculating…' : 'Recalculate Scores'}
+                    </button>
+                  </div>
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                     <h2 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.1rem', margin: 0 }}>Staff Performance Matrix</h2>
                     <input type="month" value={kpiMonth} onChange={function(e){ setKpiMonth(e.target.value); }}
                       style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
-                  </div>
-
-                  {/* Auto-Calculate Scores */}
-                  <div style={{ marginBottom: '14px' }}>
-                    <button onClick={handleAutoCalculate} disabled={calculatingScores}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '13px 22px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.90rem', fontWeight: '800', cursor: calculatingScores ? 'not-allowed' : 'pointer', opacity: calculatingScores ? 0.7 : 1, boxShadow: '0 3px 12px rgba(10,34,64,0.20)' }}>
-                      <span style={{ fontSize: '1.15rem', lineHeight: 1 }}>⚡</span>
-                      {calculatingScores ? 'Calculating…' : 'Auto-Calculate Scores'}
-                    </button>
                   </div>
 
                   {calcMsg && (
@@ -7236,43 +7294,86 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           These targets are used to auto-calculate performance scores. Update them at the start of each month before calculating.
                         </p>
 
+                        {/* GHA / SA targets sub-tabs */}
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+                          {['GHA','SA'].map(function(t) {
+                            var isActive = targetsSubTab === t;
+                            return (
+                              <button key={t} onClick={function(){ setTargetsSubTab(t); setTargetsMsg(''); }}
+                                style={{ padding: '6px 16px', borderRadius: '20px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                                {t} Targets
+                              </button>
+                            );
+                          })}
+                        </div>
+
                         {targetsMsg && (
                           <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: targetsMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (targetsMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
                             <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: targetsMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{targetsMsg}</p>
                           </div>
                         )}
 
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                          <div>
-                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspections Target</label>
-                            <input type="number" step="1" value={targetsForm.inspections_target}
-                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { inspections_target: v === '' ? '' : Number(v) }); }); }}
-                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
-                            <input type="number" step="1" value={targetsForm.response_time_target_hours}
-                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
-                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Verifications Target</label>
-                            <input type="number" step="1" value={targetsForm.agent_verifications_target}
-                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { agent_verifications_target: v === '' ? '' : Number(v) }); }); }}
-                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                          </div>
-                          <div>
-                            <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
-                            <input type="number" step="0.1" value={targetsForm.csat_target}
-                              onChange={function(e){ var v = e.target.value; setTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
-                              style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                          </div>
-                        </div>
-
-                        <button onClick={handleSaveTargets} disabled={savingTargets}
-                          style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
-                          {savingTargets ? 'Saving…' : 'Save Targets'}
-                        </button>
+                        {targetsSubTab === 'GHA' ? (
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspections Target</label>
+                                <input type="number" step="1" value={ghaTargetsForm.inspections_target}
+                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { inspections_target: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
+                                <input type="number" step="1" value={ghaTargetsForm.response_time_target_hours}
+                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Verifications Target</label>
+                                <input type="number" step="1" value={ghaTargetsForm.agent_verifications_target}
+                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { agent_verifications_target: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
+                                <input type="number" step="0.1" value={ghaTargetsForm.csat_target}
+                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                            </div>
+                            <button onClick={function(){ handleSaveTargets('GHA'); }} disabled={savingTargets}
+                              style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
+                              {savingTargets ? 'Saving…' : 'Save GHA Targets'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Approvals Target</label>
+                                <input type="number" step="1" value={saTargetsForm.agent_approvals_target}
+                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { agent_approvals_target: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
+                                <input type="number" step="1" value={saTargetsForm.response_time_target_hours}
+                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
+                                <input type="number" step="0.1" value={saTargetsForm.csat_target}
+                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
+                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
+                              </div>
+                            </div>
+                            <button onClick={function(){ handleSaveTargets('SA'); }} disabled={savingTargets}
+                              style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
+                              {savingTargets ? 'Saving…' : 'Save SA Targets'}
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -10826,7 +10927,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             {/* Top bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inspection Management</h2>
-              <button onClick={function(){ setShowCreateInsp(!showCreateInsp); setInspMsg(''); }}
+              <button onClick={function(){
+                  if (showCreateInsp) { setInspForm({ property_id: '', customer_name: '', customer_email: '', customer_phone: '', inspection_date: '', gha_id: '', property_address: '', notes: '', inspection_type: 'physical' }); }
+                  setShowCreateInsp(!showCreateInsp); setInspMsg('');
+                }}
                 style={{ padding: '9px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
                 {showCreateInsp ? 'Cancel' : '+ Create New Inspection'}
               </button>
@@ -10869,11 +10973,21 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
-                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ADDRESS</label>
-                    <textarea value={inspForm.property_address} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_address: e.target.value }); }); }}
-                      placeholder="Full property address"
-                      rows={2}
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
+                    {inspForm.property_id ? (
+                      <div style={{ padding: '10px 14px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                        <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
+                          📋 Property: {inspForm.property_address}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ADDRESS</label>
+                        <textarea value={inspForm.property_address} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_address: e.target.value }); }); }}
+                          placeholder="Full property address"
+                          rows={2}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
+                      </>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>GHA TO HANDLE THIS INSPECTION</label>
@@ -11587,6 +11701,18 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             )}
                           </div>
                           <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', gap: '8px', justifyContent: isMobile ? 'flex-start' : 'flex-end', width: isMobile ? '100%' : undefined, flexWrap: 'wrap' }}>
+                            <button onClick={function() {
+                                // Pre-fill the New Inspection form with this listing's details
+                                setInspForm(function(f){ return Object.assign({}, f, {
+                                  property_id: l.id,
+                                  property_address: (l.title || '') + ' — ' + (l.location || ''),
+                                }); });
+                                setSaTab('inspections');
+                                setShowCreateInsp(true);
+                                setInspMsg('');
+                              }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
+                              📋 Book Inspection
+                            </button>
                             <button onClick={function(){
                                 setComposeForm({
                                   recipient_type: 'GHA',
