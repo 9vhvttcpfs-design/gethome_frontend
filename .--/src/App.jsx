@@ -3433,6 +3433,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [depositViewingProperty, setDepositViewingProperty] = useState(null);
   const [expandedListing, setExpandedListing]           = useState(null);
   const [expandedAgent, setExpandedAgent]               = useState(null);
+  const [manualUpgradeAgent, setManualUpgradeAgent]     = useState(null);
+  const [manualUpgradeTier, setManualUpgradeTier]       = useState('premium');
+  const [upgradeMsg, setUpgradeMsg]                     = useState('');
   // SA/GHA Management state
   const [allSAs, setAllSAs]                             = useState([]);
   const [sasLoading, setSasLoading]                     = useState(false);
@@ -4679,6 +4682,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <button onClick={function(){ handleRevoke(agent.id, agent.email); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Revoke</button>
                                 )}
+                                {agentSubTab === 'approved' && !isDisapproved && (
+                                  <button onClick={function() { setManualUpgradeAgent(agent); setManualUpgradeTier('premium'); }}
+                                    style={{ backgroundColor: 'transparent', border: '1px solid #27ae60', color: '#27ae60', borderRadius: '6px', padding: '4px 10px', fontSize: '0.70rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                    ⬆ Upgrade
+                                  </button>
+                                )}
                                 {isRejectedTab && (
                                   <button onClick={function(){ handleReinstate(agent.id, agent.email); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Reinstate</button>
@@ -4752,6 +4761,45 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {manualUpgradeAgent && (
+                    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                      <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '380px', width: '100%' }}>
+                        <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 6px 0', fontSize: '1rem' }}>Manual Plan Upgrade</h3>
+                        <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 16px 0' }}>
+                          Upgrading: <strong>{manualUpgradeAgent.full_name || manualUpgradeAgent.email}</strong>
+                        </p>
+                        <select value={manualUpgradeTier} onChange={function(e) { setManualUpgradeTier(e.target.value); }}
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '0.88rem', marginBottom: '16px' }}>
+                          <option value='premium'>Premium — ₦8,500/month</option>
+                          <option value='agency'>Agency — ₦35,000/month</option>
+                        </select>
+                        {upgradeMsg && <p style={{ color: upgradeMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontSize: '0.78rem', margin: '0 0 10px 0', fontWeight: '600' }}>{upgradeMsg}</p>}
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button onClick={function() { setManualUpgradeAgent(null); setUpgradeMsg(''); }}
+                            style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                            Cancel
+                          </button>
+                          <button onClick={async function() {
+                            try {
+                              var token = localStorage.getItem('gh_token');
+                              var res = await fetch(API_URL + '/api/admin/manual-upgrade', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                body: JSON.stringify({ agent_email: manualUpgradeAgent.email, tier: manualUpgradeTier }),
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Upgrade failed');
+                              setUpgradeMsg(data.message);
+                              setTimeout(function() { setManualUpgradeAgent(null); setUpgradeMsg(''); fetchApprovedAgents(); }, 2000);
+                            } catch(err) { setUpgradeMsg('Error: ' + err.message); }
+                          }} style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
+                            Confirm Upgrade
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
