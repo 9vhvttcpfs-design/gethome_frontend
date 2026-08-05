@@ -1617,6 +1617,29 @@ function MovingQuoteForm() {
     </div>
   );
 }
+// Google AdSense unit. Renders nothing until both a publisher ID and an ad slot
+// are configured (Admin > Settings > Advertisement Display), so it's safe to
+// drop in anywhere ahead of having real AdSense credentials.
+function GoogleAd({ config, type }) {
+  var cfg = config || {};
+  var slot = type === 'banner' ? cfg.banner_slot : cfg.listing_slot;
+  var publisherId = cfg.publisher_id || '';
+  useEffect(function() {
+    if (!slot || !publisherId) return;
+    try {
+      if (window.adsbygoogle) window.adsbygoogle.push({});
+    } catch (e) { console.log('AdSense push error:', e.message); }
+  }, [slot, publisherId]);
+  if (!slot || !publisherId) return null;
+  return (
+    <ins className='adsbygoogle'
+      style={{ display: 'block' }}
+      data-ad-client={publisherId}
+      data-ad-slot={slot}
+      data-ad-format='auto'
+      data-full-width-responsive='true' />
+  );
+}
 function PropertyCard({ house, onSelect }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
@@ -3715,6 +3738,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [bankDetails, setBankDetails]                   = useState({ bank_name: '', account_number: '', account_name: '', bank_code: '' });
   const [loanLink, setLoanLink]                         = useState('https://creditdirect.ng/?ref=09077246534');
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
+  const [adPublisherId, setAdPublisherId]               = useState('');
+  const [adListingSlot, setAdListingSlot]               = useState('');
+  const [adBannerSlot, setAdBannerSlot]                 = useState('');
   const [settingsMsg, setSettingsMsg]                   = useState('');
   const [settingsSaving, setSettingsSaving]             = useState(false);
 
@@ -3728,6 +3754,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.bank_details) setBankDetails(data.bank_details);
         if (data.loan_link) setLoanLink(data.loan_link);
         if (data.payment_whatsapp) setPaymentWhatsapp(data.payment_whatsapp);
+        if (data.adsense_config) {
+          setAdPublisherId(data.adsense_config.publisher_id || '');
+          setAdListingSlot(data.adsense_config.listing_slot || '');
+          setAdBannerSlot(data.adsense_config.banner_slot || '');
+        }
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -7867,6 +7898,66 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       {adsEnabled ? '● Ads are LIVE on the platform' : '○ Ads are OFF — toggle to show ads to users'}
                     </p>
                   </div>
+
+                  {adsEnabled && (
+                    <div style={{ marginTop: '14px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontWeight: '700', color: '#0a2240' }}>
+                        Google AdSense Configuration
+                      </p>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '0.72rem', color: '#64748b' }}>
+                        Get these IDs from your Google AdSense dashboard at google.com/adsense. Ads stay hidden until all three are filled in.
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '3px' }}>Publisher ID (ca-pub-XXXXXXXXX)</label>
+                          <input type='text' placeholder='ca-pub-1234567890123456'
+                            value={adPublisherId}
+                            onChange={function(e) { setAdPublisherId(e.target.value); }}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.80rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '3px' }}>Listing Ad Unit ID</label>
+                          <input type='text' placeholder='1234567890'
+                            value={adListingSlot}
+                            onChange={function(e) { setAdListingSlot(e.target.value); }}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.80rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.72rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '3px' }}>Banner Ad Unit ID</label>
+                          <input type='text' placeholder='0987654321'
+                            value={adBannerSlot}
+                            onChange={function(e) { setAdBannerSlot(e.target.value); }}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.80rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <button onClick={async function() {
+                          setSettingsSaving(true);
+                          try {
+                            var token = localStorage.getItem('gh_token');
+                            var res = await fetch(API_URL + '/api/admin/settings', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                              body: JSON.stringify({
+                                setting_key: 'adsense_config',
+                                setting_json: {
+                                  publisher_id: adPublisherId.trim(),
+                                  listing_slot: adListingSlot.trim(),
+                                  banner_slot: adBannerSlot.trim(),
+                                },
+                              }),
+                            });
+                            var data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Failed');
+                            setSettingsMsg('AdSense configuration saved');
+                            setTimeout(function() { setSettingsMsg(''); }, 3000);
+                          } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                          finally { setSettingsSaving(false); }
+                        }} disabled={settingsSaving}
+                          style={{ padding: '8px', backgroundColor: settingsSaving ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+                          {settingsSaving ? 'Saving...' : 'Save AdSense Config'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Bank Details */}
@@ -12721,6 +12812,24 @@ function AppContent() {
   // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
   const [globalSettings, setGlobalSettings]     = useState({});
   const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
+  const adsenseConfig = globalSettings.adsense_config || {};
+  // Renders a list of property cards with a Google ad slotted in after every
+  // 6th card. Ads only actually render once adsEnabled is on and a publisher
+  // ID + listing ad slot are configured in Admin > Settings.
+  const renderPropertyGrid = function(list) {
+    return list.map(function(h, idx) {
+      return (
+        <Fragment key={h.id}>
+          <PropertyCard house={h} onSelect={function(){ setSelectedProperty(h); }} />
+          {adsEnabled && (idx + 1) % 6 === 0 && (
+            <div style={{ gridColumn: '1 / -1', margin: '8px 0' }}>
+              <GoogleAd config={adsenseConfig} type='listing' />
+            </div>
+          )}
+        </Fragment>
+      );
+    });
+  };
   const fetchGlobalSettings = async function() {
     try {
       var res = await fetch(API_URL + '/api/settings');
@@ -13610,6 +13719,11 @@ function AppContent() {
                 </div>
               </div>
             </div>
+            {adsEnabled && (
+              <div style={{ margin: '16px 0', maxWidth: '100%', overflow: 'hidden' }}>
+                <GoogleAd config={adsenseConfig} type='banner' />
+              </div>
+            )}
             {(searchQuery || filterCity !== 'All' || selectedPropertyType) ? (
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -13621,7 +13735,7 @@ function AppContent() {
                   ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><Search size={28} color="#cbd5e1" /></div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
                   : <>
                       <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                        {searchFiltered(rentProperties).slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                        {renderPropertyGrid(searchFiltered(rentProperties).slice(0, rentLimit))}
                       </div>
                       {searchFiltered(rentProperties).length > LISTINGS_INCREMENT && (
                         <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -13705,7 +13819,7 @@ function AppContent() {
                   )
                   : <>
                       <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                        {rentProperties.slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                        {renderPropertyGrid(rentProperties.slice(0, rentLimit))}
                       </div>
                       {rentProperties.length > LISTINGS_INCREMENT && (
                         <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -13818,6 +13932,11 @@ function AppContent() {
                 </div>
               )}
             </div>
+            {adsEnabled && (
+              <div style={{ margin: '16px 0', maxWidth: '100%', overflow: 'hidden' }}>
+                <GoogleAd config={adsenseConfig} type='banner' />
+              </div>
+            )}
             {searchFiltered(saleProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
@@ -13841,7 +13960,7 @@ function AppContent() {
               )
               : <>
                   <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                    {searchFiltered(saleProperties).slice(0, saleLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                    {renderPropertyGrid(searchFiltered(saleProperties).slice(0, saleLimit))}
                   </div>
                   {searchFiltered(saleProperties).length > LISTINGS_INCREMENT && (
                     <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -13943,6 +14062,11 @@ function AppContent() {
                 </div>
               )}
             </div>
+            {adsEnabled && (
+              <div style={{ margin: '16px 0', maxWidth: '100%', overflow: 'hidden' }}>
+                <GoogleAd config={adsenseConfig} type='banner' />
+              </div>
+            )}
             {searchFiltered(shortletProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
@@ -13962,7 +14086,7 @@ function AppContent() {
               )
               : <>
                   <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                    {searchFiltered(shortletProperties).slice(0, shortletLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                    {renderPropertyGrid(searchFiltered(shortletProperties).slice(0, shortletLimit))}
                   </div>
                   {searchFiltered(shortletProperties).length > LISTINGS_INCREMENT && (
                     <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
