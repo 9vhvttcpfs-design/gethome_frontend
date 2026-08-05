@@ -3717,6 +3717,22 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
   const [settingsMsg, setSettingsMsg]                   = useState('');
   const [settingsSaving, setSettingsSaving]             = useState(false);
+  // Super-admin-only Admin Management state
+  const [adminList, setAdminList]                       = useState([]);
+  const [newAdminEmail, setNewAdminEmail]               = useState('');
+  const [adminMgmtMsg, setAdminMgmtMsg]                 = useState('');
+  const [isSuperAdmin, setIsSuperAdmin]                 = useState(false);
+
+  const fetchAdminList = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/admin-list', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setAdminList(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Admin list error:', e.message); }
+  };
 
   const fetchAppSettings = async function() {
     try {
@@ -4393,7 +4409,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [adminTab, kpiMonth]);
 
   useEffect(function() {
-    if (adminTab === 'settings') fetchAppSettings();
+    if (adminTab === 'settings') {
+      fetchAppSettings();
+      // Check if current admin is super admin
+      var currentUserEmail = user?.email || JSON.parse(localStorage.getItem('gh_user') || '{}').email;
+      var superAdmin = currentUserEmail === 'medibrhm07@gmail.com';
+      setIsSuperAdmin(superAdmin);
+      if (superAdmin) fetchAdminList();
+    }
   }, [adminTab]);
 
   useEffect(function() {
@@ -7977,6 +8000,103 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     Save WhatsApp Number
                   </button>
                 </div>
+
+                {/* Admin Management — visible only to the super admin */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '2px solid #0a2240', boxShadow: '0 2px 8px rgba(10,34,64,0.10)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>SUPER ADMIN</span>
+                      <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Admin Management</h3>
+                    </div>
+                    <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Only you can grant or revoke admin access. Admins have full access to the dashboard.
+                    </p>
+
+                    {adminMgmtMsg && (
+                      <div style={{ backgroundColor: adminMgmtMsg.startsWith('Error') ? '#fff7ed' : '#f0fff4', border: '1px solid ' + (adminMgmtMsg.startsWith('Error') ? '#fed7aa' : '#bbf7d0'), borderRadius: '8px', padding: '8px 12px', marginBottom: '12px' }}>
+                        <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '600', color: adminMgmtMsg.startsWith('Error') ? '#c2410c' : '#166534' }}>{adminMgmtMsg}</p>
+                      </div>
+                    )}
+
+                    {/* Current admins list */}
+                    <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#374151' }}>Current Admins ({adminList.length})</p>
+                    <div style={{ marginBottom: '16px' }}>
+                      {adminList.map(function(adm) {
+                        return (
+                          <div key={adm.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '6px', border: '1px solid #e2e8f0' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                                  {adm.full_name || adm.email}
+                                </p>
+                                {adm.admin_level === 'super_admin' && (
+                                  <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '4px', padding: '1px 6px', fontSize: '0.60rem', fontWeight: '800' }}>SUPER</span>
+                                )}
+                              </div>
+                              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>{adm.email}</p>
+                            </div>
+                            {adm.email !== 'medibrhm07@gmail.com' && (
+                              <button onClick={async function() {
+                                if (!window.confirm('Remove admin access from ' + (adm.full_name || adm.email) + '? They will lose all admin privileges immediately.')) return;
+                                try {
+                                  var token = localStorage.getItem('gh_token');
+                                  var res = await fetch(API_URL + '/api/admin/revoke-admin', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ target_user_id: adm.id }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                  setAdminMgmtMsg(data.message);
+                                  fetchAdminList();
+                                  setTimeout(function() { setAdminMgmtMsg(''); }, 4000);
+                                } catch(err) { setAdminMgmtMsg('Error: ' + err.message); }
+                              }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer' }}>
+                                Revoke
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Grant admin access */}
+                    <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#374151' }}>Grant Admin Access</p>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                      The person must already have a GetHome account. Enter their email address.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type='email'
+                        placeholder='email@example.com'
+                        value={newAdminEmail}
+                        onChange={function(e) { setNewAdminEmail(e.target.value); }}
+                        style={{ flex: 1, padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
+                      />
+                      <button onClick={async function() {
+                        if (!newAdminEmail.trim()) { setAdminMgmtMsg('Error: Please enter an email address'); return; }
+                        if (!newAdminEmail.includes('@')) { setAdminMgmtMsg('Error: Please enter a valid email address'); return; }
+                        if (!window.confirm('Grant admin access to ' + newAdminEmail + '? They will have full access to the admin dashboard.')) return;
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/make-admin', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ target_email: newAdminEmail.trim().toLowerCase() }),
+                          });
+                          var data = await res.json();
+                          if (!res.ok) throw new Error(data.error || 'Failed');
+                          setAdminMgmtMsg(data.message);
+                          setNewAdminEmail('');
+                          fetchAdminList();
+                          setTimeout(function() { setAdminMgmtMsg(''); }, 5000);
+                        } catch(err) { setAdminMgmtMsg('Error: ' + err.message); }
+                      }} style={{ flexShrink: 0, padding: '10px 16px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+                        Grant Access
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
