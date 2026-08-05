@@ -2338,13 +2338,17 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
     // Initial fetch
     supabase
       .from('agents')
-      .select('subscription_status, subscription_expires_at')
+      .select('subscription_tier, subscription_status, subscription_end')
       .eq('id', user.id)
       .single()
       .then(function({ data }) {
         if (data) {
           setSubscriptionStatus(data.subscription_status || null);
-          setSubscriptionExpiresAt(data.subscription_expires_at || null);
+          setSubscriptionExpiresAt(data.subscription_end || null);
+          if (data.subscription_tier) {
+            setAgentTier(data.subscription_tier);
+            localStorage.setItem('gh_tier_' + user.id, data.subscription_tier);
+          }
         }
       })
       .catch(function() {});
@@ -2359,10 +2363,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       }, function(payload) {
         if (!payload.new) return;
         setSubscriptionStatus(payload.new.subscription_status || null);
-        setSubscriptionExpiresAt(payload.new.subscription_expires_at || null);
-        if (payload.new.tier) {
-          setAgentTier(payload.new.tier);
-          localStorage.setItem('gh_tier_' + user.id, payload.new.tier);
+        setSubscriptionExpiresAt(payload.new.subscription_end || payload.new.subscription_expires_at || null);
+        var newTier = payload.new.subscription_tier || payload.new.tier;
+        if (newTier) {
+          setAgentTier(newTier);
+          localStorage.setItem('gh_tier_' + user.id, newTier);
         }
       })
       .subscribe(function(status, err) {
@@ -4264,7 +4269,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [adminTab, paymentsMonth]);
 
   useEffect(function() {
-    if (adminTab === 'performance') fetchKPIs();
+    if (adminTab === 'performance') {
+      fetchKPIs();
+      handleAutoCalculate(); // auto-recalculate current month scores whenever the tab opens
+    }
   }, [adminTab, kpiMonth]);
 
   useEffect(function() {
@@ -7781,6 +7789,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [inspLoading, setInspLoading]               = useState(false);
   const [overview, setOverview]                     = useState(null);
   const [overviewLoading, setOverviewLoading]       = useState(false);
+  const [ghaEarningsOverview, setGhaEarningsOverview] = useState({ total_commission: 0, is_paid: false });
   const [ghaRatings, setGhaRatings]                 = useState(null);
   const [ghaRatingsLoading, setGhaRatingsLoading]   = useState(false);
   const [actionMsg, setActionMsg]                   = useState('');
@@ -7835,6 +7844,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       setOverview(data);
     } catch(e) { console.error(e); }
     finally { setOverviewLoading(false); }
+  }
+  async function fetchGHAEarningsOverview() {
+    try {
+      var res = await fetch(API_URL + '/api/gha/earnings?month=' + new Date().toISOString().slice(0, 7), { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) setGhaEarningsOverview(data);
+    } catch(e) { console.error('GHA earnings overview error:', e.message); }
   }
   async function fetchGhaRatings() {
     setGhaRatingsLoading(true);
@@ -8054,7 +8070,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   useEffect(function() { ghaNotificationsRef.current = ghaNotifications; }, [ghaNotifications]);
 
   useEffect(function() {
-    fetchOverview(); fetchAgents(); fetchGhaRatings();
+    fetchOverview(); fetchAgents(); fetchGhaRatings(); fetchGHAEarningsOverview();
     fetchGHANotifications().then(function(){ fetchMessages(); });
     var notifInterval = setInterval(fetchGHANotifications, 20000);
     var messagesInterval = setInterval(fetchMessages, 30000);
@@ -8096,7 +8112,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   var activeSubscriptions = agents.filter(function(a) { return a.subscription_tier && a.subscription_tier !== 'free' && a.subscription_expires_at && new Date(a.subscription_expires_at) > new Date(); }).length;
   var expiredSubscriptions = agents.filter(function(a) { return a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date(); }).length;
-  var monthlyEarnings = agents.reduce(function(sum, a) { return sum + (TIER_PRICE[a.subscription_tier] || 0) * 0.05; }, 0);
+  var monthlyEarnings = ghaEarningsOverview.total_commission || 0;
 
   function verLevelBadge(level) {
     var cfg = { basic: { bg: '#f1f5f9', color: '#64748b', label: 'Basic' }, verified: { bg: '#f0fff4', color: '#166534', label: 'Verified' }, premium: { bg: '#eff6ff', color: '#1e40af', label: 'Premium' } };
@@ -8372,10 +8388,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
-                    {overview?.earnings_paid
+                    {ghaEarningsOverview.is_paid
                       ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
                       : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
                     }
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: ghaEarningsOverview.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600' }}>
+                      {ghaEarningsOverview.is_paid ? '✓ Paid' : '● Awaiting payment'}
+                    </p>
                   </div>
                 </div>
 
@@ -9573,6 +9592,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
+  const [saEarningsData, setSaEarningsData]         = useState(null);
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
   // Listings tab state
   const [saListings, setSaListings]                 = useState([]);
@@ -9631,9 +9651,18 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     try {
       var res = await fetch(API_URL + '/api/sa/subscriptions?month=' + subMonth, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      setSubscriptions(Array.isArray(data) ? data : []);
+      // API returns { agents, total_revenue, sa_commission, by_month }, not a bare array
+      setSubscriptions(Array.isArray(data) ? data : (Array.isArray(data.agents) ? data.agents : []));
     } catch(e) { console.error(e); }
     finally { setSubsLoading(false); }
+  }
+
+  async function fetchSAEarningsOverview() {
+    try {
+      var res = await fetch(API_URL + '/api/sa/earnings?month=' + new Date().toISOString().slice(0, 7), { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) setSaEarningsData(data);
+    } catch(e) { console.error('SA earnings overview error:', e.message); }
   }
 
   async function fetchDeposits() {
@@ -9877,6 +9906,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   useEffect(function() {
     fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations(); fetchMessages(); fetchAllSAs();
+    fetchSubscriptions(); fetchSAEarningsOverview(); // needed for Overview earnings on first load
     var notifInterval = setInterval(fetchNotifications, 30000);
     var messagesInterval = setInterval(fetchMessages, 30000);
     return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
@@ -9934,8 +9964,18 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     });
   }, [saGhas, pendingAgents]);
 
-  var activeSubscriptions = agents.filter(function(a) { return a.subscription_tier && a.subscription_tier !== 'free' && a.subscription_expires_at && new Date(a.subscription_expires_at) > new Date(); }).length;
-  var expiredSubscriptions = agents.filter(function(a) { return a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date(); }).length;
+  var saOverviewNow = new Date();
+  var activeSubscriptions = agents.filter(function(a) {
+    return (a.subscription_status === 'active' || a.subscription_tier === 'premium' || a.subscription_tier === 'agency') &&
+      a.subscription_end &&
+      new Date(a.subscription_end) > saOverviewNow;
+  }).length;
+  var expiredSubscriptions = agents.filter(function(a) {
+    return a.subscription_end &&
+      new Date(a.subscription_end) <= saOverviewNow &&
+      a.subscription_tier !== 'free' &&
+      a.subscription_tier != null;
+  }).length;
   var subTotal = subscriptions.reduce(function(sum, s) { return sum + (s.amount || 0); }, 0);
   var saCity = (profileForm.location || staffUser.location || '').trim();
   var cityFilteredPendingAgents = saCity
@@ -9944,7 +9984,13 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   var cityFilteredGhaAgents = saCity
     ? ghaInspectionAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
     : ghaInspectionAgents;
-  var monthlyEarnings = subTotal * 0.05;
+  // Use actual earnings from sa_earnings table if available; fall back to client-side estimate
+  var monthlyEarnings = 0;
+  if (saEarningsData && saEarningsData.total_commission > 0) {
+    monthlyEarnings = saEarningsData.total_commission;
+  } else {
+    monthlyEarnings = subTotal * 0.05;
+  }
   var filteredAgents = agents.filter(function(a) {
     if (!agentSearch.trim()) return true;
     var q = agentSearch.toLowerCase();
@@ -10138,6 +10184,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
                     <p style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
                     <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
+                    {s.label === 'EARNINGS (5%)' && (
+                      <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: saEarningsData?.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600' }}>
+                        {saEarningsData?.is_paid ? '✓ Paid' : '● Awaiting payment'}
+                      </p>
+                    )}
                   </div>
                 );
               })}
