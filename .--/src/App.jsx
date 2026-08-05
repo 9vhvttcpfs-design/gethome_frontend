@@ -1663,7 +1663,7 @@ function PropertyCard({ house, onSelect }) {
     </div>
   );
 }
-function PricingModal({ property, onClose, user, onUserChange }) {
+function PricingModal({ property, onClose, user, onUserChange, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { fmtCurrency, fmtListingPrice, activeCountry } = useCountry();
   const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
@@ -1718,7 +1718,9 @@ function PricingModal({ property, onClose, user, onUserChange }) {
   const inspectionFeeAmount = parseFloat(property.inspection_fee || 0);
   const inspectionFeeLabel  = inspectionFeeAmount > 0 ? '₦' + inspectionFeeAmount.toLocaleString() : 'FREE';
   const inspectionFeeColor  = inspectionFeeAmount > 0 ? '#0a2240' : '#27ae60';
-  const loanUrl = `${LOAN_PARTNER_URL}${LOAN_PARTNER_URL && LOAN_PARTNER_URL.includes('?') ? '&' : '?'}utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
+  const loanBaseUrl = globalSettings.loan_link || LOAN_PARTNER_URL || 'https://creditdirect.ng/?ref=09077246534';
+  const loanUrl = `${loanBaseUrl}${loanBaseUrl.includes('?') ? '&' : '?'}utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
+  const ghBank = globalSettings.bank_details || { bank_name: GETHOME_BANK_NAME, account_number: GETHOME_ACCOUNT_NUMBER, account_name: GETHOME_ACCOUNT_NAME };
   const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
   const handleAuthSuccess = (newUser) => { onUserChange(newUser); setAuthWall(null); };
   const handleWhatsAppInspection = async function() {
@@ -2098,9 +2100,9 @@ function PricingModal({ property, onClose, user, onUserChange }) {
               style={{ position: 'absolute', top: '14px', right: '14px', background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer', fontSize: '0.9rem', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&#x2715;</button>
             <p style={{ margin: '0 0 16px 0', fontWeight: '800', fontSize: '1rem', color: '#0a2240', textAlign: 'center' }}>Direct Bank Transfer</p>
             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Bank Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_BANK_NAME}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Number</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_ACCOUNT_NUMBER}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{GETHOME_ACCOUNT_NAME}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Bank Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{ghBank.bank_name}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Number</span><span style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.9rem', letterSpacing: '0.08em' }}>{ghBank.account_number || 'Contact admin'}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Account Name</span><span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.82rem' }}>{ghBank.account_name}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>Amount</span><span style={{ color: '#27ae60', fontWeight: '800', fontSize: '0.86rem' }}>{fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal)}</span></div>
             </div>
             <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem', lineHeight: '1.6', textAlign: 'center' }}>After transferring, notify us via WhatsApp with your payment receipt so we can confirm and process your booking.</p>
@@ -3707,6 +3709,28 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [saTargetsForm, setSaTargetsForm]               = useState({ agent_approvals_target: 20, response_time_target_hours: 24, csat_target: 4.7 });
   const [savingTargets, setSavingTargets]               = useState(false);
   const [targetsMsg, setTargetsMsg]                     = useState('');
+  // App Settings tab state
+  const [appSettings, setAppSettings]                   = useState({});
+  const [adsEnabled, setAdsEnabled]                     = useState(false);
+  const [bankDetails, setBankDetails]                   = useState({ bank_name: '', account_number: '', account_name: '', bank_code: '' });
+  const [loanLink, setLoanLink]                         = useState('https://creditdirect.ng/?ref=09077246534');
+  const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
+  const [settingsMsg, setSettingsMsg]                   = useState('');
+  const [settingsSaving, setSettingsSaving]             = useState(false);
+
+  const fetchAppSettings = async function() {
+    try {
+      var res = await fetch(API_URL + '/api/settings');
+      var data = await res.json();
+      if (res.ok) {
+        setAppSettings(data);
+        setAdsEnabled(data.ads_enabled === 'true' || data.ads_enabled === true);
+        if (data.bank_details) setBankDetails(data.bank_details);
+        if (data.loan_link) setLoanLink(data.loan_link);
+        if (data.payment_whatsapp) setPaymentWhatsapp(data.payment_whatsapp);
+      }
+    } catch(e) { console.error('Settings fetch error:', e.message); }
+  };
 
   const fetchKPIs = async function(silent) {
     if (!silent) setKpiLoading(true);
@@ -4369,6 +4393,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [adminTab, kpiMonth]);
 
   useEffect(function() {
+    if (adminTab === 'settings') fetchAppSettings();
+  }, [adminTab]);
+
+  useEffect(function() {
     function handleClickOutside(e) {
       if (mobileNavRef.current && !mobileNavRef.current.contains(e.target)) {
         setMobileNavOpen(false);
@@ -4614,7 +4642,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
-    ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],
+    ['payments','Payments'],['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],['settings','Settings'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -4629,6 +4657,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'staff-payments') fetchStaffPayments();
     if (t === 'performance') fetchKPIs();
     if (t === 'inbox') { fetchAdminMessages(); if (allSAs.length === 0) fetchAllSAs(); if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }
+    if (t === 'settings') fetchAppSettings();
   }
 
   return (
@@ -7702,6 +7731,18 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{msg.subject || '(no subject)'}</span>
                             </div>
                             <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem' }}>{preview}</p>
+                            {msg.message_type === 'payment_received' && msg.meta && (function() {
+                              try {
+                                var meta = JSON.parse(msg.meta);
+                                return meta.whatsapp_link ? (
+                                  <a href={meta.whatsapp_link} target='_blank' rel='noopener noreferrer'
+                                    onClick={function(e){ e.stopPropagation(); }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '6px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', textDecoration: 'none' }}>
+                                    📱 Open WhatsApp to Notify GetHome
+                                  </a>
+                                ) : null;
+                              } catch(e) { return null; }
+                            })()}
                           </div>
                           <span style={{ color: '#94a3b8', fontSize: '0.70rem', whiteSpace: 'nowrap' }}>{timeAgo}</span>
                         </div>
@@ -7716,6 +7757,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     ? { bg: '#fffbeb', color: '#92400e', border: '#fde68a', label: 'Inspection Note' }
                     : m.message_type === 'new_listing_alert'
                     ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
+                    : m.message_type === 'payment_received'
+                    ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0', label: 'Payment Received' }
                     : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
                   return (
                     <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', padding: '20px 24px' }}>
@@ -7747,6 +7790,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             View Property
                           </button>
                         )}
+                        {m.message_type === 'payment_received' && m.meta && (function() {
+                          try {
+                            var meta = JSON.parse(m.meta);
+                            return meta.whatsapp_link ? (
+                              <a href={meta.whatsapp_link} target='_blank' rel='noopener noreferrer'
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', textDecoration: 'none' }}>
+                                📱 Open WhatsApp to Notify GetHome
+                              </a>
+                            ) : null;
+                          } catch(e) { return null; }
+                        })()}
                         <button onClick={function(){
                             setComposeForm({ recipient_type: m.sender_type === 'GHA' ? 'GHA' : 'SA', recipient_id: m.sender_id || '', subject: 'Re: ' + (m.subject || ''), message: '' });
                             setMessageMsg('');
@@ -7759,6 +7813,170 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {adminTab === 'settings' && (
+              <div style={{ padding: isMobile ? '0' : '0 8px' }}>
+                <h2 style={{ color: '#0a2240', fontWeight: '900', fontSize: '1.1rem', margin: '0 0 20px 0' }}>
+                  App Settings
+                </h2>
+
+                {settingsMsg && (
+                  <div style={{ backgroundColor: settingsMsg.startsWith('Error') ? '#fff7ed' : '#f0fff4', border: '1px solid ' + (settingsMsg.startsWith('Error') ? '#fed7aa' : '#bbf7d0'), borderRadius: '10px', padding: '10px 14px', marginBottom: '16px' }}>
+                    <p style={{ margin: 0, color: settingsMsg.startsWith('Error') ? '#c2410c' : '#166534', fontSize: '0.82rem', fontWeight: '600' }}>{settingsMsg}</p>
+                  </div>
+                )}
+
+                {/* Ads Toggle */}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Advertisement Display</h3>
+                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem' }}>
+                        {adsEnabled ? 'Ads are currently showing on the app' : 'Ads are currently hidden from the app'}
+                      </p>
+                    </div>
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/admin/toggle-ads', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        setAdsEnabled(data.ads_enabled);
+                        setSettingsMsg('Ads ' + (data.ads_enabled ? 'enabled' : 'disabled') + ' successfully');
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{
+                      width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer',
+                      backgroundColor: adsEnabled ? '#27ae60' : '#e2e8f0',
+                      position: 'relative', transition: 'background-color 0.2s', flexShrink: 0,
+                    }}>
+                      <div style={{
+                        width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fff',
+                        position: 'absolute', top: '3px', transition: 'left 0.2s',
+                        left: adsEnabled ? '31px' : '3px', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                      }} />
+                    </button>
+                  </div>
+                  <div style={{ marginTop: '12px', padding: '10px 12px', backgroundColor: adsEnabled ? '#f0fff4' : '#f8fafc', borderRadius: '8px', border: '1px solid ' + (adsEnabled ? '#bbf7d0' : '#e2e8f0') }}>
+                    <p style={{ margin: 0, fontSize: '0.74rem', color: adsEnabled ? '#166534' : '#94a3b8', fontWeight: '600' }}>
+                      {adsEnabled ? '● Ads are LIVE on the platform' : '○ Ads are OFF — toggle to show ads to users'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Bank Details */}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                  <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>GetHome Bank Account</h3>
+                  <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>Customers make property deposits to this account. This shows in the fee breakdown modal.</p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Bank Name</label>
+                      <select value={bankDetails.bank_code || ''} onChange={function(e) {
+                        var selected = NIGERIAN_BANKS.find(function(b) { return b.code === e.target.value; });
+                        setBankDetails(function(prev) { return Object.assign({}, prev, { bank_code: e.target.value, bank_name: selected ? selected.name : '' }); });
+                      }} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                        <option value=''>Select bank...</option>
+                        {NIGERIAN_BANKS.map(function(bank) {
+                          return <option key={bank.code} value={bank.code}>{bank.name}</option>;
+                        })}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Number</label>
+                      <input type='text' maxLength={10} placeholder='0123456789'
+                        value={bankDetails.account_number || ''}
+                        onChange={function(e) { setBankDetails(function(prev) { return Object.assign({}, prev, { account_number: e.target.value.replace(/\D/g, '') }); }); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ gridColumn: isMobile ? '1' : '1 / -1' }}>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Account Name</label>
+                      <input type='text' placeholder='GETHOME REAL ESTATE LTD'
+                        value={bankDetails.account_name || ''}
+                        onChange={function(e) { setBankDetails(function(prev) { return Object.assign({}, prev, { account_name: e.target.value.toUpperCase() }); }); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+
+                  <button onClick={async function() {
+                    if (!bankDetails.bank_name || !bankDetails.account_number || !bankDetails.account_name) {
+                      setSettingsMsg('Error: Please fill all bank details');
+                      return;
+                    }
+                    setSettingsSaving(true);
+                    try {
+                      var token = localStorage.getItem('gh_token');
+                      var res = await fetch(API_URL + '/api/admin/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        body: JSON.stringify({ setting_key: 'bank_details', setting_json: bankDetails }),
+                      });
+                      var data = await res.json();
+                      if (!res.ok) throw new Error(data.error || 'Failed');
+                      setSettingsMsg('Bank details saved successfully');
+                      setTimeout(function() { setSettingsMsg(''); }, 3000);
+                    } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    finally { setSettingsSaving(false); }
+                  }} disabled={settingsSaving}
+                    style={{ marginTop: '14px', width: '100%', padding: '11px', backgroundColor: settingsSaving ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
+                    {settingsSaving ? 'Saving...' : 'Save Bank Details'}
+                  </button>
+                </div>
+
+                {/* Property Loan Link */}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                  <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Property Loan Link</h3>
+                  <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>This link appears in the fee breakdown as Apply for Property Loan. Currently points to Credit Direct with your affiliate code.</p>
+                  <input type='url' placeholder='https://creditdirect.ng/?ref=09077246534'
+                    value={loanLink}
+                    onChange={function(e) { setLoanLink(e.target.value); }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box', marginBottom: '10px' }} />
+                  <button onClick={async function() {
+                    try {
+                      var token = localStorage.getItem('gh_token');
+                      var res = await fetch(API_URL + '/api/admin/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        body: JSON.stringify({ setting_key: 'loan_link', setting_value: loanLink }),
+                      });
+                      if (!res.ok) throw new Error('Failed');
+                      setSettingsMsg('Loan link updated successfully');
+                      setTimeout(function() { setSettingsMsg(''); }, 3000);
+                    } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                  }} style={{ width: '100%', padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                    Save Loan Link
+                  </button>
+                </div>
+
+                {/* Payment WhatsApp Number */}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                  <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Payment Notification WhatsApp</h3>
+                  <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>GetHome receives a WhatsApp message at this number whenever a customer makes a property payment.</p>
+                  <input type='tel' placeholder='+234 913 064 9368'
+                    value={paymentWhatsapp}
+                    onChange={function(e) { setPaymentWhatsapp(e.target.value.replace(/\D/g, '')); }}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box', marginBottom: '10px' }} />
+                  <button onClick={async function() {
+                    try {
+                      var token = localStorage.getItem('gh_token');
+                      var res = await fetch(API_URL + '/api/admin/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        body: JSON.stringify({ setting_key: 'payment_whatsapp', setting_value: paymentWhatsapp }),
+                      });
+                      if (!res.ok) throw new Error('Failed');
+                      setSettingsMsg('Payment WhatsApp number updated');
+                      setTimeout(function() { setSettingsMsg(''); }, 3000);
+                    } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                  }} style={{ width: '100%', padding: '10px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                    Save WhatsApp Number
+                  </button>
+                </div>
               </div>
             )}
 
@@ -12500,11 +12718,21 @@ function AppContent() {
   ];
   var footerLoanUrl = isGhana ? LOAN_PARTNER_URL_GH : LOAN_PARTNER_URL;
   usePaystackSDK();
+  // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
+  const [globalSettings, setGlobalSettings]     = useState({});
+  const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
+  const fetchGlobalSettings = async function() {
+    try {
+      var res = await fetch(API_URL + '/api/settings');
+      var data = await res.json();
+      if (res.ok) setGlobalSettings(data);
+    } catch(e) { console.error('Global settings fetch error:', e.message); }
+  };
   useEffect(function() {
-    if (!ENABLE_ADS) return;
+    if (!ENABLE_ADS || !adsEnabled) return;
     async function initAdMob() { try { console.log('AdMob ready'); } catch(e) {} }
     initAdMob();
-  }, []);
+  }, [adsEnabled]);
   useEffect(function() {
     if (document.getElementById('gh-fonts')) return;
     var link = document.createElement('link');
@@ -12519,6 +12747,8 @@ function AppContent() {
     if (window.__hideSplash) window.__hideSplash();
     // Wake up Render backend
     fetch(`${API_URL}/`).catch(function(){});
+    // Load app-wide settings (ads toggle, GetHome bank details, loan link, etc.)
+    fetchGlobalSettings();
   }, []);
   const [user, setUser]                         = useState(null);
   const [authChecked, setAuthChecked]           = useState(false);
@@ -13116,7 +13346,7 @@ function AppContent() {
         .gh-footer-contact:hover { color: rgba(255,255,255,0.9) !important; }
         .gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
       `}</style>
-      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} />}
+      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} globalSettings={globalSettings} />}
       {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={footerModal === 'about' ? undefined : function(){ setFooterModal(null); }} />}
       {showRatingModal && ratingGhaId && (
         <RateGHAModal
