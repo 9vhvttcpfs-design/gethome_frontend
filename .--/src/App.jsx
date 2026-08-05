@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { Home, Search, Building2, Star, MapPin, Phone, Mail, User, Users, CheckCircle, AlertCircle, FileText, MessageSquare, Bell, Edit, Lock, BarChart2, Award, Target, Zap, Crown, RefreshCw, Send, Link, Hotel, Layers, X, Phone as PhoneIcon } from 'lucide-react';
 import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
 import { formatLocalPrice } from './utils/pricing';
@@ -31,6 +32,46 @@ const AGENT_TIERS = {
   free:    { listingLimit: 3,   label: 'Free',          price: 0     },
   premium: { listingLimit: 15,  label: 'Premium Agent', price: 8500  },
   agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
+};
+// Single source of truth for "what plan is this agent on".
+// Priority: agentProfile (fresh DB read) → localStorage cache → user object
+// (often the Supabase Auth user, whose metadata can be stale or null).
+var getAgentPlan = function(userObj, agentProfileObj) {
+  var tier = agentProfileObj?.subscription_tier ||
+    (function() { try { return JSON.parse(localStorage.getItem('gh_user') || '{}').subscription_tier; } catch(e) { return null; } })() ||
+    userObj?.subscription_tier ||
+    userObj?.user_metadata?.subscription_tier ||
+    'free';
+
+  var status = agentProfileObj?.subscription_status ||
+    userObj?.subscription_status || 'inactive';
+
+  var endDate = agentProfileObj?.subscription_end ||
+    agentProfileObj?.subscription_expires_at ||
+    userObj?.subscription_end || null;
+
+  var now = new Date();
+  var isExpired = !!(endDate && new Date(endDate) < now);
+  var isActive = (status === 'active' || tier === 'premium' || tier === 'agency') && !isExpired;
+
+  var planNames = { free: 'Free Plan', premium: 'Premium Plan', agency: 'Agency Plan' };
+  var planLimits = { free: 3, premium: 15, agency: 100 };
+  var planColors = {
+    free: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
+    premium: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' },
+    agency: { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' },
+  };
+
+  return {
+    tier: tier,
+    name: planNames[tier] || 'Free Plan',
+    status: status,
+    isActive: isActive,
+    isExpired: isExpired,
+    endDate: endDate ? new Date(endDate) : null,
+    limit: planLimits[tier] || 3,
+    colors: planColors[tier] || planColors.free,
+  };
 };
 var PROPERTY_TYPES = [
   { value: '', label: 'All Property Types', icon: '🏠' },
@@ -214,7 +255,7 @@ function LoadingScreen() {
 function ErrorScreen({ onRetry }) {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
-      <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem' }}>⚠</div>
+      <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertCircle size={24} color="#ef4444" /></div>
       <h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Unable to Connect</h2>
       <p style={{ color: '#64748b', textAlign: 'center', margin: 0, maxWidth: '300px', fontSize: '0.88rem', lineHeight: '1.6' }}>Could not load listings. Check your connection and try again.</p>
       <button onClick={onRetry} style={{ padding: '12px 32px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 16px rgba(34,197,94,0.28)' }}>Retry</button>
@@ -331,7 +372,7 @@ function RateGHAModal({ ghaId, ghaName, inspectionId, customerEmail, onClose, on
       <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '440px', width: '100%', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
         {submitted ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>⭐</div>
+            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><Star size={32} color="#f59e0b" fill="#f59e0b" /></div>
             <h3 style={{ color: '#166534', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 8px 0' }}>Thank You!</h3>
             <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 20px 0' }}>Your rating has been submitted. This helps us improve our inspection service.</p>
             <button onClick={onClose} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px 28px', fontWeight: '700', cursor: 'pointer' }}>Done</button>
@@ -833,7 +874,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
           </>
         ) : (
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <p style={{ fontSize: '1.4rem', margin: '0 0 10px 0' }}>{'✅'}</p>
+            <p style={{ margin: '0 0 10px 0', display: 'flex', justifyContent: 'center' }}><CheckCircle size={22} color="#27ae60" /></p>
             <p style={{ color: '#166534', fontWeight: '700', fontSize: '0.92rem', margin: '0 0 6px 0' }}>Check Your Email</p>
             <p style={{ color: '#64748b', fontSize: '0.82rem', margin: 0 }}>We sent a password reset link to {resetEmail}. Click the link to set a new password.</p>
           </div>
@@ -849,7 +890,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
   }
   if (emailSent) return (
     <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '16px', padding: '28px 24px', textAlign: 'center' }}>
-      <div style={{ fontSize: '2.8rem', marginBottom: '10px' }}>✅</div>
+      <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><CheckCircle size={32} color="#27ae60" /></div>
       <h3 style={{ color: '#166534', fontSize: '1rem', fontWeight: '800', margin: '0 0 10px 0' }}>
         {mode === 'signup' ? 'Registration Submitted!' : 'Check Your Email!'}
       </h3>
@@ -870,7 +911,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
   if (showEmailVerification) {
     return (
       <div style={{ textAlign: 'center', padding: '20px 0' }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📧</div>
+        <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><Mail size={32} color="#1e40af" /></div>
         <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 8px 0' }}>Verify Your Email</h3>
         <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 16px 0', lineHeight: 1.6 }}>
           We sent a verification link to <strong>{verificationEmail}</strong>. Please check your inbox and click the link to activate your account before logging in.
@@ -982,13 +1023,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
 
       {/* Mode toggle */}
       <div style={{ display: 'flex', gap: '4px', marginBottom: '18px', backgroundColor: '#f0f4f8', borderRadius: '10px', padding: '3px' }}>
-        {[['login', '', 'Login'], ['customer', '🔍', 'Create Account'], ['signup', '🏠', 'Create Agent Account']].map(function([m, icon, lbl]) {
+        {[['login', null, 'Login'], ['customer', <Search size={14} />, 'Create Account'], ['signup', <Home size={14} />, 'Create Agent Account']].map(function([m, icon, lbl]) {
           var active = mode === m;
           return (
             <button key={m} type="button"
               onClick={function(){ setMode(m); setError(''); setShowResendVerification(false); setTermsAccepted(false); setConfirmPassword(''); }}
-              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#374151', fontWeight: active ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>
-              {icon ? icon + ' ' : ''}{lbl}
+              style={{ flex: 1, padding: '8px', borderRadius: '8px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#374151', fontWeight: active ? '700' : '500', fontSize: '0.82rem', cursor: 'pointer', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+              {icon}{lbl}
             </button>
           );
         })}
@@ -1032,14 +1073,14 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
               <button
                 type='button'
                 onClick={function() { setAgentType('agent'); setNinVerified(false); setNin(''); setCacVerified(false); setCacVerifiedName(''); setCacNumber(''); setCacError(''); setError(''); }}
-                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agent' ? '#0a2240' : 'transparent', color: agentType === 'agent' ? '#fff' : '#64748b', transition: 'all 0.2s' }}>
-                👤 As Agent
+                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agent' ? '#0a2240' : 'transparent', color: agentType === 'agent' ? '#fff' : '#64748b', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <User size={14} /> As Agent
               </button>
               <button
                 type='button'
                 onClick={function() { setAgentType('agency'); setNinVerified(false); setNin(''); setCacVerified(false); setCacVerifiedName(''); setCacNumber(''); setCacError(''); setError(''); }}
-                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agency' ? '#0a2240' : 'transparent', color: agentType === 'agency' ? '#fff' : '#64748b', transition: 'all 0.2s' }}>
-                🏢 As Agency
+                style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', backgroundColor: agentType === 'agency' ? '#0a2240' : 'transparent', color: agentType === 'agency' ? '#fff' : '#64748b', transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <Building2 size={14} /> As Agency
               </button>
             </div>
 
@@ -1096,7 +1137,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
                     {config.identityLabel} *
-                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Verified</span>}
                   </label>
                   <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
                     <input
@@ -1165,14 +1206,14 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                         fontSize: '0.76rem',
                         cursor: ninVerifying || ninVerified || !nin.trim() ? 'not-allowed' : 'pointer',
                       }}>
-                      {ninVerified ? '✓ Done' : ninVerifying ? '...' : 'Verify'}
+                      {ninVerified ? <><CheckCircle size={14} style={{ verticalAlign: '-2px' }} /> Done</> : ninVerifying ? '...' : 'Verify'}
                     </button>
                   </div>
 
                   {ninVerified && ninVerifiedName && (
                     <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                       <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
-                        ✓ Identity confirmed: {ninVerifiedName}
+                        <CheckCircle size={12} style={{ verticalAlign: '-1px' }} /> Identity confirmed: {ninVerifiedName}
                       </p>
                     </div>
                   )}
@@ -1187,7 +1228,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                 <div>
                   <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
                     NIN (National Identity Number) *
-                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                    {ninVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Verified</span>}
                   </label>
                   <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
                     <input
@@ -1261,14 +1302,14 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                         fontSize: '0.76rem',
                         cursor: ninVerified || nin.length !== 11 ? 'not-allowed' : 'pointer',
                       }}>
-                      {ninVerified ? '✓ Done' : ninVerifying ? '...' : 'Verify'}
+                      {ninVerified ? <><CheckCircle size={14} style={{ verticalAlign: '-2px' }} /> Done</> : ninVerifying ? '...' : 'Verify'}
                     </button>
                   </div>
 
                   {ninVerified && ninVerifiedName && (
                     <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                       <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
-                        ✓ Identity confirmed: {ninVerifiedName}
+                        <CheckCircle size={12} style={{ verticalAlign: '-1px' }} /> Identity confirmed: {ninVerifiedName}
                       </p>
                     </div>
                   )}
@@ -1375,8 +1416,8 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                   value={cacNumber} onChange={function(e) { setCacNumber(e.target.value); setError(''); }}
                   style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
                 <div style={{ marginTop: '8px', padding: '10px 12px', backgroundColor: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600' }}>
-                    ⚠ ORC numbers cannot be automatically verified. Your registration will be manually reviewed by our team within 24-48 hours before approval.
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+                    <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} /> ORC numbers cannot be automatically verified. Your registration will be manually reviewed by our team within 24-48 hours before approval.
                   </p>
                 </div>
               </div>
@@ -1384,7 +1425,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
               <div>
                 <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
                   CAC Registration Number *
-                  {cacVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Verified</span>}
+                  {cacVerified && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Verified</span>}
                 </label>
                 <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'stretch' }}>
                   <input
@@ -1447,14 +1488,14 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
                       cursor: cacVerified || !cacNumber.trim() ? 'not-allowed' : 'pointer',
                       whiteSpace: 'nowrap',
                     }}>
-                    {cacVerified ? '✓ Done' : cacVerifying ? '...' : 'Verify'}
+                    {cacVerified ? <><CheckCircle size={14} style={{ verticalAlign: '-2px' }} /> Done</> : cacVerifying ? '...' : 'Verify'}
                   </button>
                 </div>
 
                 {cacVerified && cacVerifiedName && (
                   <div style={{ marginTop: '6px', padding: '8px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
                     <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '600' }}>
-                      ✓ Business confirmed: {cacVerifiedName}
+                      <CheckCircle size={12} style={{ verticalAlign: '-1px' }} /> Business confirmed: {cacVerifiedName}
                     </p>
                   </div>
                 )}
@@ -1603,7 +1644,7 @@ function PropertyCard({ house, onSelect }) {
             gap: '4px',
             backdropFilter: 'blur(4px)',
           }}>
-            <span style={{ fontSize: '0.78rem' }}>👑</span>
+            <Crown size={12} color="#fff" />
             <span style={{ color: '#fff', fontSize: '0.64rem', fontWeight: '800', letterSpacing: '0.04em' }}>VERIFIED</span>
           </div>
         )}
@@ -1866,8 +1907,8 @@ function PricingModal({ property, onClose, user, onUserChange }) {
                   <img src={property.agent_photo_url} alt='Agent'
                     style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #27ae60', flexShrink: 0 }} />
                 ) : (
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>
-                    {property.agent_type === 'agency' ? '🏢' : '👤'}
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {property.agent_type === 'agency' ? <Building2 size={18} color="#64748b" /> : <User size={18} color="#64748b" />}
                   </div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1876,13 +1917,13 @@ function PricingModal({ property, onClose, user, onUserChange }) {
                     <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
                       {property.agent_display_name || 'Verified Agent'}
                     </p>
-                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800' }}>
-                      ✓ Verified
+                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                      <CheckCircle size={10} /> Verified
                     </span>
                   </div>
                   {property.agent_phone && (
-                    <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#64748b' }}>
-                      📞 {property.agent_phone}
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Phone size={12} /> {property.agent_phone}
                     </p>
                   )}
                 </div>
@@ -2223,7 +2264,7 @@ function RenewalBanner({ user, agentTier, isMobile }) {
   if (isExpired) {
     return (
       <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: '14px', padding: isMobile ? '14px 16px' : '16px 20px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>⚠️</div>
+        <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><AlertCircle size={18} color="#ef4444" /></div>
         <div style={{ flex: 1, minWidth: '180px' }}>
           <p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#991b1b', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Your {tier.label} subscription has expired</p>
           <p style={{ margin: 0, color: '#b91c1c', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif", lineHeight: '1.5' }}>Renew now to continue listing properties and accessing premium features.</p>
@@ -2236,7 +2277,7 @@ function RenewalBanner({ user, agentTier, isMobile }) {
   }
   return (
     <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: '14px', padding: isMobile ? '14px 16px' : '16px 20px', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-      <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>🔔</div>
+      <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Bell size={18} color="#f59e0b" /></div>
       <div style={{ flex: 1, minWidth: '180px' }}>
         <p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Subscription renews in {daysLeft} day{daysLeft === 1 ? '' : 's'}</p>
         <p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif", lineHeight: '1.5' }}>Renew your {tier.label} plan early to avoid any interruption to your listings.</p>
@@ -2277,12 +2318,30 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       .catch(function() {});
   }, [user?.id]);
   const [agentProfile, setAgentProfile] = useState({ phone: user?.phone || '', profile_photo_url: user?.profile_photo_url || null, city: user?.city || '' });
-  useEffect(function() {
+  var fetchAgentProfile = function() {
     if (!user?.id) return;
-    supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single()
-      .then(function({ data }) { if (data) setAgentProfile(function(prev){ return Object.assign({}, prev, data); }); })
+    // Profile basics (phone/photo/city) live on `agents`; subscription fields
+    // live on `profiles` — confirmed via Supabase SQL editor that `agents`
+    // has none of the subscription_* columns. Fetched in parallel and merged.
+    return Promise.all([
+      supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end').eq('id', user.id).single(),
+    ])
+      .then(function(results) {
+        var agentData = results[0] && results[0].data;
+        var subData = results[1] && results[1].data;
+        if (!agentData && !subData) return;
+        setAgentProfile(function(prev) {
+          return Object.assign({}, prev, agentData || {}, {
+            subscription_tier: (subData && subData.subscription_tier) || prev?.subscription_tier || 'free',
+            subscription_status: (subData && subData.subscription_status) || prev?.subscription_status || 'inactive',
+            subscription_end: (subData && subData.subscription_end) || prev?.subscription_end || null,
+          });
+        });
+      })
       .catch(function() {});
-  }, [user?.id]);
+  };
+  useEffect(function() { fetchAgentProfile(); }, [user?.id]);
   const [profileState, setProfileState]         = useState('');
   const [profileCity, setProfileCity]           = useState('');
   const [profileCustomCity, setProfileCustomCity] = useState('');
@@ -2332,12 +2391,15 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
     const savedTier = localStorage.getItem(`gh_tier_${user.id}`);
     if (savedTier) setAgentTier(savedTier);
   }, [user?.id]);
-  // Listen for subscription status changes in real time
+  // Listen for subscription status changes in real time.
+  // subscription_tier / subscription_status / subscription_end all live on
+  // `profiles` — confirmed via the Supabase SQL editor that `agents` has
+  // none of these columns (queries against `agents` for them return null).
   useEffect(function() {
     if (!user?.id) return;
     // Initial fetch
     supabase
-      .from('agents')
+      .from('profiles')
       .select('subscription_tier, subscription_status, subscription_end')
       .eq('id', user.id)
       .single()
@@ -2352,13 +2414,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         }
       })
       .catch(function() {});
-    // Real-time listener — fires whenever admin or cron updates the agent row
+    // Real-time listener — fires whenever admin or cron updates the profile row
     var channel = supabase
       .channel('agent-sub-' + user.id)
       .on('postgres_changes', {
         event: 'UPDATE',
         schema: 'public',
-        table: 'agents',
+        table: 'profiles',
         filter: 'id=eq.' + user.id,
       }, function(payload) {
         if (!payload.new) return;
@@ -2557,17 +2619,21 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
   const myListings = (allProperties || []).filter(p =>
     isAdmin ? true : p.created_by === user?.id || p.agent_id === user?.id
   );
-  // Plan status — derived from the realtime-synced subscription state above
-  var subTier = agentTier || 'free';
-  var subEnd = subscriptionExpiresAt ? new Date(subscriptionExpiresAt) : null;
-  var isExpired = subscriptionStatus === 'expired' || (!!subEnd && subEnd < new Date());
+  // Plan status — single source of truth via getAgentPlan(). `user` carries
+  // the freshest data (kept current by AppContent's fetchAgentSubscription);
+  // the locally realtime-synced agentTier/subscriptionStatus/subscriptionExpiresAt
+  // state above is passed as the fallback so the card still renders correctly
+  // the instant this component mounts, before the parent's fetch resolves.
+  var plan = getAgentPlan(user, {
+    subscription_tier: agentTier,
+    subscription_status: subscriptionStatus,
+    subscription_end: subscriptionExpiresAt,
+  });
+  var subTier = plan.tier;
+  var subEnd = plan.endDate;
+  var isExpired = plan.isExpired || subscriptionStatus === 'expired';
   var daysLeft = subEnd && !isExpired ? Math.ceil((subEnd - new Date()) / (1000 * 60 * 60 * 24)) : 0;
-  var planColors = {
-    free: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
-    premium: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' },
-    agency: { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' },
-  };
-  var planColor = planColors[subTier] || planColors.free;
+  var planColor = plan.colors;
   var goToUpgrade = function() {
     setPortalTab('listings');
     setTimeout(function() {
@@ -2596,7 +2662,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           maxWidth: '90vw',
           animation: 'toastSlideDown 0.3s ease',
         }}>
-          <span style={{ fontSize: '1.6rem' }}>✅</span>
+          <CheckCircle size={26} color="#fff" />
           <div style={{ flex: 1 }}>
             <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.95rem' }}>
               Listing Published Successfully!
@@ -2645,11 +2711,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         <div>
           <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', fontWeight: '600', color: planColor.color, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Plan</p>
           <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: planColor.color, fontSize: '1.1rem' }}>
-            {subTier === 'free' ? 'Free Plan' : subTier === 'premium' ? 'Premium Plan' : 'Agency Plan'}
+            {plan.name}
           </p>
           {subTier !== 'free' && subEnd && (
-            <p style={{ margin: 0, fontSize: '0.74rem', color: planColor.color, opacity: 0.8 }}>
-              {isExpired ? '⚠ Expired on ' + subEnd.toLocaleDateString() : '✓ Active · ' + daysLeft + ' days remaining · Expires ' + subEnd.toLocaleDateString()}
+            <p style={{ margin: 0, fontSize: '0.74rem', color: planColor.color, opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {isExpired
+                ? <><AlertCircle size={12} color="#f59e0b" /> Expired on {subEnd.toLocaleDateString()}</>
+                : <><CheckCircle size={12} color="#27ae60" /> Active · {daysLeft} days remaining · Expires {subEnd.toLocaleDateString()}</>}
             </p>
           )}
           {subTier === 'free' && (
@@ -2663,7 +2731,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           {(subTier === 'free' || isExpired) && (
             <button onClick={goToUpgrade}
               style={{ backgroundColor: isExpired ? '#ef4444' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '8px 18px', fontWeight: '800', fontSize: '0.82rem', cursor: 'pointer' }}>
-              {isExpired ? '🔄 Renew Plan' : '⬆ Upgrade Plan'}
+              {isExpired ? <><RefreshCw size={13} style={{ verticalAlign: '-2px' }} /> Renew Plan</> : '⬆ Upgrade Plan'}
             </button>
           )}
         </div>
@@ -2689,7 +2757,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
               {label}
               {t === 'listings' && (
                 <span style={{ backgroundColor: active ? 'rgba(255,255,255,0.18)' : planColor.bg, color: active ? '#fff' : planColor.color, border: '1px solid ' + (active ? 'rgba(255,255,255,0.3)' : planColor.border), borderRadius: '20px', padding: '1px 8px', fontSize: '0.62rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                  {subTier === 'free' ? 'Free' : subTier === 'premium' ? 'Premium' : 'Agency'}
+                  [{plan.tier.toUpperCase()}]
                 </span>
               )}
             </button>
@@ -2709,7 +2777,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
               Phone Number
-              {agentProfile?.phone && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+              {agentProfile?.phone && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Added</span>}
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <span style={{ flexShrink: 0, padding: '11px 10px', backgroundColor: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontSize: '0.84rem', color: '#374151', fontWeight: '600' }}>+234</span>
@@ -2728,14 +2796,14 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           <div style={{ marginBottom: '18px' }}>
             <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
               Profile Photo
-              {agentProfile?.profile_photo_url && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+              {agentProfile?.profile_photo_url && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Added</span>}
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               {agentProfile?.profile_photo_url ? (
                 <img src={agentProfile.profile_photo_url} alt='Profile'
                   style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #27ae60' }} />
               ) : (
-                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', border: '2px dashed #e2e8f0' }}>👤</div>
+                <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #e2e8f0' }}><User size={26} color="#94a3b8" /></div>
               )}
               <div>
                 <input type='file' accept='image/*' id='profile-photo-input' style={{ display: 'none' }}
@@ -2774,7 +2842,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
           <div style={{ marginBottom: '18px' }}>
             <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
               City
-              {agentProfile?.city && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem' }}>✓ Added</span>}
+              {agentProfile?.city && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={12} /> Added</span>}
             </label>
             <select
               value={profileState}
@@ -2903,7 +2971,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
       subscriptionStatus === 'expired' ? (
         /* ── Expired subscription gate ── */
         <div style={{ ...cardStyle, padding: isMobile ? '32px 20px' : '56px 48px', textAlign: 'center', maxWidth: '560px', margin: '0 auto' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', margin: '0 auto 24px' }}>🔒</div>
+          <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}><Lock size={28} color="#ef4444" /></div>
           <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: '800', margin: '0 0 14px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px', lineHeight: '1.25' }}>
             Your subscription has expired
           </h2>
@@ -3379,6 +3447,31 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
         </div>
         {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
         </form>
+        {plan.tier !== 'agency' && (
+          <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', marginTop: '16px', border: '1px solid #e2e8f0' }}>
+            <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+              Current Plan: <span style={{ color: planColor.color }}>{plan.name}</span>
+              <span style={{ marginLeft: '8px', fontSize: '0.72rem', color: '#94a3b8' }}>({plan.limit} listing limit)</span>
+            </p>
+            {plan.tier === 'free' && (
+              <p style={{ margin: '4px 0 0 0', fontSize: '0.76rem', color: '#64748b' }}>
+                Upgrade to Premium for up to 15 listings or Agency for up to 100 listings.
+                <span onClick={goToUpgrade}
+                  style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', marginLeft: '4px' }}>
+                  Upgrade now →
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+        {plan.tier !== 'free' && plan.isActive && (
+          <div style={{ backgroundColor: '#f0fff4', borderRadius: '12px', padding: '10px 14px', marginTop: '12px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CheckCircle size={16} color="#27ae60" />
+            <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534', fontWeight: '600' }}>
+              {plan.name} · {plan.limit} listings available{plan.endDate ? ' · Expires ' + plan.endDate.toLocaleDateString() : ''}
+            </p>
+          </div>
+        )}
         <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} />
       </div>
       {myListings.length > 0 ? (
@@ -4693,19 +4786,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     {agent.agent_type === 'agency' ? (agent.agency_name || agent.full_name || 'Name not provided') : (agent.full_name || 'Name not provided')}
                                   </p>
                                   {agent.agent_type === 'agency' ? (
-                                    <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
-                                      🏢 AGENCY
+                                    <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      <Building2 size={11} /> AGENCY
                                     </span>
                                   ) : (
-                                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
-                                      👤 AGENT
+                                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                      <User size={11} /> AGENT
                                     </span>
                                   )}
                                 </div>
                                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{agent.email || 'No email'}</p>
                                 {!isPending && (
-                                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem' }}>
-                                    {agent.city ? '📍 ' + agent.city + ' · ' : ''}{isRejectedTab ? 'Rejected' : 'Approved'}: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
+                                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                                    {agent.city && <><MapPin size={11} /> {agent.city} · </>}{isRejectedTab ? 'Rejected' : 'Approved'}: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
                                   </p>
                                 )}
                               </div>
@@ -5254,7 +5347,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             {/* Confirmed banner */}
                             {status === 'confirmed' && (
                               <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <span style={{ fontSize: '1.1rem' }}>✅</span>
+                                <CheckCircle size={18} color="#27ae60" />
                                 <div>
                                   <p style={{ margin: 0, fontWeight: '700', color: '#166534', fontSize: '0.80rem' }}>Confirmed by SA</p>
                                   {insp.sa_confirmed_at && <p style={{ margin: '1px 0 0 0', fontSize: '0.68rem', color: '#4ade80' }}>{new Date(insp.sa_confirmed_at).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
@@ -5316,8 +5409,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       setActionMsg('Inspection cancelled successfully');
                                       fetchAdminInspections();
                                     } catch(err) { setActionMsg('Error: ' + err.message); }
-                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    ✕ Cancel
+                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    <X size={11} /> Cancel
                                   </button>
 
                                   <button onClick={async function() {
@@ -5626,7 +5719,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 onError={function(e) { e.target.style.display = 'none'; }}
                               />
                             ) : (
-                              <div style={{ width: '72px', height: '72px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem', flexShrink: 0 }}>🏠</div>
+                              <div style={{ width: '72px', height: '72px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Home size={24} color="#94a3b8" /></div>
                             )}
                             <div style={{ flex: 1 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
@@ -5635,7 +5728,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>{prop.title}</span>
                                     {prop.property_type && <span style={{ backgroundColor: '#f1f5f9', color: '#64748b', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '600' }}>{prop.property_type.toUpperCase()}</span>}
                                   </div>
-                                  <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem' }}>📍 {prop.location}</p>
+                                  <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}><MapPin size={12} /> {prop.location}</p>
                                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Agent: {prop.agent_name || '—'}</span>
                                     {prop.sa_code && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Set by: {prop.sa_code} — {prop.sa_name}</span>}
@@ -5651,7 +5744,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     setSettingAdminFee(prop.id);
                                     setAdminFeeInput(prop.inspection_fee > 0 ? String(prop.inspection_fee) : '');
                                   }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    {prop.inspection_fee > 0 ? '✏ Adjust Fee' : '+ Set Fee'}
+                                    {prop.inspection_fee > 0 ? <><Edit size={11} style={{ verticalAlign: '-1px' }} /> Adjust Fee</> : '+ Set Fee'}
                                   </button>
                                 </div>
                               </div>
@@ -6767,8 +6860,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               return (
                 <div>
                   {copyMsg && (
-                    <div style={{ position: 'fixed', bottom: '24px', right: '24px', backgroundColor: '#0a2240', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', fontSize: '0.84rem', zIndex: 99999, boxShadow: '0 4px 20px rgba(10,34,64,0.3)' }}>
-                      ✓ {copyMsg}
+                    <div style={{ position: 'fixed', bottom: '24px', right: '24px', backgroundColor: '#0a2240', color: '#fff', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', fontSize: '0.84rem', zIndex: 99999, boxShadow: '0 4px 20px rgba(10,34,64,0.3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle size={14} /> {copyMsg}
                     </div>
                   )}
 
@@ -6800,7 +6893,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Grand Total</p>
                     </div>
                     <div style={{ backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', borderLeft: '4px solid #f59e0b', padding: '14px 16px', flex: '1 1 180px' }}>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}>⚠️ {totals.unpaid_count || 0}</p>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem', fontWeight: '900', color: '#b45309', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={18} /> {totals.unpaid_count || 0}</p>
                       <p style={{ margin: 0, fontSize: '0.66rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Unpaid Staff</p>
                     </div>
                   </div>
@@ -6896,7 +6989,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   color: isPaid ? '#166534' : payment.payment_status === 'processing' ? '#1e40af' : '#c2410c',
                                   border: '1px solid ' + (isPaid ? '#bbf7d0' : payment.payment_status === 'processing' ? '#bfdbfe' : '#fed7aa'),
                                 }}>
-                                  {isPaid ? '✓ PAID' : payment.payment_status === 'processing' ? '⟳ PROCESSING' : '● UNPAID'}
+                                  {isPaid ? <><CheckCircle size={11} style={{ verticalAlign: '-1px' }} /> PAID</> : payment.payment_status === 'processing' ? '⟳ PROCESSING' : '● UNPAID'}
                                 </span>
                               </div>
                             </div>
@@ -6950,13 +7043,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   var allDetails = 'Bank: ' + payment.bank_name + '\nAccount Number: ' + payment.account_number + '\nAccount Name: ' + payment.account_name + '\nAmount: NGN ' + parseFloat(payment.total_payment).toLocaleString() + '\nRef: ' + staffCode + ' ' + staffPaymentsMonth;
                                   copyToClipboard(allDetails, 'All payment details');
                                 }} style={{ marginTop: '10px', width: '100%', padding: '8px', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer', color: '#374151' }}>
-                                  📋 Copy All Payment Details
+                                  <FileText size={13} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Copy All Payment Details
                                 </button>
                               </div>
                             ) : (
                               <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #fed7aa' }}>
-                                <p style={{ margin: 0, fontSize: '0.78rem', color: '#c2410c', fontWeight: '600' }}>
-                                  ⚠ No bank account added — {staffName} must add their bank details in their profile before payment
+                                <p style={{ margin: 0, fontSize: '0.78rem', color: '#c2410c', fontWeight: '600', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+                                  <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} /> No bank account added — {staffName} must add their bank details in their profile before payment
                                 </p>
                               </div>
                             )}
@@ -6973,7 +7066,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     color: '#fff', fontWeight: '700', fontSize: '0.84rem',
                                     cursor: payment.account_number ? 'pointer' : 'not-allowed',
                                   }}>
-                                  ✓ Mark as Paid
+                                  <CheckCircle size={14} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Mark as Paid
                                 </button>
                               </div>
                             )}
@@ -7035,7 +7128,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               setConfirmPayModal(null);
                             }
                           }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
-                            ✓ Confirm Payment Made
+                            <CheckCircle size={14} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Confirm Payment Made
                           </button>
                         </div>
                       </div>
@@ -7224,12 +7317,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   {/* Prominent Recalculate Scores banner */}
                   <div style={{ background: 'linear-gradient(135deg, #0a2240, #133a67)', borderRadius: '14px', padding: isMobile ? '16px' : '20px 24px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 6px 20px rgba(10,34,64,0.25)' }}>
                     <div>
-                      <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '800', fontSize: '0.98rem' }}>⚡ Scores may be out of date</p>
+                      <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '800', fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '5px' }}><Zap size={16} /> Scores may be out of date</p>
                       <p style={{ margin: 0, color: 'rgba(255,255,255,0.75)', fontSize: '0.80rem' }}>Recalculate to refresh KPI scores from the latest inspection, rating and agent activity data.</p>
                     </div>
                     <button onClick={handleAutoCalculate} disabled={calculatingScores}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 28px', backgroundColor: calculatingScores ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.94rem', fontWeight: '800', cursor: calculatingScores ? 'not-allowed' : 'pointer', boxShadow: calculatingScores ? 'none' : '0 4px 16px rgba(34,197,94,0.35)', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>🔄</span>
+                      <RefreshCw size={16} />
                       {calculatingScores ? 'Calculating…' : 'Recalculate Scores'}
                     </button>
                   </div>
@@ -7293,7 +7386,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   <div style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '12px', marginBottom: '16px', overflow: 'hidden' }}>
                     <button onClick={function(){ setShowTargets(!showTargets); }}
                       style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', backgroundColor: '#f8fafc', border: 'none', cursor: 'pointer' }}>
-                      <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>🎯 Monthly Targets (GHA &amp; SA)</span>
+                      <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Target size={15} /> Monthly Targets (GHA &amp; SA)</span>
                       <span style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: '700' }}>{showTargets ? '▲ Collapse' : '▼ Expand'}</span>
                     </button>
                     {showTargets && (
@@ -7574,7 +7667,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
                   {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                      <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}><MessageSquare size={26} color="#cbd5e1" /></div>
                       <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0' }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
                     </div>
                   ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
@@ -7635,7 +7728,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
                           </span>
                         </div>
-                        <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                        <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={18} /></button>
                       </div>
                       <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800' }}>{m.subject || '(no subject)'}</h3>
                       <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
@@ -7787,7 +7880,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [listingsLoading, setListingsLoading]       = useState(false);
   const [inspections, setInspections]               = useState([]);
   const [inspLoading, setInspLoading]               = useState(false);
-  const [overview, setOverview]                     = useState(null);
+  const [ghaOverview, setGhaOverview]                = useState({});
   const [overviewLoading, setOverviewLoading]       = useState(false);
   const [ghaEarningsOverview, setGhaEarningsOverview] = useState({ total_commission: 0, is_paid: false });
   const [ghaRatings, setGhaRatings]                 = useState(null);
@@ -7836,13 +7929,17 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   function showMsg(msg) { setActionMsg(msg); setTimeout(function(){ setActionMsg(''); }, 4000); }
 
-  async function fetchOverview() {
+  async function fetchGHAOverview() {
     setOverviewLoading(true);
     try {
       var res = await fetch(API_URL + '/api/gha/overview', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      setOverview(data);
-    } catch(e) { console.error(e); }
+      if (res.ok) {
+        setGhaOverview(data);
+        // Also sync agents list if returned
+        if (data.agents) setAgents(data.agents);
+      }
+    } catch(e) { console.error('GHA overview error:', e.message); }
     finally { setOverviewLoading(false); }
   }
   async function fetchGHAEarningsOverview() {
@@ -8070,11 +8167,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   useEffect(function() { ghaNotificationsRef.current = ghaNotifications; }, [ghaNotifications]);
 
   useEffect(function() {
-    fetchOverview(); fetchAgents(); fetchGhaRatings(); fetchGHAEarningsOverview();
+    fetchGHAOverview(); fetchAgents(); fetchGhaRatings(); fetchGHAEarningsOverview();
     fetchGHANotifications().then(function(){ fetchMessages(); });
     var notifInterval = setInterval(fetchGHANotifications, 20000);
     var messagesInterval = setInterval(fetchMessages, 30000);
-    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
+    var overviewInterval = setInterval(fetchGHAOverview, 60000);
+    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); clearInterval(overviewInterval); };
   }, []);
   useEffect(function() {
     if (ghaTab === 'inspections') {
@@ -8109,10 +8207,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     document.addEventListener('mousedown', handleClickOutside);
     return function() { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
-
-  var activeSubscriptions = agents.filter(function(a) { return a.subscription_tier && a.subscription_tier !== 'free' && a.subscription_expires_at && new Date(a.subscription_expires_at) > new Date(); }).length;
-  var expiredSubscriptions = agents.filter(function(a) { return a.subscription_expires_at && new Date(a.subscription_expires_at) <= new Date(); }).length;
-  var monthlyEarnings = ghaEarningsOverview.total_commission || 0;
 
   function verLevelBadge(level) {
     var cfg = { basic: { bg: '#f1f5f9', color: '#64748b', label: 'Basic' }, verified: { bg: '#f0fff4', color: '#166534', label: 'Verified' }, premium: { bg: '#eff6ff', color: '#1e40af', label: 'Premium' } };
@@ -8154,13 +8248,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button onClick={function(){ fetchOverview(); fetchAgents(); fetchGHANotifications(); if (ghaTab === 'listings') fetchListings(); if (ghaTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
+          <button onClick={function(){ fetchGHAOverview(); fetchAgents(); fetchGHANotifications(); if (ghaTab === 'listings') fetchListings(); if (ghaTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
 
           {/* Notification Bell */}
           <div ref={notifBellRef} style={{ position: 'relative', display: 'inline-block' }}>
             <button onClick={function(){ setShowNotifDropdown(function(v){ return !v; }); }}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', padding: '8px', color: 'white', fontSize: '1.3rem', lineHeight: 1 }}>
-              🔔
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', position: 'relative', padding: '8px', color: 'white', lineHeight: 1 }}>
+              <Bell size={20} />
               {unreadCount > 0 && (
                 <span style={{ position: 'absolute', top: 0, right: 0, width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
                   {unreadCount < 10 ? unreadCount : '9+'}
@@ -8180,12 +8274,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {/* Notification items */}
                 {ghaNotifs.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '24px' }}>
-                    <div style={{ fontSize: '1.8rem' }}>🔔</div>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}><Bell size={22} color="#cbd5e1" /></div>
                     <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No notifications yet</p>
                   </div>
                 ) : ghaNotifs.map(function(notif) {
                   var iconBg = notif.type === 'inspection_passed' ? '#22c55e' : notif.type === 'agent_verification' ? '#3b82f6' : '#f59e0b';
-                  var iconChar = notif.type === 'inspection_passed' ? '✓' : notif.type === 'agent_verification' ? '👤' : '🔍';
+                  var iconChar = notif.type === 'inspection_passed' ? <CheckCircle size={14} /> : notif.type === 'agent_verification' ? <User size={14} /> : <Search size={14} />;
                   var isRead = notif.is_read || notif.read;
                   var createdAt = notif.created_at ? new Date(notif.created_at) : null;
                   var timeAgo = '';
@@ -8327,9 +8421,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {/* Stat cards */}
                 <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
                   {[
-                    { label: 'TOTAL AGENTS',   value: ghaProfile.agent_count || 0, borderColor: '#0a2240' },
-                    { label: 'ACTIVE SUBS',    value: activeSubscriptions,          borderColor: '#27ae60' },
-                    { label: 'EXPIRED',        value: expiredSubscriptions,         borderColor: '#ef4444' },
+                    { label: 'TOTAL AGENTS',     value: ghaOverview.total_agents || 0,        borderColor: '#0a2240' },
+                    { label: 'ACTIVE SUBS',      value: ghaOverview.active_subscriptions || 0, borderColor: '#27ae60' },
+                    { label: 'EXPIRED',          value: ghaOverview.expired_subscriptions || 0, borderColor: '#ef4444' },
+                    { label: 'FREE',             value: ghaOverview.free_agents || 0,          borderColor: '#64748b' },
+                    { label: 'INSPECTIONS DONE', value: ghaOverview.inspections_done || 0,     borderColor: '#0d9488' },
+                    { label: 'RATING',           value: ghaOverview.average_rating || '—',     borderColor: '#f59e0b' },
                   ].map(function(s) {
                     return (
                       <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
@@ -8343,8 +8440,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {/* Referral link card */}
                 <div style={{ backgroundColor: '#0a2240', borderRadius: '14px', padding: '16px 18px', marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
-                    <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#fff', fontSize: '0.88rem' }}>
-                      🔗 Invite Agents to GetHome
+                    <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#fff', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Link size={14} /> Invite Agents to GetHome
                     </p>
                     <p style={{ margin: 0, color: 'rgba(255,255,255,0.65)', fontSize: '0.74rem' }}>
                       Share your link — earn when they subscribe
@@ -8374,8 +8471,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       var link = 'https://trygethome.online/?ref=' + ghaCode + '&role=agent';
                       var msg = 'Join GetHome as a verified property agent! 🏠\n\nList your properties, get them physically verified, and connect with serious buyers and renters.\n\n✅ Free to join\n✅ I will be your dedicated support agent\n✅ Verified listings build customer trust\n\nRegister here:\n' + link;
                       window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
-                    }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
-                      📱 WhatsApp
+                    }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      <PhoneIcon size={13} /> WhatsApp
                     </button>
                   </div>
                 </div>
@@ -8384,7 +8481,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div>
                     <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS (5%)</p>
-                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(monthlyEarnings)}</p>
+                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{'₦' + (ghaOverview.monthly_commission || 0).toLocaleString()}</p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
@@ -8392,8 +8489,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
                       : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
                     }
-                    <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: ghaEarningsOverview.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600' }}>
-                      {ghaEarningsOverview.is_paid ? '✓ Paid' : '● Awaiting payment'}
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: ghaEarningsOverview.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                      {ghaEarningsOverview.is_paid ? <><CheckCircle size={12} /> Paid</> : '● Awaiting payment'}
                     </p>
                   </div>
                 </div>
@@ -8448,8 +8545,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <span style={{ fontSize: '1.1rem' }}>🏦</span>
                     <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
                     {staffUser?.account_number
-                      ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>✓ Account Added</span>
-                      : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>⚠ No Account Added</span>
+                      ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={11} /> Account Added</span>
+                      : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><AlertCircle size={11} /> No Account Added</span>
                     }
                   </div>
 
@@ -8561,7 +8658,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading agents...</p></div>
             ) : agents.length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>👤</div>
+                <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><User size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No agents assigned to your GHA yet</p>
               </div>
             ) : (
@@ -8681,7 +8778,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading listings...</p></div>
             ) : listings.length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🏠</div>
+                <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><Home size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No listings from your agents yet</p>
               </div>
             ) : (
@@ -8707,7 +8804,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         ? <img src={imageUrl} alt={p.title} loading="lazy"
                             style={{ width: '72px', height: '60px', objectFit: 'cover', borderRadius: '10px', flexShrink: 0 }}
                             onError={function(e){ e.target.style.display='none'; }} />
-                        : <div style={{ width: '72px', height: '60px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>🏠</div>
+                        : <div style={{ width: '72px', height: '60px', borderRadius: '10px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Home size={20} color="#94a3b8" /></div>
                       }
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.9rem', fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</p>
@@ -8768,7 +8865,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                             }
                           }}
                           style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '8px', padding: '8px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
-                          ⚠ Report Inaccurate
+                          <AlertCircle size={13} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Report Inaccurate
                         </button>
                       </div>
                     </div>
@@ -8806,7 +8903,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
             ) : inspections.length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>📋</div>
+                <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No inspections assigned to you yet</p>
               </div>
             ) : (
@@ -8914,8 +9011,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>Awaiting SA Confirmation</span>
                         )}
                         {status === 'confirmed' && (
-                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
-                            ✓ Confirmed{insp.confirmed_at ? ' · ' + new Date(insp.confirmed_at).toLocaleDateString() : ''}
+                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif", display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <CheckCircle size={10} /> Confirmed{insp.confirmed_at ? ' · ' + new Date(insp.confirmed_at).toLocaleDateString() : ''}
                           </span>
                         )}
                       </div>
@@ -8939,7 +9036,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       {/* CONFIRMED: green checkmark card */}
                       {status === 'confirmed' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f0fff4', borderRadius: '10px', padding: '12px 16px', border: '1.5px solid #86efac' }}>
-                          <span style={{ fontSize: '1.4rem' }}>✅</span>
+                          <CheckCircle size={22} color="#27ae60" />
                           <div>
                             <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>Inspection Confirmed by SA</p>
                             {insp.confirmed_at && <p style={{ margin: 0, fontSize: '0.72rem', color: '#4ade80', fontFamily: "'Inter', sans-serif" }}>on {new Date(insp.confirmed_at).toLocaleDateString()}</p>}
@@ -8966,8 +9063,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid ' + (currentNote.length > 0 && !noteOk ? '#fca5a5' : '#e2e8f0'), fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", resize: 'vertical', color: '#0a2240', lineHeight: '1.6', boxSizing: 'border-box', marginBottom: '4px' }}
                               />
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <span style={{ fontSize: '0.72rem', color: noteOk ? '#166534' : currentNote.length > 0 ? '#b91c1c' : '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
-                                  {currentNote.trim().length} / 20 characters{noteOk ? ' ✓' : ''}
+                                <span style={{ fontSize: '0.72rem', color: noteOk ? '#166534' : currentNote.length > 0 ? '#b91c1c' : '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif", display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  {currentNote.trim().length} / 20 characters{noteOk && <CheckCircle size={11} />}
                                 </span>
                                 <button onClick={function(){ setMarkingDone(null); }} style={{ fontSize: '0.72rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Cancel</button>
                               </div>
@@ -9059,7 +9156,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
                   {snapshots.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>👥</p>
+                      <p style={{ margin: '0 0 8px 0', display: 'flex', justifyContent: 'center' }}><Users size={22} color="#cbd5e1" /></p>
                       <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Agent Snapshots Yet</p>
                       <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
                         Agent activity snapshots will appear here once your agents make subscription payments or complete inspections for {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}.
@@ -9118,7 +9215,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   {/* Paid / Pending status banner */}
                   {earningsData?.is_paid === true ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#f0fff4', border: '2px solid #22c55e', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
-                      <span style={{ fontSize: '1.8rem' }}>✅</span>
+                      <CheckCircle size={28} color="#27ae60" />
                       <div>
                         <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Paid</p>
                         {earningsData.paid_at && (
@@ -9203,7 +9300,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             <div style={{ ...cardSt, overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
               {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}><MessageSquare size={26} color="#cbd5e1" /></div>
                   <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
                 </div>
               ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
@@ -9266,7 +9363,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
                       </span>
                     </div>
-                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={18} /></button>
                   </div>
                   <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.subject || '(no subject)'}</h3>
                   <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
@@ -9309,8 +9406,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
           <div>
             {/* Referral link card */}
             <div style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
-              <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', margin: '0 0 6px 0' }}>
-                🔗 Your Agent Referral Link
+              <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Link size={15} /> Your Agent Referral Link
               </h3>
               <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 14px 0' }}>
                 Share this link with potential agents. When they register using your link your GHA code is automatically attached to their account.
@@ -9336,7 +9433,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     setTimeout(function() { setReferralLinkCopied(false); }, 3000);
                   }
                 }} style={{ flexShrink: 0, backgroundColor: referralLinkCopied ? '#27ae60' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {referralLinkCopied ? '✓ Copied!' : 'Copy Link'}
+                  {referralLinkCopied ? <><CheckCircle size={13} style={{ verticalAlign: '-2px' }} /> Copied!</> : 'Copy Link'}
                 </button>
               </div>
 
@@ -9345,13 +9442,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   var whatsappMsg = 'Join GetHome as a verified property agent! 🏠\n\nList your properties, get them physically verified, and connect with serious buyers and renters across Nigeria.\n\n✅ Free to join\n✅ Dedicated support agent (me!)\n✅ Verified listings build customer trust\n✅ Secure payment handling\n\nRegister here using my link:\n' + referralLink + '\n\nYour GHA code ' + ghaCode + ' will be automatically linked to your account.';
                   window.open('https://wa.me/?text=' + encodeURIComponent(whatsappMsg), '_blank');
                 }} style={{ backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span>📱</span> Share on WhatsApp
+                  <PhoneIcon size={14} /> Share on WhatsApp
                 </button>
                 <button onClick={function() {
                   var smsText = 'Join GetHome as a property agent! Register at ' + referralLink + ' — your account will be linked to my GHA code ' + ghaCode + ' for dedicated support.';
                   window.open('sms:?body=' + encodeURIComponent(smsText), '_blank');
-                }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
-                  📩 Share via SMS
+                }} style={{ backgroundColor: 'transparent', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '8px', padding: '8px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <Send size={13} /> Share via SMS
                 </button>
               </div>
             </div>
@@ -9379,7 +9476,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
             {ghaReferrals.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px' }}>
-                <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>🔗</p>
+                <p style={{ margin: '0 0 8px 0', display: 'flex', justifyContent: 'center' }}><Link size={22} color="#cbd5e1" /></p>
                 <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0' }}>No referrals yet</p>
                 <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0 }}>Share your referral link with agents to start building your network</p>
               </div>
@@ -9400,8 +9497,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       backgroundColor: ref.status === 'subscribed' ? '#fef3c7' : ref.status === 'approved' ? '#f0fff4' : '#f1f5f9',
                       color: ref.status === 'subscribed' ? '#92400e' : ref.status === 'approved' ? '#166534' : '#64748b',
                       border: '1px solid ' + (ref.status === 'subscribed' ? '#fde68a' : ref.status === 'approved' ? '#bbf7d0' : '#e2e8f0'),
+                      display: 'inline-flex', alignItems: 'center', gap: '4px',
                     }}>
-                      {ref.status === 'subscribed' ? '⭐ Subscribed' : ref.status === 'approved' ? '✓ Approved' : '⏳ Registered'}
+                      {ref.status === 'subscribed' ? <><Star size={11} /> Subscribed</> : ref.status === 'approved' ? <><CheckCircle size={11} /> Approved</> : '⏳ Registered'}
                     </span>
                   </div>
                 );
@@ -9593,6 +9691,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saEarningsData, setSaEarningsData]         = useState(null);
+  const [saOverview, setSaOverview]                 = useState({});
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
   // Listings tab state
   const [saListings, setSaListings]                 = useState([]);
@@ -9664,6 +9763,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       if (res.ok) setSaEarningsData(data);
     } catch(e) { console.error('SA earnings overview error:', e.message); }
   }
+
+  const fetchSAOverview = async function() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      var res = await fetch(API_URL + '/api/sa/overview', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setSaOverview(data);
+    } catch(e) { console.error('SA overview error:', e.message); }
+  };
 
   async function fetchDeposits() {
     setDepositsLoading(true);
@@ -9906,10 +10016,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   useEffect(function() {
     fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchPendingAgents(); fetchSaGhas(); syncProfile(); fetchSALocations(); fetchMessages(); fetchAllSAs();
-    fetchSubscriptions(); fetchSAEarningsOverview(); // needed for Overview earnings on first load
+    fetchSubscriptions(); fetchSAEarningsOverview(); fetchSAOverview(); // needed for Overview earnings on first load
     var notifInterval = setInterval(fetchNotifications, 30000);
     var messagesInterval = setInterval(fetchMessages, 30000);
-    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); };
+    var overviewInterval = setInterval(fetchSAOverview, 60000);
+    return function() { clearInterval(notifInterval); clearInterval(messagesInterval); clearInterval(overviewInterval); };
   }, []);
   useEffect(function() {
     function handleClickOutside(e) {
@@ -9964,19 +10075,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     });
   }, [saGhas, pendingAgents]);
 
-  var saOverviewNow = new Date();
-  var activeSubscriptions = agents.filter(function(a) {
-    return (a.subscription_status === 'active' || a.subscription_tier === 'premium' || a.subscription_tier === 'agency') &&
-      a.subscription_end &&
-      new Date(a.subscription_end) > saOverviewNow;
-  }).length;
-  var expiredSubscriptions = agents.filter(function(a) {
-    return a.subscription_end &&
-      new Date(a.subscription_end) <= saOverviewNow &&
-      a.subscription_tier !== 'free' &&
-      a.subscription_tier != null;
-  }).length;
-  var subTotal = subscriptions.reduce(function(sum, s) { return sum + (s.amount || 0); }, 0);
   var saCity = (profileForm.location || staffUser.location || '').trim();
   var cityFilteredPendingAgents = saCity
     ? pendingAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
@@ -9984,13 +10082,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   var cityFilteredGhaAgents = saCity
     ? ghaInspectionAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
     : ghaInspectionAgents;
-  // Use actual earnings from sa_earnings table if available; fall back to client-side estimate
-  var monthlyEarnings = 0;
-  if (saEarningsData && saEarningsData.total_commission > 0) {
-    monthlyEarnings = saEarningsData.total_commission;
-  } else {
-    monthlyEarnings = subTotal * 0.05;
-  }
   var filteredAgents = agents.filter(function(a) {
     if (!agentSearch.trim()) return true;
     var q = agentSearch.toLowerCase();
@@ -10023,20 +10114,20 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           <div>
             <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{staffUser.full_name || staffUser.name || 'Service Agent'}</p>
             <p style={{ margin: 0, color: 'rgba(255,255,255,0.55)', fontSize: '0.75rem' }}>Service Agent Portal</p>
-            <div style={{ backgroundColor: '#f1f5f9', borderRadius: '20px', padding: '3px 10px', fontSize: '0.76rem', color: '#64748b', display: 'inline-block', marginTop: '5px' }}>
-              📍 {saCoveredCities.length > 0 ? saCoveredCities.join(', ') : (staffUser.location || 'Location not set')}
+            <div style={{ backgroundColor: '#f1f5f9', borderRadius: '20px', padding: '3px 10px', fontSize: '0.76rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '5px' }}>
+              <MapPin size={12} /> {saCoveredCities.length > 0 ? saCoveredCities.join(', ') : (staffUser.location || 'Location not set')}
             </div>
             <p style={{ margin: '3px 0 0 0', color: 'rgba(255,255,255,0.45)', fontSize: '0.71rem' }}>Showing agents in your area: {saCoveredCities.length > 0 ? saCoveredCities.join(', ') : (staffUser.location || 'N/A')}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button onClick={function(){ fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); if (saTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
+          <button onClick={function(){ fetchGhas(); fetchAgents(); fetchDeposits(); fetchNotifications(); fetchSAOverview(); if (saTab === 'inspections') fetchInspections(); }} style={{ padding: '7px 14px', border: '1.5px solid rgba(255,255,255,0.2)', borderRadius: '8px', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer' }}>Refresh</button>
 
           <div ref={notifBellRef} style={{ position: 'relative', display: 'inline-block' }}>
             <button
               onClick={function() { setShowNotifDropdown(function(v) { return !v; }); }}
-              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', fontSize: '1.3rem', position: 'relative' }}>
-              {'🔔'}
+              style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', position: 'relative' }}>
+              <Bell size={20} />
               {notifications.length > 0 && (
                 <span style={{ position: 'absolute', top: '2px', right: '2px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.62rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {notifications.length > 9 ? '9+' : notifications.length}
@@ -10103,7 +10194,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         {/* WhatsApp missing banner */}
         {showWaBanner && (
           <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderLeft: '5px solid #f59e0b', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', display: 'flex', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>⚠️</span>
+            <AlertCircle size={18} color="#f59e0b" style={{ flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>
                 Important: Add your WhatsApp number so customers can reach you for inspection requests.
@@ -10116,7 +10207,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 Add WhatsApp Number
               </button>
             </div>
-            <button onClick={function(){ setShowWaBanner(false); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer', padding: '0', flexShrink: 0 }}>✕</button>
+            <button onClick={function(){ setShowWaBanner(false); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0', flexShrink: 0, display: 'flex', alignItems: 'center' }}><X size={16} /></button>
           </div>
         )}
 
@@ -10175,18 +10266,21 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
             <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
               {[
-                { label: 'TOTAL GHAs',       value: ghas.length,                                                          borderColor: '#0a2240' },
-                { label: 'ACTIVE SUBS',      value: activeSubscriptions,                                                  borderColor: '#27ae60' },
-                { label: 'PENDING DEPOSITS', value: deposits.filter(function(d){ return !d.deposit_confirmed; }).length,  borderColor: '#f59e0b' },
-                { label: 'EARNINGS (5%)',    value: fmtMoney(monthlyEarnings),                                            borderColor: '#7c3aed' },
+                { label: 'TOTAL AGENTS',           value: saOverview.total_agents || 0,                             borderColor: '#0a2240' },
+                { label: 'ACTIVE SUBSCRIPTIONS',    value: saOverview.active_subscriptions || 0,                     borderColor: '#27ae60' },
+                { label: 'EXPIRED',                 value: saOverview.expired_subscriptions || 0,                    borderColor: '#ef4444' },
+                { label: 'TOTAL GHAs',               value: saOverview.total_ghas || 0,                              borderColor: '#0d9488' },
+                { label: 'MONTHLY EARNINGS',         value: '₦' + (saOverview.monthly_earnings || 0).toLocaleString(), borderColor: '#7c3aed' },
+                { label: 'PENDING AGENTS',           value: saOverview.pending_agents || 0,                          borderColor: '#f59e0b' },
+                { label: 'INSPECTIONS CONFIRMED',    value: saOverview.inspections_confirmed || 0,                   borderColor: '#1e40af' },
               ].map(function(s) {
                 return (
                   <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
                     <p style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
                     <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
-                    {s.label === 'EARNINGS (5%)' && (
-                      <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: saEarningsData?.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600' }}>
-                        {saEarningsData?.is_paid ? '✓ Paid' : '● Awaiting payment'}
+                    {s.label === 'MONTHLY EARNINGS' && (
+                      <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: saOverview.earnings_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {saOverview.earnings_paid ? <><CheckCircle size={11} /> Paid this month</> : '● Pending payment'}
                       </p>
                     )}
                   </div>
@@ -10292,7 +10386,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading GHAs...</p></div>
             ) : ghas.length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🏢</div>
+                <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><Building2 size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No GHA agents in your team yet</p>
               </div>
             ) : (
@@ -10393,14 +10487,14 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             <div style={{ padding: '12px 14px', backgroundColor: agentSearchResult.already_assigned_other_sa ? '#fef2f2' : agentSearchResult.already_assigned ? '#fffbeb' : '#f8fafc', borderRadius: '10px', border: '1.5px solid ' + (agentSearchResult.already_assigned_other_sa ? '#fecaca' : agentSearchResult.already_assigned ? '#fcd34d' : '#e2e8f0'), marginBottom: '10px' }}>
                               {agentSearchResult.already_assigned_other_sa ? (
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '8px', marginBottom: '10px' }}>
-                                  <span style={{ fontSize: '1rem', lineHeight: '1.4' }}>🔒</span>
+                                  <Lock size={15} color="#b91c1c" style={{ flexShrink: 0 }} />
                                   <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '700', color: '#b91c1c', fontFamily: "'Inter', sans-serif" }}>
                                     This agent is locked under another SA. Only admin can reassign them.
                                   </p>
                                 </div>
                               ) : agentSearchResult.already_assigned ? (
                                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '8px 10px', backgroundColor: '#fef9c3', border: '1.5px solid #fcd34d', borderRadius: '8px', marginBottom: '10px' }}>
-                                  <span style={{ fontSize: '1rem', lineHeight: '1.4' }}>⚠️</span>
+                                  <AlertCircle size={15} color="#92400e" style={{ flexShrink: 0 }} />
                                   <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: '600', color: '#92400e', fontFamily: "'Inter', sans-serif" }}>
                                     {'Already assigned to ' + agentSearchResult.assigned_gha_code + '. You can reassign to a different GHA.'}
                                   </p>
@@ -10521,7 +10615,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div>
                 {cityFilteredPendingAgents.length === 0 ? (
                   <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>✅</div>
+                    <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><CheckCircle size={28} color="#cbd5e1" /></div>
                     <p style={{ margin: 0, color: '#94a3b8', fontWeight: '500', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>No pending agents right now{saCity ? ' in ' + saCity : ''}</p>
                   </div>
                 ) : (
@@ -10556,7 +10650,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </button>
                           {expandedPendingId === a.id && (
                             <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
-                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📍 {a.office_address}</p>}
+                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '3px' }}><MapPin size={12} /> {a.office_address}</p>}
                               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
                                 {a.years_experience && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>{a.years_experience} yrs exp</span>}
                                 {a.specialty && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: '700' }}>{a.specialty}</span>}
@@ -10725,7 +10819,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div>
                 {cityFilteredGhaAgents.length === 0 ? (
                   <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>🔍</div>
+                    <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><Search size={28} color="#cbd5e1" /></div>
                     <p style={{ margin: 0, color: '#94a3b8', fontWeight: '500', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>No agents are currently with a GHA for inspection{saCity ? ' in ' + saCity : ''}</p>
                   </div>
                 ) : (
@@ -10756,7 +10850,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </button>
                           {expandedPendingId === a.id && (
                             <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
-                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📍 {a.office_address}</p>}
+                              {a.office_address && <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '3px' }}><MapPin size={12} /> {a.office_address}</p>}
                               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
                                 {a.years_experience && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', fontWeight: '700' }}>{a.years_experience} yrs exp</span>}
                                 {a.specialty && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: '700' }}>{a.specialty}</span>}
@@ -10878,16 +10972,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       </div>
                     );
                   })}
-                </div>
-                <div style={{ ...cardSt, padding: '20px 24px', backgroundColor: '#f0fff4', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.74rem', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>TOTAL SUBSCRIPTION REVENUE</p>
-                    <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>₦{subTotal.toLocaleString()}</p>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.74rem', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>YOUR EARNINGS (5%)</p>
-                    <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#166534', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(subTotal * 0.05)}</p>
-                  </div>
                 </div>
               </div>
             )}
@@ -11026,8 +11110,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
                     {inspForm.property_id ? (
                       <div style={{ padding: '10px 14px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                        <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>
-                          📋 Property: {inspForm.property_address}
+                        <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <FileText size={12} /> Property: {inspForm.property_address}
                         </p>
                       </div>
                     ) : (
@@ -11314,8 +11398,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                     setInspMsg('Inspection cancelled successfully');
                                     fetchInspections();
                                   } catch(err) { setInspMsg('Error: ' + err.message); }
-                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                  ✕ Cancel
+                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <X size={11} /> Cancel
                                 </button>
 
                                 <button onClick={async function() {
@@ -11525,7 +11609,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Summary</h3>
                   {ghaSummary.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
-                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>📊</p>
+                      <p style={{ margin: '0 0 8px 0', display: 'flex', justifyContent: 'center' }}><BarChart2 size={22} color="#cbd5e1" /></p>
                       <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Activity This Month</p>
                       <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
                         No agents are assigned to your GHAs yet for {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}, or no subscription payments have been made. Data will appear here once agents are active under your GHAs.
@@ -11576,7 +11660,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   </div>
                   {filteredSnapshots.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                      <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>👥</p>
+                      <p style={{ margin: '0 0 8px 0', display: 'flex', justifyContent: 'center' }}><Users size={22} color="#cbd5e1" /></p>
                       <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Agent Snapshots Yet</p>
                       <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
                         Agent activity snapshots will appear here once agents under your GHAs make subscription payments or complete inspections.
@@ -11662,7 +11746,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                   }}>
-                  ⭐ {showFeaturedOnly ? 'All Listings' : 'Featured Only'}
+                  <Star size={14} style={{ marginRight: '4px', verticalAlign: '-2px' }} />{showFeaturedOnly ? 'All Listings' : 'Featured Only'}
                 </button>
               </div>
               <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 16px 0', fontFamily: "'Inter', sans-serif" }}>
@@ -11692,7 +11776,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: '12px' }}>
                           {imageUrl
                             ? <img src={imageUrl} alt={l.title} loading="lazy" style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }} onError={function(e){ e.target.style.display = 'none'; }} />
-                            : <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>🏠</div>
+                            : <div style={{ width: '50px', height: '50px', borderRadius: '8px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Home size={18} color="#94a3b8" /></div>
                           }
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
@@ -11710,7 +11794,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                   alignItems: 'center',
                                   gap: '3px',
                                 }}>
-                                  ⭐ FEATURED
+                                  <Star size={11} fill="currentColor" /> FEATURED
                                 </span>
                               )}
                               {l.agent_gha_code && <span style={{ fontSize: '0.66rem', padding: '3px 10px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '20px', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{l.agent_gha_code}</span>}
@@ -11721,12 +11805,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                               {listingStatusBadge(l.status)}
                               <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{listingTimeAgo(l.created_at)}</span>
                               {l.gha_verified ? (
-                                <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700' }}>
-                                  ✓ GHA Verified {l.gha_verified_at ? '· ' + new Date(l.gha_verified_at).toLocaleDateString() : ''}
+                                <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <CheckCircle size={12} /> GHA Verified {l.gha_verified_at ? '· ' + new Date(l.gha_verified_at).toLocaleDateString() : ''}
                                 </span>
                               ) : (
-                                <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700' }}>
-                                  ⚠ Awaiting GHA Verification
+                                <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <AlertCircle size={12} /> Awaiting GHA Verification
                                 </span>
                               )}
                             </div>
@@ -11762,7 +11846,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 setShowCreateInsp(true);
                                 setInspMsg('');
                               }} style={{ backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
-                              📋 Book Inspection
+                              <FileText size={12} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Book Inspection
                             </button>
                             <button onClick={function(){
                                 setComposeForm({
@@ -11803,7 +11887,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 }
                               }}
                               style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '8px', padding: '7px 14px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
-                              ⚠ Report Inaccurate
+                              <AlertCircle size={13} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Report Inaccurate
                             </button>
                           </div>
                         </div>
@@ -11905,7 +11989,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   {/* Paid / Pending status banner */}
                   {earningsData?.is_paid === true ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '14px', backgroundColor: '#f0fff4', border: '2px solid #22c55e', borderRadius: '14px', padding: '18px 22px', marginBottom: '20px' }}>
-                      <span style={{ fontSize: '1.8rem' }}>✅</span>
+                      <CheckCircle size={28} color="#27ae60" />
                       <div>
                         <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Commission Paid</p>
                         {earningsData.paid_at && (
@@ -12059,8 +12143,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <span style={{ fontSize: '1.1rem' }}>🏦</span>
                 <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
                 {staffUser?.account_number
-                  ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>✓ Account Added</span>
-                  : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700' }}>⚠ No Account Added</span>
+                  ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={11} /> Account Added</span>
+                  : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><AlertCircle size={11} /> No Account Added</span>
                 }
               </div>
 
@@ -12184,7 +12268,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             <div style={{ ...cardSt, overflow: 'hidden', marginBottom: selectedMessage ? '16px' : 0 }}>
               {(inboxTab === 'inbox' ? messages : sentMessages).length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ fontSize: '1.8rem' }}>✉️</div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}><MessageSquare size={26} color="#cbd5e1" /></div>
                   <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '8px 0 0 0', fontFamily: "'Inter', sans-serif" }}>No messages{inboxTab === 'sent' ? ' sent' : ''} yet</p>
                 </div>
               ) : (inboxTab === 'inbox' ? messages : sentMessages).map(function(msg) {
@@ -12247,7 +12331,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         To: {m.recipient_code || m.recipient_type || 'Unknown'}{m.recipient_name ? ' — ' + m.recipient_name : ''}
                       </span>
                     </div>
-                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.1rem', cursor: 'pointer' }}>✕</button>
+                    <button onClick={function(){ setSelectedMessage(null); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={18} /></button>
                   </div>
                   <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.subject || '(no subject)'}</h3>
                   <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
@@ -12445,6 +12529,50 @@ function AppContent() {
   const [isError, setIsError]                   = useState(false);
   const [agentTier, setAgentTier]               = useState('free');
   const [renewalDate, setRenewalDate]           = useState(null);
+  // ── Single source of truth for agent subscription state ────────────────
+  // Always reads fresh from the `profiles` table (confirmed via Supabase SQL
+  // editor to be where subscription_tier / subscription_status /
+  // subscription_end / subscription_amount actually live — `agents` has none
+  // of these columns) and pushes the result onto both the global `user`
+  // object and localStorage, so every screen that derives plan info via
+  // getAgentPlan() sees the same data instead of relying on a stale
+  // per-component cache.
+  const fetchAgentSubscription = useCallback(async function(userId) {
+    if (!userId) return;
+    try {
+      var { data, error } = await supabase
+        .from('profiles')
+        .select('subscription_tier, subscription_status, subscription_end, subscription_amount')
+        .eq('id', userId)
+        .single();
+      if (error || !data) return;
+
+      setUser(function(prev) {
+        if (!prev) return prev;
+        return Object.assign({}, prev, {
+          subscription_tier: data.subscription_tier || 'free',
+          subscription_status: data.subscription_status || 'inactive',
+          subscription_end: data.subscription_end || null,
+          subscription_amount: data.subscription_amount || 0,
+        });
+      });
+      setAgentTier(data.subscription_tier || 'free');
+      localStorage.setItem('gh_tier_' + userId, data.subscription_tier || 'free');
+
+      try {
+        var stored = JSON.parse(localStorage.getItem('gh_user') || '{}');
+        stored.subscription_tier = data.subscription_tier || 'free';
+        stored.subscription_status = data.subscription_status || 'inactive';
+        stored.subscription_end = data.subscription_end || null;
+        stored.subscription_amount = data.subscription_amount || 0;
+        localStorage.setItem('gh_user', JSON.stringify(stored));
+      } catch(e) {}
+
+      console.log('Subscription refreshed:', data.subscription_tier, data.subscription_status);
+    } catch(err) {
+      console.error('fetchAgentSubscription error:', err.message);
+    }
+  }, []);
   // Sync tab with URL - read tab from URL on mount, default to 'rent'
   var validTabs = ['rent', 'sale', 'shortlet', 'services', 'upload', 'agent', 'admin'];
   var initialTab = (function() {
@@ -12635,6 +12763,7 @@ function AppContent() {
             });
             localStorage.setItem('gh_user', JSON.stringify(freshUser));
             setUser(freshUser);
+            if (freshUser.role === 'agent') fetchAgentSubscription(freshUser.id);
           }
         })
         .catch(function() {
@@ -12861,6 +12990,9 @@ function AppContent() {
   const isApproved = user?.role === 'admin' || user?.status === 'approved' || isMasterAdmin;
   const isAdmin    = user?.role === 'admin' || isMasterAdmin;
   const isAgencyAccount = user?.agent_type === 'agency';
+  // Single source of truth for plan info on this screen too — same helper
+  // AgentUploadPortal uses, so "Manage Plan" and the Upload Portal never disagree.
+  const plan = getAgentPlan(user, { subscription_tier: agentTier });
   useEffect(function() {
     if (currentTab === 'admin' && user && !isMasterAdmin && !isAdmin) {
       navigateTab(isAgent ? 'upload' : 'rent');
@@ -12868,11 +13000,46 @@ function AppContent() {
   }, [currentTab, user, isMasterAdmin, isAdmin]);
   useEffect(function() {
     if (!user?.id) return;
+    // Paint instantly from cache, then always reconcile against the database —
+    // the cached value alone is what let "Manage Plan" and the upload-tab
+    // banner drift out of sync with what the agent actually paid for.
     var saved = localStorage.getItem('gh_tier_' + user.id);
     if (saved) setAgentTier(saved);
     var savedRenewal = localStorage.getItem('gh_tier_renewed_' + user.email)
       || localStorage.getItem('gh_tier_renewed_' + user.id);
     if (savedRenewal) setRenewalDate(savedRenewal);
+    if (isAgent) fetchAgentSubscription(user.id);
+  }, [user?.id, isAgent]);
+  // Realtime: instantly reflect a subscription change (webhook-driven) without
+  // waiting for the agent to reload or re-navigate.
+  useEffect(function() {
+    if (!user?.id || !isAgent) return;
+    var planChannel = supabase.channel('agent-plan-' + user.id)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: 'id=eq.' + user.id,
+      }, function(payload) {
+        console.log('Agent profile updated via realtime:', payload.new?.subscription_tier);
+        if (payload.new?.subscription_tier) fetchAgentSubscription(user.id);
+      })
+      .subscribe();
+    return function() { supabase.removeChannel(planChannel); };
+  }, [user?.id, isAgent]);
+  // Refresh subscription on return from Flutterwave checkout — the webhook
+  // that updates `agents` can lag the redirect back to the app slightly, so
+  // give it a moment before re-reading.
+  useEffect(function() {
+    try {
+      var urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('staff_payment') === 'complete' || urlParams.get('payment') === 'success') {
+        if (user?.id) {
+          setTimeout(function() { fetchAgentSubscription(user.id); }, 2000);
+        }
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    } catch(e) {}
   }, [user?.id]);
   const searchFiltered = function(list) {
     var result = list;
@@ -13221,7 +13388,7 @@ function AppContent() {
                   <button onClick={clearAllFilters} style={{ marginLeft: 'auto', padding: '5px 13px', borderRadius: '8px', border: '1px solid #e2e8f0', backgroundColor: '#fff', color: '#64748b', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Clear</button>
                 </div>
                 {searchFiltered(rentProperties).length === 0
-                  ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ fontSize: '2.6rem', marginBottom: '12px' }}>🔍</div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
+                  ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><Search size={28} color="#cbd5e1" /></div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
                   : <>
                       <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
                         {searchFiltered(rentProperties).slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
@@ -13272,13 +13439,13 @@ function AppContent() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: isMobile ? '10px' : '16px' }}>
                     {[
-                      { icon: '🔒', title: 'Escrow Protection', body: 'Funds held until you verify and approve.' },
-                      { icon: '✅', title: 'Verified Agents', body: 'Every agent is screened before listing.' },
-                      { icon: '📊', title: 'Transparent Fees', body: 'Full fee breakdown before you pay.' },
+                      { icon: <Lock size={isMobile ? 20 : 24} color="#fff" />, title: 'Escrow Protection', body: 'Funds held until you verify and approve.' },
+                      { icon: <CheckCircle size={isMobile ? 20 : 24} color="#fff" />, title: 'Verified Agents', body: 'Every agent is screened before listing.' },
+                      { icon: <BarChart2 size={isMobile ? 20 : 24} color="#fff" />, title: 'Transparent Fees', body: 'Full fee breakdown before you pay.' },
                       { icon: '🤝', title: 'Dispute Resolution', body: 'Our team mediates if anything goes wrong.' }
                     ].map(function(item){ return (
                       <div key={item.title} style={{ backgroundColor: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px', padding: isMobile ? '14px 12px' : '20px 18px', transition: 'background 0.2s' }}>
-                        <div style={{ fontSize: isMobile ? '1.3rem' : '1.5rem', marginBottom: '10px', lineHeight: 1 }}>{item.icon}</div>
+                        <div style={{ marginBottom: '10px', lineHeight: 1 }}>{item.icon}</div>
                         <h4 style={{ color: '#fff', fontSize: isMobile ? '0.78rem' : '0.87rem', fontWeight: '700', margin: '0 0 5px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.2px' }}>{item.title}</h4>
                         <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: isMobile ? '0.70rem' : '0.77rem', lineHeight: '1.55', margin: 0, fontFamily: "'Inter', sans-serif" }}>{item.body}</p>
                       </div>
@@ -13294,7 +13461,7 @@ function AppContent() {
                 {rentProperties.length === 0
                   ? (
                     <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
-                      <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>🏘️</div>
+                      <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}><Layers size={32} color="#cbd5e1" /></div>
                       <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
                         No listings yet in {activeCountry.flag} {activeCountry.name}
                       </h3>
@@ -13424,7 +13591,7 @@ function AppContent() {
             {searchFiltered(saleProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
-                  <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>{searchQuery ? '🔍' : '🏠'}</div>
+                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>{searchQuery ? <Search size={32} color="#cbd5e1" /> : <Home size={32} color="#cbd5e1" />}</div>
                   <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
                     {searchQuery
                       ? 'No results found'
@@ -13549,7 +13716,7 @@ function AppContent() {
             {searchFiltered(shortletProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
-                  <div style={{ fontSize: '3.2rem', marginBottom: '16px' }}>{searchQuery ? '🔍' : '🏨'}</div>
+                  <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>{searchQuery ? <Search size={32} color="#cbd5e1" /> : <Hotel size={32} color="#cbd5e1" />}</div>
                   <h3 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '800', margin: '0 0 10px 0' }}>
                     {searchQuery ? 'No results found' : `No shortlets in ${activeCountry.flag} ${activeCountry.name}`}
                   </h3>
@@ -13670,14 +13837,28 @@ function AppContent() {
               </h2>
               <p style={{ color: '#64748b', fontSize: isMobile ? '0.85rem' : '0.92rem', margin: '0 auto', maxWidth: '460px', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>
                 {user && isApproved
-                  ? `You're currently on the ${AGENT_TIERS[agentTier]?.label || 'Free'} plan. ${agentTier === 'free' ? 'Upgrade anytime to list more properties.' : 'Renew your plan to keep your listings active.'}`
+                  ? `You're currently on the ${plan.name}. ${plan.tier === 'free' ? 'Upgrade anytime to list more properties.' : 'Renew your plan to keep your listings active.'}`
                   : `Join verified agents on GetHome's transparent platform, serving ${activeCountry.flag} ${activeCountry.name} and expanding across Africa.`}
               </p>
             </div>
+            {user && isApproved && (
+              <div style={{ maxWidth: '780px', margin: '0 auto 20px', backgroundColor: plan.colors.bg, borderRadius: '14px', padding: '16px 18px', border: '1px solid ' + plan.colors.border }}>
+                <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: plan.colors.color, textTransform: 'uppercase' }}>Current Plan</p>
+                <p style={{ margin: '0 0 6px 0', fontWeight: '900', fontSize: '1.1rem', color: plan.colors.color }}>{plan.name}</p>
+                {plan.tier !== 'free' && plan.endDate && (
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: plan.colors.color, opacity: 0.8, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {plan.isExpired
+                      ? <><AlertCircle size={12} color="#f59e0b" /> Expired {plan.endDate.toLocaleDateString()}</>
+                      : <><CheckCircle size={12} color="#27ae60" /> Active · Expires {plan.endDate.toLocaleDateString()}</>}
+                  </p>
+                )}
+                {plan.tier === 'free' && <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>Up to {plan.limit} listings</p>}
+              </div>
+            )}
             {user && isApproved ? (
               agentTier === 'agency' ? (
                 <div style={{ maxWidth: '500px', margin: '0 auto', ...cardStyle, padding: isMobile ? '24px 20px' : '36px 32px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🏆</div>
+                  <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'center' }}><Award size={32} color="#f59e0b" /></div>
                   <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '1.1rem', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>You're on the Agency Plan</p>
                   <p style={{ color: '#64748b', fontSize: '0.86rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>You're already on our highest tier with up to 100 listings. Manage your listings from the Upload tab.</p>
                   <button onClick={function(){ navigateTab('upload'); }} style={{ padding: '12px 28px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 14px rgba(34,197,94,0.28)' }}>Go to Upload Tab</button>
@@ -13686,8 +13867,8 @@ function AppContent() {
                 <div style={{ maxWidth: '780px', margin: '0 auto' }}>
                   {isAgencyAccount && (
                     <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', border: '1px solid #bfdbfe' }}>
-                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e40af', fontWeight: '600' }}>
-                        🏢 Agency accounts have access to the Agency Plan only, up to 100 listings per month.
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#1e40af', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Building2 size={14} /> Agency accounts have access to the Agency Plan only, up to 100 listings per month.
                       </p>
                     </div>
                   )}
@@ -13736,7 +13917,7 @@ function AppContent() {
               )
             ) : (
               <div style={{ maxWidth: '480px', margin: '0 auto', ...cardStyle, padding: isMobile ? '28px 22px' : '40px 36px', textAlign: 'center' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🏠</div>
+                <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'center' }}><Home size={32} color="#22c55e" /></div>
                 <p style={{ fontWeight: '800', color: '#0a2240', fontSize: '1.15rem', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Upload Your First {plans[0].listingLimit} Properties for Free</p>
                 <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 24px 0', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>Create your agent account to start listing on GetHome, no cost, no card required. Upgrade anytime to list more.</p>
                 <button onClick={function(){ navigateTab('upload'); }} style={{ padding: '13px 30px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: '0 4px 14px rgba(34,197,94,0.28)' }}>Create Free Agent Account</button>
