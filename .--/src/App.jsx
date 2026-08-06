@@ -13113,6 +13113,23 @@ function AppContent() {
   // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
   const [globalSettings, setGlobalSettings]     = useState({});
   const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
+  // Single ad banner shown directly below the search/filter bar on the Rent, Sale
+  // and Shortlet tabs (above the listings grid). Defined once here and reused at
+  // each tab's insertion point so there is exactly one banner implementation.
+  const searchBarAdBanner = adsEnabled && (
+    <div style={{
+      width: '100%',
+      height: '90px',
+      maxHeight: '90px',
+      overflow: 'hidden',
+      margin: '8px 0',
+      backgroundColor: '#f8fafc',
+      borderRadius: '8px',
+      border: '1px solid #e2e8f0',
+    }}>
+      <GoogleAd type='banner' />
+    </div>
+  );
   const fetchGlobalSettings = async function() {
     try {
       var res = await fetch(API_URL + '/api/settings');
@@ -14006,6 +14023,7 @@ function AppContent() {
                 </div>
               </div>
             </div>
+            {searchBarAdBanner}
             {(searchQuery || filterCity !== 'All' || selectedPropertyType) ? (
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -14078,9 +14096,6 @@ function AppContent() {
                     ); })}
                   </div>
                 </div>
-                <div style={{ marginBottom: isMobile ? '24px' : '36px' }}>
-                  <GoogleAd type="banner" />
-                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div>
                     <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: '0 0 3px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>All Rental Listings</h2>
@@ -14131,10 +14146,6 @@ function AppContent() {
                         </div>
                       )}
                     </>}
-                <div style={{ marginTop: isMobile ? '24px' : '36px' }}>
-                  <p style={{ margin: '0 0 6px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Advertisement</p>
-                  <GoogleAd type="listing" />
-                </div>
               </>
             )}
           </section>
@@ -14221,6 +14232,7 @@ function AppContent() {
                 </div>
               )}
             </div>
+            {searchBarAdBanner}
             {searchFiltered(saleProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
@@ -14346,6 +14358,7 @@ function AppContent() {
                 </div>
               )}
             </div>
+            {searchBarAdBanner}
             {searchFiltered(shortletProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
