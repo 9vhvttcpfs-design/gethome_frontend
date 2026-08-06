@@ -2456,8 +2456,16 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     : currentConfig.featured;
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [pendingSubmit, setPendingSubmit]           = useState(false);
-  const [wantsFeatured, setWantsFeatured]           = useState(false);
   const [featuredPaid, setFeaturedPaid]             = useState(false);
+  // Featuring payment now happens AFTER publish (see handleSubmit + this
+  // upsell modal) instead of before — Flutterwave does a full-page redirect,
+  // and asking the agent to pay before the listing exists meant the entire
+  // form (title, images, fees...) had to survive that round trip. Publishing
+  // first means there's nothing left to lose: the listing is already saved
+  // server-side, and "feature it" just attaches a real property_id to the
+  // payment instead of the `property_id: null` placeholder this used to send.
+  const [showFeaturedUpsell, setShowFeaturedUpsell] = useState(false);
+  const [justPublishedProperty, setJustPublishedProperty] = useState(null);
   const [portalTab, setPortalTab]                   = useState('listings');
   const [localIsApproved, setLocalIsApproved]       = useState(isApproved);
   const [agentStatus, setAgentStatus]               = useState(null);
@@ -2621,11 +2629,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     setForm({ title: property.title || '', property_type: property.property_type || '', location: resolved.city, country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
     setUploadLocationState(resolved.state);
     setCustomCity(resolved.city === 'Other' ? (property.location || '') : '');
-    setWantsFeatured(property.is_featured || false); setFeaturedPaid(property.is_featured || false);
+    setFeaturedPaid(property.is_featured || false);
     window.scrollTo({ top: 0, behavior: 'smooth' }); clearMessages();
   };
-  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); setUploadLocationState(''); setCustomCity(''); setWantsFeatured(false); setFeaturedPaid(false); setForm(function(f){ return Object.assign({}, f, { video_url: null, videoFile: null }); }); clearMessages(); };
-  const handleFeaturedPayment = async () => {
+  const cancelEdit = () => { setEditingProperty(null); setForm(EMPTY_FORM); setUploadLocationState(''); setCustomCity(''); setFeaturedPaid(false); setForm(function(f){ return Object.assign({}, f, { video_url: null, videoFile: null }); }); clearMessages(); };
+  const handleFeaturedPayment = async (property) => {
     try {
       const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
         method: 'POST',
@@ -2634,8 +2642,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           amount: featuredPrice,
           customer_email: user.email,
           customer_name: user.email,
-          purpose: 'Featured Listing - ' + (form.title || 'New Listing'),
-          property_id: null,
+          purpose: 'Featured Listing - ' + (property?.title || form.title || 'New Listing'),
+          property_id: property?.id || null,
+          meta: {
+            payment_type: 'featured_listing',
+            property_id: property?.id || null,
+            agent_id: user?.id,
+          },
         }),
       });
       const data = await res.json();
@@ -2736,13 +2749,18 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           return;
         }
         if (!res.ok) throw new Error(data.error || 'Publish failed');
-        setSuccessMsg('Listing published!'); setAgentListingCount(c => c + 1); onListingPublished && onListingPublished(Object.assign({}, payload, data));
-        // Show success toast — fixed position, so it's visible regardless of scroll position
-        setUploadSuccess(true);
-        setTimeout(function() { setUploadSuccess(false); }, 5000);
-        // Reset form
-        setForm(EMPTY_FORM); setWantsFeatured(false); setFeaturedPaid(false);
+        const publishedProperty = Object.assign({}, payload, data);
+        setSuccessMsg('Listing published!'); setAgentListingCount(c => c + 1); onListingPublished && onListingPublished(publishedProperty);
+        // Reset form — the listing is safely saved server-side at this point,
+        // so there's nothing left to preserve even if the agent now goes on
+        // to pay for featuring (which redirects away to Flutterwave).
+        setForm(EMPTY_FORM); setFeaturedPaid(false);
         try { sessionStorage.removeItem(DRAFT_KEY); } catch(e) {}
+        // Always offer the featured-listing upsell now that a real property_id
+        // exists — there's no pre-publish checkbox anymore to pre-decide this;
+        // the agent chooses Feature/Skip in the modal (see handleFeaturedPayment).
+        setJustPublishedProperty(publishedProperty);
+        setShowFeaturedUpsell(true);
       }
     } catch (err) { setErrorMsg((err.message || 'Something went wrong. Please try again.') + (responseData ? ' | Server: ' + JSON.stringify(responseData) : '')); }
     finally { setSubmitting(false); }
@@ -2904,6 +2922,38 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
               <button onClick={function(){ setShowAgreementModal(false); }} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer' }}>Go Back and Edit</button>
               <button onClick={function(){ setShowAgreementModal(false); setPendingSubmit(true); fetch(`${API_URL}/api/legal/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user?.id, user_email: user?.email, agreement_type: 'agent_agreement', version: '1.0' }) }).catch(console.error); setTimeout(function(){ var f = document.getElementById('agent-upload-form'); if (f) f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }, 150); }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
                 I Accept - Publish Listing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showFeaturedUpsell && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '400px', width: '100%' }}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <span style={{ fontSize: '2rem' }}>👑</span>
+              <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '8px 0 4px 0' }}>Your listing is live!</h3>
+              <p style={{ color: '#64748b', fontSize: '0.84rem', margin: 0 }}>Want to feature it at the top of search results?</p>
+            </div>
+            <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', marginBottom: '16px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Featured Listing</p>
+              <p style={{ margin: '0 0 8px 0', color: '#64748b', fontSize: '0.78rem' }}>Appear at the top · More visibility · More inquiries</p>
+              <p style={{ margin: 0, fontWeight: '900', color: '#27ae60', fontSize: '1.2rem' }}>{currentConfig.symbol}{featuredPrice.toLocaleString()}</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() {
+                setShowFeaturedUpsell(false);
+                setJustPublishedProperty(null);
+                setUploadSuccess(true);
+                setTimeout(function() { setUploadSuccess(false); }, 5000);
+              }} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer', fontSize: '0.84rem' }}>
+                Skip for now
+              </button>
+              <button onClick={function() {
+                setShowFeaturedUpsell(false);
+                handleFeaturedPayment(justPublishedProperty);
+              }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '800', cursor: 'pointer', fontSize: '0.84rem' }}>
+                👑 Feature it — {currentConfig.symbol}{featuredPrice.toLocaleString()}
               </button>
             </div>
           </div>
@@ -3610,16 +3660,8 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                 </div>
               )}
             </div>
-          {!isEditMode && (
-            <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div><p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem' }}>Feature This Listing</p><p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem' }}>Get FEATURED badge for {currentConfig.symbol}{featuredPrice.toLocaleString()}</p></div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="checkbox" checked={wantsFeatured} onChange={e => setWantsFeatured(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }} /><span style={{ fontSize: '0.80rem', fontWeight: '600', color: '#92400e' }}>Yes</span></label>
-              </div>
-              {wantsFeatured && !featuredPaid && <button type="button" onClick={handleFeaturedPayment} style={{ width: '100%', padding: '11px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay {currentConfig.symbol}{featuredPrice.toLocaleString()} to Feature</button>}
-              {featuredPaid && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '8px', padding: '8px 12px' }}><span style={{ color: '#27ae60', fontWeight: '700' }}>v</span><span style={{ color: '#166534', fontSize: '0.82rem', fontWeight: '600' }}>Featured payment confirmed!</span></div>}
-            </div>
-          )}
+          {/* Featuring is now offered as a post-publish upsell modal (showFeaturedUpsell)
+              instead of a pre-publish checkbox — see handleSubmit's success branch. */}
           {!isEditMode && (
             <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '10px', padding: '14px 16px' }}>
               <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#166534', fontSize: '0.82rem' }}>By clicking "Agree and Publish" you confirm:</p>
@@ -3648,13 +3690,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   <p style={{ margin: 0, color: '#b91c1c', fontWeight: '700', fontSize: '0.88rem' }}>{limitError}</p>
                 </div>
               )}
-              <button type="submit" disabled={submitting || (wantsFeatured && !featuredPaid && !isEditMode)} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting || (wantsFeatured && !featuredPaid && !isEditMode) ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting || (wantsFeatured && !featuredPaid && !isEditMode) ? 'not-allowed' : 'pointer' }}>
+              <button type="submit" disabled={submitting} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
                 {submitting ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Agree and Publish Listing')}
               </button>
             </>
           )}
         </div>
-        {wantsFeatured && !featuredPaid && !isEditMode && localIsApproved && <p style={{ textAlign: 'center', color: '#f59e0b', fontSize: '0.76rem', margin: '-8px 0 0 0' }}>Please complete the featured listing payment above first</p>}
         </form>
         {plan.tier !== 'agency' && (
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', marginTop: '16px', border: '1px solid #e2e8f0' }}>
