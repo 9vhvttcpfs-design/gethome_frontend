@@ -13119,12 +13119,12 @@ function AppContent() {
   const searchBarAdBanner = adsEnabled && (
     <div style={{
       width: '100%',
-      height: '90px',
-      maxHeight: '90px',
+      height: '28px',
+      maxHeight: '28px',
       overflow: 'hidden',
-      margin: '8px 0',
+      margin: '4px 0',
       backgroundColor: '#f8fafc',
-      borderRadius: '8px',
+      borderRadius: '4px',
       border: '1px solid #e2e8f0',
     }}>
       <GoogleAd type='banner' />
