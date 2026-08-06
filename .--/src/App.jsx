@@ -7,7 +7,6 @@ import { formatLocalPrice } from './utils/pricing';
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
 });
-const ENABLE_ADS = false;
 const MASTER_ADMIN = "medibrhm07@gmail.com";
 const AD_CONFIG = { BANNER_ANDROID: 'ca-app-pub-3940256099942544/6300978111', BANNER_IOS: 'ca-app-pub-3940256099942544/2934735716' };
 const API_URL            = import.meta.env.VITE_API_URL;
@@ -2139,6 +2138,49 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     </div>
   );
 }
+// =========================================================
+// GOOGLE ADSENSE SLOT
+// Reads publisher/slot IDs from the settings loaded by the top-level App
+// (fetchGlobalSettings), so ads can be toggled/reconfigured from Admin
+// Settings without a redeploy. Renders nothing until globalSettings +
+// adsense_config are actually populated with real IDs.
+// =========================================================
+function GoogleAd({ type }) {
+  var config = (window.__gethomeSettings || {}).adsense_config || {};
+  var publisherId = config.publisher_id || '';
+  var slot = type === 'banner' ? (config.banner_slot || '') : (config.listing_slot || '');
+
+  useEffect(function() {
+    if (!publisherId || !slot) return;
+    try {
+      // Load the AdSense loader script once per publisher, then ask it to
+      // fill this <ins> block. Injected dynamically (rather than statically
+      // in index.html) because the publisher id itself comes from the
+      // backend, not from a build-time env var.
+      if (!document.getElementById('adsbygoogle-js')) {
+        var script = document.createElement('script');
+        script.id = 'adsbygoogle-js';
+        script.async = true;
+        script.crossOrigin = 'anonymous';
+        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + publisherId;
+        document.head.appendChild(script);
+      }
+      window.adsbygoogle = window.adsbygoogle || [];
+      window.adsbygoogle.push({});
+    } catch(e) {}
+  }, [publisherId, slot]);
+
+  if (!publisherId || !slot) return null;
+
+  return (
+    <ins className="adsbygoogle"
+      style={{ display: 'block' }}
+      data-ad-client={publisherId}
+      data-ad-slot={slot}
+      data-ad-format="auto"
+      data-full-width-responsive="true" />
+  );
+}
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
 function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
@@ -2154,15 +2196,25 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   const [upgrading, setUpgrading] = useState(null);
   const [activePromo, setActivePromo] = useState(null);
   useEffect(function() {
+    // Check from already-loaded global settings first (avoids a duplicate
+    // fetch + a flash of "no promo" while the App-level fetch is in flight).
+    var settingsData = window.__gethomeSettings || {};
+    var promoOn = settingsData.promo_enabled === 'true' || settingsData.promo_enabled === true;
+    var promoValid = settingsData.promo_details &&
+      (!settingsData.promo_details.expires_at || new Date(settingsData.promo_details.expires_at) > new Date());
+    if (promoOn && promoValid) {
+      setActivePromo(settingsData.promo_details);
+      return;
+    }
+    // Fallback: fetch fresh from API (covers first mount before App-level
+    // fetchGlobalSettings has populated window.__gethomeSettings).
     fetch(API_URL + '/api/settings').then(function(r) { return r.json(); }).then(function(data) {
-      var promoOn = data.promo_enabled === 'true' || data.promo_enabled === true;
-      var promoValid = data.promo_details &&
+      window.__gethomeSettings = Object.assign({}, window.__gethomeSettings || {}, data);
+      var on = data.promo_enabled === 'true' || data.promo_enabled === true;
+      var valid = data.promo_details &&
         (!data.promo_details.expires_at || new Date(data.promo_details.expires_at) > new Date());
-      if (promoOn && promoValid) {
-        setActivePromo(data.promo_details);
-      } else {
-        setActivePromo(null);
-      }
+      if (on && valid) setActivePromo(data.promo_details);
+      else setActivePromo(null);
     }).catch(function() {});
   }, []);
   const handleUpgrade = async (tierKey, amount) => {
@@ -2218,6 +2270,9 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
           {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
             var promoActive = !!activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey) &&
               (!activePromo.expires_at || new Date(activePromo.expires_at) > new Date());
+            if (activePromo && !promoActive) {
+              console.log('Plan key:', tierKey, '| promo applies_to:', activePromo.applies_to);
+            }
             var promoPrice = promoActive && activePromo.discount_percent > 0
               ? Math.round(tier.price * (1 - activePromo.discount_percent / 100))
               : null;
@@ -13062,11 +13117,15 @@ function AppContent() {
     try {
       var res = await fetch(API_URL + '/api/settings');
       var data = await res.json();
-      if (res.ok) setGlobalSettings(data);
+      console.log('Global settings loaded:', JSON.stringify(data));
+      if (res.ok) {
+        setGlobalSettings(data);
+        window.__gethomeSettings = data;
+      }
     } catch(e) { console.error('Global settings fetch error:', e.message); }
   };
   useEffect(function() {
-    if (!ENABLE_ADS || !adsEnabled) return;
+    if (!adsEnabled) return;
     async function initAdMob() { try { console.log('AdMob ready'); } catch(e) {} }
     initAdMob();
   }, [adsEnabled]);
@@ -14019,6 +14078,9 @@ function AppContent() {
                     ); })}
                   </div>
                 </div>
+                <div style={{ marginBottom: isMobile ? '24px' : '36px' }}>
+                  <GoogleAd type="banner" />
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div>
                     <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1rem' : '1.2rem', fontWeight: '700', margin: '0 0 3px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>All Rental Listings</h2>
@@ -14069,6 +14131,10 @@ function AppContent() {
                         </div>
                       )}
                     </>}
+                <div style={{ marginTop: isMobile ? '24px' : '36px' }}>
+                  <p style={{ margin: '0 0 6px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Advertisement</p>
+                  <GoogleAd type="listing" />
+                </div>
               </>
             )}
           </section>
