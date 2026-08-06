@@ -2223,12 +2223,16 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   // Single source of truth for "what does this tier cost right now" — used by
   // both the price display and the checkout payload so they never disagree.
   var getPromoPrice = function(tierKey) {
-    if (!activePromo) return null;
+    console.log('getPromoPrice called - activePromo:', JSON.stringify(activePromo), '| tierKey:', tierKey);
+    if (!activePromo) { console.log('No activePromo'); return null; }
     var appliesToThisPlan = activePromo.applies_to === 'all' || activePromo.applies_to === tierKey;
+    console.log('appliesToThisPlan:', appliesToThisPlan, '| applies_to:', activePromo.applies_to);
     if (!appliesToThisPlan) return null;
     if (!activePromo.discount_percent || activePromo.discount_percent <= 0) return null;
-    if (!isPromoValid(activePromo)) return null;
-    var basePrice = AGENT_TIERS[tierKey]?.price || 0;
+    if (!isPromoValid(activePromo)) { console.log('Promo not valid - expired'); return null; }
+    var basePrice = AGENT_TIERS[tierKey]?.price;
+    console.log('basePrice:', basePrice, '| discount:', activePromo.discount_percent);
+    if (!basePrice) return null;
     return Math.round(basePrice * (1 - activePromo.discount_percent / 100));
   };
   const handleUpgrade = async (tierKey, amount) => {
@@ -2789,8 +2793,21 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   });
   var subTier = plan.tier;
   var subEnd = plan.endDate;
+  // plan.isExpired already checks subscription_end/subscription_expires_at
+  // against "now" (see getAgentPlan above), so isExpired covers agents whose
+  // subscription_status is stuck on 'active' but whose end date has passed —
+  // no need to duplicate that date math here.
   var isExpired = plan.isExpired || subscriptionStatus === 'expired';
   var daysLeft = subEnd && !isExpired ? Math.ceil((subEnd - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+  // If the DB status wasn't flipped to 'expired' yet but the end date has
+  // already passed, sync local state so every other place reading
+  // subscriptionStatus (upgrade panel, badges, etc.) agrees it's expired too.
+  useEffect(function() {
+    if (plan.isExpired && subscriptionStatus === 'active') {
+      console.log('Subscription date expired but status still active - treating as expired');
+      setSubscriptionStatus('expired');
+    }
+  }, [plan.isExpired, subscriptionStatus]);
   var planColor = plan.colors;
   var goToUpgrade = function() {
     setPortalTab('listings');
@@ -3160,7 +3177,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         </>
       )}
       {(portalTab === 'listings' || !portalTab) && (
-      subscriptionStatus === 'expired' ? (
+      isExpired ? (
         /* ── Expired subscription gate ── */
         <div style={{ ...cardStyle, padding: isMobile ? '32px 20px' : '56px 48px', textAlign: 'center', maxWidth: '560px', margin: '0 auto' }}>
           <div style={{ width: '64px', height: '64px', borderRadius: '20px', backgroundColor: '#fef2f2', border: '2px solid #fca5a5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}><Lock size={28} color="#ef4444" /></div>
