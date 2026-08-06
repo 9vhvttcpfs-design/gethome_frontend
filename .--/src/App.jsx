@@ -2152,6 +2152,14 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   var isDisapproved = agentStatus === 'disapproved' || agentStatus === 'rejected';
   var isPending      = !canSubscribe && !isDisapproved;
   const [upgrading, setUpgrading] = useState(null);
+  const [activePromo, setActivePromo] = useState(null);
+  useEffect(function() {
+    fetch(API_URL + '/api/settings').then(function(r) { return r.json(); }).then(function(data) {
+      if (data.promo_enabled === 'true' && data.promo_details) {
+        setActivePromo(data.promo_details);
+      }
+    }).catch(function() {});
+  }, []);
   const handleUpgrade = async (tierKey) => {
     if (!canSubscribe) return;
     const tier = AGENT_TIERS[tierKey];
@@ -2203,13 +2211,46 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
-            return (<div key={tierKey} style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+            return (<div key={tierKey}>
+              {activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey) && (
+                !activePromo.expires_at || new Date(activePromo.expires_at) > new Date()
+              ) && (
+                <div style={{ backgroundColor: '#fef3c7', border: '1px solid #fde68a', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#92400e', fontSize: '0.88rem' }}>
+                    🎉 {activePromo.title}
+                  </p>
+                  <p style={{ margin: '0 0 6px 0', color: '#78350f', fontSize: '0.78rem' }}>{activePromo.description}</p>
+                  {activePromo.discount_percent > 0 && (
+                    <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: '#92400e', fontSize: '1rem' }}>
+                      {activePromo.discount_percent}% OFF
+                      <span style={{ marginLeft: '6px', textDecoration: 'line-through', fontWeight: '400', fontSize: '0.78rem', opacity: 0.7 }}>
+                        ₦{tier.price?.toLocaleString()}
+                      </span>
+                      <span style={{ marginLeft: '6px', fontSize: '1rem' }}>
+                        ₦{Math.round(tier.price * (1 - activePromo.discount_percent / 100)).toLocaleString()}
+                      </span>
+                    </p>
+                  )}
+                  {activePromo.promo_code && (
+                    <p style={{ margin: 0, fontSize: '0.74rem', color: '#78350f' }}>
+                      Use code: <strong>{activePromo.promo_code}</strong>
+                    </p>
+                  )}
+                  {activePromo.expires_at && (
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#92400e', opacity: 0.8 }}>
+                      Expires: {new Date(activePromo.expires_at).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              )}
+              <div style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
               <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
               <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
               <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
               <button onClick={() => handleUpgrade(tierKey)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
                 {upgrading === tierKey ? 'Processing...' : (currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`)}
               </button>
+              </div>
             </div>);
           })}
         </div>
@@ -3717,6 +3758,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
   const [settingsMsg, setSettingsMsg]                   = useState('');
   const [settingsSaving, setSettingsSaving]             = useState(false);
+  const [promoEnabled, setPromoEnabled]                 = useState(false);
+  const [promoDetails, setPromoDetails]                 = useState({ title: '', description: '', discount_percent: 0, promo_code: '', applies_to: 'premium', expires_at: '' });
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -3744,6 +3787,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.bank_details) setBankDetails(data.bank_details);
         if (data.loan_link) setLoanLink(data.loan_link);
         if (data.payment_whatsapp) setPaymentWhatsapp(data.payment_whatsapp);
+        if (data.promo_enabled) setPromoEnabled(data.promo_enabled === 'true');
+        if (data.promo_details) setPromoDetails(data.promo_details);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -7949,6 +7994,98 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     style={{ marginTop: '14px', width: '100%', padding: '11px', backgroundColor: settingsSaving ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
                     {settingsSaving ? 'Saving...' : 'Save Bank Details'}
                   </button>
+                </div>
+
+                {/* Agent Promotions */}
+                <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                    <div>
+                      <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Agent Promotions</h3>
+                      <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem' }}>Activate a discount or promo for agent subscriptions</p>
+                    </div>
+                    <button onClick={async function() {
+                      var token = localStorage.getItem('gh_token');
+                      var res = await fetch(API_URL + '/api/admin/settings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        body: JSON.stringify({ setting_key: 'promo_enabled', setting_value: promoEnabled ? 'false' : 'true' }),
+                      });
+                      if (res.ok) {
+                        setPromoEnabled(!promoEnabled);
+                        setSettingsMsg('Promo ' + (!promoEnabled ? 'activated' : 'deactivated'));
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      }
+                    }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: promoEnabled ? '#27ae60' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fff', position: 'absolute', top: '3px', left: promoEnabled ? '31px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+                    </button>
+                  </div>
+
+                  {promoEnabled && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Promo Title</label>
+                        <input type='text' placeholder='e.g. Launch Special Offer'
+                          value={promoDetails.title}
+                          onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { title: e.target.value }); }); }}
+                          style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Description</label>
+                        <input type='text' placeholder='e.g. Get 20% off your first month'
+                          value={promoDetails.description}
+                          onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { description: e.target.value }); }); }}
+                          style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Discount %</label>
+                          <input type='number' min='0' max='100' placeholder='20'
+                            value={promoDetails.discount_percent}
+                            onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { discount_percent: parseFloat(e.target.value) || 0 }); }); }}
+                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Promo Code (optional)</label>
+                          <input type='text' placeholder='LAUNCH20'
+                            value={promoDetails.promo_code}
+                            onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { promo_code: e.target.value.toUpperCase() }); }); }}
+                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Applies To</label>
+                          <select value={promoDetails.applies_to}
+                            onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { applies_to: e.target.value }); }); }}
+                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                            <option value='all'>All Plans</option>
+                            <option value='premium'>Premium Only</option>
+                            <option value='agency'>Agency Only</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Expires On</label>
+                          <input type='date'
+                            value={promoDetails.expires_at}
+                            onChange={function(e) { setPromoDetails(function(p) { return Object.assign({}, p, { expires_at: e.target.value }); }); }}
+                            style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
+                      </div>
+                      <button onClick={async function() {
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'promo_details', setting_json: promoDetails }),
+                          });
+                          if (!res.ok) throw new Error('Failed');
+                          setSettingsMsg('Promo details saved successfully');
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ width: '100%', padding: '10px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                        Save Promo Details
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Property Loan Link */}
