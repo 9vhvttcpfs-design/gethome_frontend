@@ -14685,20 +14685,35 @@ function AppContent() {
                       var isGhana = activeCountry && activeCountry.code === 'GH';
                       var priceText = tierKey === 'premium' ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500') : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
                       var isPrimary = tierKey === 'premium' || agentTier === 'premium';
+                      // Same promo calc as AgentUpgradePanel.getPromoPrice — keeps this
+                      // tab's pricing in sync with the Upload tab's upgrade panel instead
+                      // of showing a hardcoded price that ignores an active promo.
+                      var appliesToThisPlan = activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey);
+                      var promoPrice = (appliesToThisPlan && activePromo.discount_percent > 0 && isPromoValid(activePromo) && tier.price)
+                        ? Math.round(tier.price * (1 - activePromo.discount_percent / 100))
+                        : null;
                       return (
                         <div key={tierKey} style={{ ...cardStyle, padding: isMobile ? '22px 18px' : '28px 24px', textAlign: 'center', position: 'relative', border: isPrimary ? '2px solid #22c55e' : '1px solid #e8edf5', boxShadow: isPrimary ? '0 8px 32px rgba(34,197,94,0.12)' : cardStyle.boxShadow }}>
                           {isPrimary && <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#22c55e', color: '#fff', fontSize: '0.65rem', fontWeight: '800', padding: '4px 14px', borderRadius: '20px', whiteSpace: 'nowrap', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif", boxShadow: '0 3px 10px rgba(34,197,94,0.3)' }}>RECOMMENDED</div>}
                           <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 6px 0', fontSize: '1rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{tier.label}</p>
-                          <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{priceText}</p>
+                          {promoPrice ? (
+                            <p style={{ margin: '0 0 4px 0' }}>
+                              <span style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '0.9rem', marginRight: '6px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{priceText}</span>
+                              <span style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>₦{promoPrice.toLocaleString()}</span>
+                            </p>
+                          ) : (
+                            <p style={{ color: '#22c55e', fontWeight: '800', fontSize: '1.4rem', margin: '0 0 4px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{priceText}</p>
+                          )}
                           <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 20px 0', fontFamily: "'Inter', sans-serif" }}>Up to {tier.listingLimit} listings</p>
                           <button onClick={async function(){
                             var _tierKey = tierKey;
+                            var _promoPrice = promoPrice;
                             try {
                               var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                  amount: tier.price,
+                                  amount: _promoPrice || tier.price,
                                   customer_email: user.email,
                                   customer_name: user.email,
                                   purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[_tierKey],
@@ -14706,6 +14721,9 @@ function AppContent() {
                                     payment_type: 'subscription',
                                     agent_id: user.id,
                                     tier: _tierKey,
+                                    original_price: tier.price,
+                                    promo_price: _promoPrice,
+                                    promo_code: activePromo?.promo_code || null,
                                   },
                                 }),
                               });
@@ -14715,7 +14733,7 @@ function AppContent() {
                             } catch (err) {
                               alert('Error: ' + err.message);
                             }
-                          }} style={{ width: '100%', padding: '11px', backgroundColor: isPrimary ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: isPrimary ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>{agentTier === 'free' ? 'Upgrade to ' + tier.label : 'Renew ' + tier.label}</button>
+                          }} style={{ width: '100%', padding: '11px', backgroundColor: isPrimary ? '#22c55e' : '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.83rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: isPrimary ? '0 4px 14px rgba(34,197,94,0.28)' : 'none', transition: 'all 0.18s' }}>{agentTier === 'free' ? 'Upgrade to ' + tier.label : 'Renew ' + tier.label}{promoPrice ? <span style={{ marginLeft: '4px', fontWeight: '400' }}>({activePromo.discount_percent}% off)</span> : null}</button>
                         </div>
                       );
                     })}
