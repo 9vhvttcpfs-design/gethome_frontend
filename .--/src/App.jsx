@@ -2148,7 +2148,16 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
 function GoogleAd({ type }) {
   var config = (window.__gethomeSettings || {}).adsense_config || {};
   var publisherId = config.publisher_id || '';
-  var slot = type === 'banner' ? (config.banner_slot || '') : (config.listing_slot || '');
+  // 'mobile-banner' falls back to banner_slot if no dedicated mobile slot is
+  // configured yet, so the 320x50 placement still shows something on mobile
+  // rather than silently rendering nothing.
+  var slot = type === 'mobile-banner' ? (config.mobile_slot || config.banner_slot || '')
+    : type === 'banner' ? (config.banner_slot || '')
+    : (config.listing_slot || '');
+  var isFixedSize = type === 'banner' || type === 'mobile-banner';
+  var adStyle = type === 'mobile-banner' ? { display: 'inline-block', width: '320px', height: '50px' }
+    : type === 'banner' ? { display: 'inline-block', width: '468px', height: '60px' }
+    : { display: 'block' };
 
   useEffect(function() {
     if (!publisherId || !slot) return;
@@ -2174,11 +2183,11 @@ function GoogleAd({ type }) {
 
   return (
     <ins className="adsbygoogle"
-      style={{ display: 'block' }}
+      style={adStyle}
       data-ad-client={publisherId}
       data-ad-slot={slot}
-      data-ad-format="auto"
-      data-full-width-responsive="true" />
+      data-ad-format={isFixedSize ? 'fixed' : 'auto'}
+      data-full-width-responsive={isFixedSize ? 'false' : 'true'} />
   );
 }
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
@@ -2258,7 +2267,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
     <div id="agent-upgrade-panel" style={{ ...cardStyle, padding: isMobile ? '16px' : '24px', marginTop: '24px' }}>
       <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: isMobile ? '0.9rem' : '1rem' }}>{currentTier === 'free' ? 'Upgrade Your Agent Tier' : 'Renew Your Subscription'}</p>
       <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 16px 0' }}>Current plan: <strong style={{ color: '#27ae60' }}>{AGENT_TIERS[currentTier]?.label}</strong></p>
-      {activePromo && (
+      {activePromo ? (
         <div style={{
           background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
           borderRadius: '14px',
@@ -2294,6 +2303,10 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
               ⏰ Offer expires: {new Date(activePromo.expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
             </p>
           )}
+        </div>
+      ) : (
+        <div style={{ padding: '10px', backgroundColor: '#f1f5f9', borderRadius: '8px', marginBottom: '12px', fontSize: '0.76rem', color: '#94a3b8' }}>
+          No active promotion at the moment
         </div>
       )}
       {isAgencyAccount && (
@@ -2784,6 +2797,40 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   };
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+      {activePromo && (
+        <div style={{
+          backgroundColor: '#f59e0b',
+          color: '#fff',
+          padding: '8px 16px',
+          textAlign: 'center',
+          fontSize: '0.82rem',
+          fontWeight: '700',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '10px',
+          flexWrap: 'wrap',
+          borderRadius: '10px',
+          marginBottom: '16px',
+        }}>
+          <span>🎉 {activePromo.title}</span>
+          {activePromo.discount_percent > 0 && (
+            <span style={{ backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: '20px', padding: '2px 10px' }}>
+              {activePromo.discount_percent}% OFF
+            </span>
+          )}
+          {activePromo.promo_code && (
+            <span>Code: <strong>{activePromo.promo_code}</strong></span>
+          )}
+          <span onClick={goToUpgrade}
+            style={{ cursor: 'pointer', textDecoration: 'underline', fontWeight: '800' }}>
+            Upgrade now →
+          </span>
+        </div>
+      )}
       {uploadSuccess && (
         <div style={{
           position: 'fixed',
@@ -3613,20 +3660,15 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             </p>
           </div>
         )}
-        {activePromo && (
-          <div style={{ backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px 14px', marginTop: '12px', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '1.1rem' }}>🎉</span>
-            <div>
-              <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#92400e', fontSize: '0.82rem' }}>{activePromo.title} — {activePromo.discount_percent}% OFF</p>
-              <p style={{ margin: 0, color: '#78350f', fontSize: '0.74rem' }}>
-                {activePromo.description}
-                {activePromo.promo_code && ' · Code: ' + activePromo.promo_code}
-                <span onClick={goToUpgrade}
-                  style={{ color: '#d97706', fontWeight: '700', cursor: 'pointer', marginLeft: '6px' }}>
-                  Upgrade now →
-                </span>
-              </p>
-            </div>
+        {activePromo && (plan.tier === 'free' || !plan.isActive) && (
+          <div style={{ backgroundColor: '#fef3c7', borderRadius: '12px', padding: '12px 16px', marginTop: '12px', border: '1px solid #fde68a', cursor: 'pointer' }}
+            onClick={goToUpgrade}>
+            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#92400e', fontSize: '0.84rem' }}>
+              🎉 {activePromo.title} — {activePromo.discount_percent}% OFF
+            </p>
+            <p style={{ margin: 0, color: '#78350f', fontSize: '0.76rem' }}>
+              {activePromo.description} · Tap to upgrade →
+            </p>
           </div>
         )}
         <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} />
@@ -3870,6 +3912,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [adPublisherId, setAdPublisherId]               = useState('');
   const [adListingSlot, setAdListingSlot]               = useState('');
   const [adBannerSlot, setAdBannerSlot]                 = useState('');
+  const [adMobileSlot, setAdMobileSlot]                 = useState('');
   const [bankDetails, setBankDetails]                   = useState({ bank_name: '', account_number: '', account_name: '', bank_code: '' });
   const [loanLink, setLoanLink]                         = useState('https://creditdirect.ng/?ref=09077246534');
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
@@ -3905,6 +3948,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
           setAdPublisherId(data.adsense_config.publisher_id || '');
           setAdListingSlot(data.adsense_config.listing_slot || '');
           setAdBannerSlot(data.adsense_config.banner_slot || '');
+          setAdMobileSlot(data.adsense_config.mobile_slot || '');
         }
         if (data.bank_details) setBankDetails(data.bank_details);
         if (data.loan_link) setLoanLink(data.loan_link);
@@ -8082,10 +8126,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Banner Ad Unit ID (below search bar)</label>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Banner Ad Unit ID (468×60, above footer)</label>
                         <input type='text' placeholder='0987654321'
                           value={adBannerSlot}
                           onChange={function(e) { setAdBannerSlot(e.target.value.trim()); }}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Mobile Banner Slot ID (320×50)</label>
+                        <input type='text' placeholder='mobile ad unit ID'
+                          value={adMobileSlot}
+                          onChange={function(e) { setAdMobileSlot(e.target.value.trim()); }}
                           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
                       </div>
                       <button onClick={async function() {
@@ -8097,7 +8148,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                             body: JSON.stringify({
                               setting_key: 'adsense_config',
-                              setting_json: { publisher_id: adPublisherId, listing_slot: adListingSlot, banner_slot: adBannerSlot },
+                              setting_json: { publisher_id: adPublisherId, listing_slot: adListingSlot, banner_slot: adBannerSlot, mobile_slot: adMobileSlot },
                             }),
                           });
                           if (!res.ok) throw new Error('Failed to save');
@@ -13167,14 +13218,6 @@ function AppContent() {
     var valid = isPromoValid(globalSettings.promo_details);
     setActivePromo(on && valid ? globalSettings.promo_details : null);
   }, [globalSettings]);
-  // Single ad banner shown directly below the search/filter bar on the Rent, Sale
-  // and Shortlet tabs (above the listings grid). Defined once here and reused at
-  // each tab's insertion point so there is exactly one banner implementation.
-  const searchBarAdBanner = adsEnabled && (
-    <div style={{ width: '468px', height: '60px', maxWidth: '100%', overflow: 'hidden', margin: '4px auto' }}>
-      <GoogleAd type='banner' />
-    </div>
-  );
   const fetchGlobalSettings = async function() {
     try {
       var res = await fetch(API_URL + '/api/settings');
@@ -14073,7 +14116,6 @@ function AppContent() {
                 </div>
               </div>
             </div>
-            {searchBarAdBanner}
             {(searchQuery || filterCity !== 'All' || selectedPropertyType) ? (
               <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -14282,7 +14324,6 @@ function AppContent() {
                 </div>
               )}
             </div>
-            {searchBarAdBanner}
             {searchFiltered(saleProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
@@ -14408,7 +14449,6 @@ function AppContent() {
                 </div>
               )}
             </div>
-            {searchBarAdBanner}
             {searchFiltered(shortletProperties).length === 0
               ? (
                 <div style={{ ...cardStyle, textAlign: 'center', padding: isMobile ? '40px 20px' : '72px 48px' }}>
@@ -14627,6 +14667,29 @@ function AppContent() {
           </section>
         )}
       </div>
+      {/* Ad banner - sits just above footer */}
+      {(globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true) && (
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '8px 0',
+          backgroundColor: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+        }}>
+          {isMobile ? (
+            <div style={{ width: '320px', height: '50px', maxWidth: '100%', overflow: 'hidden' }}>
+              <GoogleAd type='mobile-banner' />
+            </div>
+          ) : (
+            <div style={{ width: '468px', height: '60px', maxWidth: '100%', overflow: 'hidden' }}>
+              <GoogleAd type='banner' />
+            </div>
+          )}
+        </div>
+      )}
+      {/* Footer starts here */}
       <footer style={{ background: 'linear-gradient(170deg, #0b1e35 0%, #060f1e 100%)', color: 'rgba(255,255,255,0.65)', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
         <div style={{ padding: isMobile ? '36px 4% 28px' : '60px 5% 40px', maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr 1fr 1.2fr', gap: isMobile ? '28px' : '40px', marginBottom: '40px' }}>
