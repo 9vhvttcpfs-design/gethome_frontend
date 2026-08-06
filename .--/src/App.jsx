@@ -2155,12 +2155,17 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   const [activePromo, setActivePromo] = useState(null);
   useEffect(function() {
     fetch(API_URL + '/api/settings').then(function(r) { return r.json(); }).then(function(data) {
-      if (data.promo_enabled === 'true' && data.promo_details) {
+      var promoOn = data.promo_enabled === 'true' || data.promo_enabled === true;
+      var promoValid = data.promo_details &&
+        (!data.promo_details.expires_at || new Date(data.promo_details.expires_at) > new Date());
+      if (promoOn && promoValid) {
         setActivePromo(data.promo_details);
+      } else {
+        setActivePromo(null);
       }
     }).catch(function() {});
   }, []);
-  const handleUpgrade = async (tierKey) => {
+  const handleUpgrade = async (tierKey, amount) => {
     if (!canSubscribe) return;
     const tier = AGENT_TIERS[tierKey];
     setUpgrading(tierKey);
@@ -2169,7 +2174,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: tier.price,
+          amount: amount || tier.price,
           customer_email: agentEmail,
           customer_name: agentEmail,
           purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[tierKey],
@@ -2211,10 +2216,13 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
+            var promoActive = !!activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey) &&
+              (!activePromo.expires_at || new Date(activePromo.expires_at) > new Date());
+            var promoPrice = promoActive && activePromo.discount_percent > 0
+              ? Math.round(tier.price * (1 - activePromo.discount_percent / 100))
+              : null;
             return (<div key={tierKey}>
-              {activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey) && (
-                !activePromo.expires_at || new Date(activePromo.expires_at) > new Date()
-              ) && (
+              {promoActive && (
                 <div style={{ backgroundColor: '#fef3c7', border: '1px solid #fde68a', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', textAlign: 'center' }}>
                   <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#92400e', fontSize: '0.88rem' }}>
                     🎉 {activePromo.title}
@@ -2247,8 +2255,20 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
               <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.9rem' }}>{tier.label}</p>
               <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
               <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
-              <button onClick={() => handleUpgrade(tierKey)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
-                {upgrading === tierKey ? 'Processing...' : (currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`)}
+              <button onClick={() => handleUpgrade(tierKey, promoPrice || tier.price)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+                {upgrading === tierKey ? 'Processing...' : (
+                  <>
+                    {currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`}
+                    {promoPrice && (
+                      <span style={{ marginLeft: '6px', fontWeight: '400' }}>
+                        — ₦{promoPrice.toLocaleString()}
+                        <span style={{ marginLeft: '4px', textDecoration: 'line-through', opacity: 0.7, fontSize: '0.76rem' }}>
+                          ₦{tier.price.toLocaleString()}
+                        </span>
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
               </div>
             </div>);
