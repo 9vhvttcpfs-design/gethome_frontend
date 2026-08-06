@@ -2182,6 +2182,20 @@ function GoogleAd({ type }) {
   );
 }
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
+// Single source of truth for "is this promo still running" — used everywhere
+// expires_at is checked. promo_details.expires_at comes from a date-only
+// <input type='date'> (e.g. '2026-08-10'), which `new Date(...)` parses as
+// UTC midnight. Nigeria (UTC+1) and Ghana (UTC+0) both sit at/ahead of UTC,
+// so comparing that directly against `new Date()` makes a promo read as
+// "expired" from the first hour of its intended last day. Parsing date-only
+// strings as end-of-day West Africa Time (UTC+1) fixes that off-by-a-day gap.
+var isPromoValid = function(promoDetails) {
+  if (!promoDetails) return false;
+  if (!promoDetails.expires_at) return true; // no expiry set = always valid
+  var expiryStr = promoDetails.expires_at;
+  var expiryDate = expiryStr.length === 10 ? new Date(expiryStr + 'T23:59:59+01:00') : new Date(expiryStr);
+  return expiryDate > new Date();
+};
 function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus, activePromo }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
@@ -2204,7 +2218,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
     var appliesToThisPlan = activePromo.applies_to === 'all' || activePromo.applies_to === tierKey;
     if (!appliesToThisPlan) return null;
     if (!activePromo.discount_percent || activePromo.discount_percent <= 0) return null;
-    if (activePromo.expires_at && new Date(activePromo.expires_at) <= new Date()) return null;
+    if (!isPromoValid(activePromo)) return null;
     var basePrice = AGENT_TIERS[tierKey]?.price || 0;
     return Math.round(basePrice * (1 - activePromo.discount_percent / 100));
   };
@@ -8158,8 +8172,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 </div>
                 )}
 
-                {/* Agent Promotions — super admin only */}
-                {isSuperAdmin && (
+                {/* Agent Promotions — visible to all admins */}
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <div>
@@ -8250,7 +8263,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   )}
                 </div>
-                )}
 
                 {/* Property Loan Link — super admin only */}
                 {isSuperAdmin && (
@@ -13152,15 +13164,14 @@ function AppContent() {
   const [activePromo, setActivePromo] = useState(null);
   useEffect(function() {
     var on = globalSettings.promo_enabled === 'true' || globalSettings.promo_enabled === true;
-    var valid = globalSettings.promo_details &&
-      (!globalSettings.promo_details.expires_at || new Date(globalSettings.promo_details.expires_at) > new Date());
+    var valid = isPromoValid(globalSettings.promo_details);
     setActivePromo(on && valid ? globalSettings.promo_details : null);
   }, [globalSettings]);
   // Single ad banner shown directly below the search/filter bar on the Rent, Sale
   // and Shortlet tabs (above the listings grid). Defined once here and reused at
   // each tab's insertion point so there is exactly one banner implementation.
   const searchBarAdBanner = adsEnabled && (
-    <div style={{ width: '100%', height: '3px', maxHeight: '3px', overflow: 'hidden', margin: '0', backgroundColor: '#e2e8f0' }}>
+    <div style={{ width: '468px', height: '60px', maxWidth: '100%', overflow: 'hidden', margin: '4px auto' }}>
       <GoogleAd type='banner' />
     </div>
   );
@@ -13168,12 +13179,12 @@ function AppContent() {
     try {
       var res = await fetch(API_URL + '/api/settings');
       var data = await res.json();
-      console.log('Global settings loaded:', JSON.stringify(data));
       if (res.ok) {
         setGlobalSettings(data);
         window.__gethomeSettings = data;
+        console.log('Settings refreshed:', new Date().toLocaleTimeString());
       }
-    } catch(e) { console.error('Global settings fetch error:', e.message); }
+    } catch(e) { console.error('Settings fetch error:', e.message); }
   };
   useEffect(function() {
     if (!adsEnabled) return;
@@ -13194,8 +13205,12 @@ function AppContent() {
     if (window.__hideSplash) window.__hideSplash();
     // Wake up Render backend
     fetch(`${API_URL}/`).catch(function(){});
-    // Load app-wide settings (ads toggle, GetHome bank details, loan link, etc.)
+    // Load app-wide settings (ads toggle, GetHome bank details, loan link, promo, etc.)
+    // and keep polling so changes an admin makes (e.g. flipping a promo on)
+    // reach sessions that were already open, without requiring a hard reload.
     fetchGlobalSettings();
+    var settingsInterval = setInterval(fetchGlobalSettings, 5 * 60 * 1000); // every 5 minutes
+    return function() { clearInterval(settingsInterval); };
   }, []);
   const [user, setUser]                         = useState(null);
   const [authChecked, setAuthChecked]           = useState(false);
