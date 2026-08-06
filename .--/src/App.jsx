@@ -2182,7 +2182,7 @@ function GoogleAd({ type }) {
   );
 }
 var AGENT_TIER_NAMES = { premium: 'Premium', agency: 'Agency' };
-function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus }) {
+function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus, activePromo }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
@@ -2194,29 +2194,9 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   var isDisapproved = agentStatus === 'disapproved' || agentStatus === 'rejected';
   var isPending      = !canSubscribe && !isDisapproved;
   const [upgrading, setUpgrading] = useState(null);
-  const [activePromo, setActivePromo] = useState(null);
-  useEffect(function() {
-    // Check from already-loaded global settings first (avoids a duplicate
-    // fetch + a flash of "no promo" while the App-level fetch is in flight).
-    var settingsData = window.__gethomeSettings || {};
-    var promoOn = settingsData.promo_enabled === 'true' || settingsData.promo_enabled === true;
-    var promoValid = settingsData.promo_details &&
-      (!settingsData.promo_details.expires_at || new Date(settingsData.promo_details.expires_at) > new Date());
-    if (promoOn && promoValid) {
-      setActivePromo(settingsData.promo_details);
-      return;
-    }
-    // Fallback: fetch fresh from API (covers first mount before App-level
-    // fetchGlobalSettings has populated window.__gethomeSettings).
-    fetch(API_URL + '/api/settings').then(function(r) { return r.json(); }).then(function(data) {
-      window.__gethomeSettings = Object.assign({}, window.__gethomeSettings || {}, data);
-      var on = data.promo_enabled === 'true' || data.promo_enabled === true;
-      var valid = data.promo_details &&
-        (!data.promo_details.expires_at || new Date(data.promo_details.expires_at) > new Date());
-      if (on && valid) setActivePromo(data.promo_details);
-      else setActivePromo(null);
-    }).catch(function() {});
-  }, []);
+  // activePromo is passed down from the App root (single source of truth —
+  // see the App-level activePromo effect) so this panel, the Agents tab
+  // header, and the Upload Listings tab never disagree about promo state.
   // Single source of truth for "what does this tier cost right now" — used by
   // both the price display and the checkout payload so they never disagree.
   var getPromoPrice = function(tierKey) {
@@ -2435,7 +2415,7 @@ function RenewalBanner({ user, agentTier, isMobile }) {
     </div>
   );
 }
-function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished, onListingUpdated, onListingDeleted }) {
+function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onListingPublished, onListingUpdated, onListingDeleted }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry, fmtCurrency, fmtListingPrice, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
   const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
@@ -3619,7 +3599,23 @@ function AgentUploadPortal({ user, isApproved, allProperties, onListingPublished
             </p>
           </div>
         )}
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} />
+        {activePromo && (
+          <div style={{ backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px 14px', marginTop: '12px', border: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.1rem' }}>🎉</span>
+            <div>
+              <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#92400e', fontSize: '0.82rem' }}>{activePromo.title} — {activePromo.discount_percent}% OFF</p>
+              <p style={{ margin: 0, color: '#78350f', fontSize: '0.74rem' }}>
+                {activePromo.description}
+                {activePromo.promo_code && ' · Code: ' + activePromo.promo_code}
+                <span onClick={goToUpgrade}
+                  style={{ color: '#d97706', fontWeight: '700', cursor: 'pointer', marginLeft: '6px' }}>
+                  Upgrade now →
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -8049,8 +8045,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 </div>
 
-                {/* AdSense Configuration */}
-                {adsEnabled && (
+                {/* AdSense Configuration — super admin only */}
+                {isSuperAdmin && adsEnabled && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                     <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Google AdSense Configuration</h3>
                     <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
@@ -8101,7 +8097,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 )}
 
-                {/* Bank Details */}
+                {/* Bank Details — super admin only */}
+                {isSuperAdmin && (
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                   <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>GetHome Bank Account</h3>
                   <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>Customers make property deposits to this account. This shows in the fee breakdown modal.</p>
@@ -8159,8 +8156,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     {settingsSaving ? 'Saving...' : 'Save Bank Details'}
                   </button>
                 </div>
+                )}
 
-                {/* Agent Promotions */}
+                {/* Agent Promotions — super admin only */}
+                {isSuperAdmin && (
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <div>
@@ -8251,8 +8250,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   )}
                 </div>
+                )}
 
-                {/* Property Loan Link */}
+                {/* Property Loan Link — super admin only */}
+                {isSuperAdmin && (
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                   <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Property Loan Link</h3>
                   <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>This link appears in the fee breakdown as Apply for Property Loan. Currently points to Credit Direct with your affiliate code.</p>
@@ -8276,8 +8277,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     Save Loan Link
                   </button>
                 </div>
+                )}
 
-                {/* Payment WhatsApp Number */}
+                {/* Payment WhatsApp Number — super admin only */}
+                {isSuperAdmin && (
                 <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                   <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Payment Notification WhatsApp</h3>
                   <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>GetHome receives a WhatsApp message at this number whenever a customer makes a property payment.</p>
@@ -8301,6 +8304,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     Save WhatsApp Number
                   </button>
                 </div>
+                )}
 
                 {/* Admin Management — visible only to the super admin */}
                 {isSuperAdmin && (
@@ -13142,20 +13146,21 @@ function AppContent() {
   // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
   const [globalSettings, setGlobalSettings]     = useState({});
   const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
+  // Active promo (if any) — single source of truth derived from globalSettings so
+  // every agent-facing surface (Agents tab header, Upload Listings tab, Upgrade
+  // panel) agrees on whether a promo is live, without each fetching separately.
+  const [activePromo, setActivePromo] = useState(null);
+  useEffect(function() {
+    var on = globalSettings.promo_enabled === 'true' || globalSettings.promo_enabled === true;
+    var valid = globalSettings.promo_details &&
+      (!globalSettings.promo_details.expires_at || new Date(globalSettings.promo_details.expires_at) > new Date());
+    setActivePromo(on && valid ? globalSettings.promo_details : null);
+  }, [globalSettings]);
   // Single ad banner shown directly below the search/filter bar on the Rent, Sale
   // and Shortlet tabs (above the listings grid). Defined once here and reused at
   // each tab's insertion point so there is exactly one banner implementation.
   const searchBarAdBanner = adsEnabled && (
-    <div style={{
-      width: '100%',
-      height: '28px',
-      maxHeight: '28px',
-      overflow: 'hidden',
-      margin: '4px 0',
-      backgroundColor: '#f8fafc',
-      borderRadius: '4px',
-      border: '1px solid #e2e8f0',
-    }}>
+    <div style={{ width: '100%', height: '3px', maxHeight: '3px', overflow: 'hidden', margin: '0', backgroundColor: '#e2e8f0' }}>
       <GoogleAd type='banner' />
     </div>
   );
@@ -13757,6 +13762,7 @@ function AppContent() {
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         * { box-sizing: border-box; }
         body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif !important; background: #f0f4f8 !important; color: #0f172a !important; }
         h1, h2, h3, h4, h5, h6 { font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif !important; letter-spacing: -0.02em; }
@@ -14483,7 +14489,7 @@ function AppContent() {
               </div>
             )}
             {user && isAgent
-              ? <AgentUploadPortal user={user} isApproved={isApproved} allProperties={properties} onListingPublished={function(p){ setProperties(prev => [p, ...prev]); }} onListingUpdated={function(p){ setProperties(prev => prev.map(x => x.id === p.id ? p : x)); }} onListingDeleted={function(id){ setProperties(prev => prev.filter(x => x.id !== id)); }} />
+              ? <AgentUploadPortal user={user} isApproved={isApproved} allProperties={properties} activePromo={activePromo} onListingPublished={function(p){ setProperties(prev => [p, ...prev]); }} onListingUpdated={function(p){ setProperties(prev => prev.map(x => x.id === p.id ? p : x)); }} onListingDeleted={function(id){ setProperties(prev => prev.filter(x => x.id !== id)); }} />
               : <div style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '440px', margin: '0 auto' }}><h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Agent Access Required</h2><p style={{ color: '#64748b', margin: '0 0 24px 0', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>Sign in or create an agent account to upload listings.</p><InlineAuthForm actionLabel="access the upload portal" onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); navigateTab('upload'); }} /></div>
             }
           </section>
@@ -14507,6 +14513,11 @@ function AppContent() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '4px 14px', marginBottom: '14px' }}>
                 <span style={{ color: '#16a34a', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{user && isApproved ? 'YOUR PLAN' : 'FOR AGENTS'}</span>
               </div>
+              {activePromo && (
+                <span style={{ backgroundColor: '#f59e0b', color: '#fff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.62rem', fontWeight: '800', marginLeft: '6px', marginBottom: '14px', display: 'inline-block', animation: 'pulse 2s infinite' }}>
+                  {activePromo.discount_percent}% OFF
+                </span>
+              )}
               <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.2rem' : '1.7rem', fontWeight: '800', margin: '0 0 12px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.6px', lineHeight: '1.15' }}>
                 {user && isApproved ? 'Manage Your Agent Plan' : 'List Your Properties on GetHome'}
               </h2>
