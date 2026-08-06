@@ -2442,10 +2442,14 @@ function RenewalBanner({ user, agentTier, isMobile }) {
     </div>
   );
 }
-function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onListingPublished, onListingUpdated, onListingDeleted }) {
+function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onListingPublished, onListingUpdated, onListingDeleted, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry, fmtCurrency, fmtListingPrice, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
   const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
+  // Featured listing fee is admin-configurable (Naira only); other currencies keep their local default.
+  const featuredPrice = activeCountry.name === 'Nigeria'
+    ? parseFloat(globalSettings.featured_listing_fee || currentConfig.featured)
+    : currentConfig.featured;
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [pendingSubmit, setPendingSubmit]           = useState(false);
   const [wantsFeatured, setWantsFeatured]           = useState(false);
@@ -2623,7 +2627,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: currentConfig.featured,
+          amount: featuredPrice,
           customer_email: user.email,
           customer_name: user.email,
           purpose: 'Featured Listing - ' + (form.title || 'New Listing'),
@@ -3592,10 +3596,10 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           {!isEditMode && (
             <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: '12px', padding: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div><p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem' }}>Feature This Listing</p><p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem' }}>Get FEATURED badge for {currentConfig.symbol}{currentConfig.featured.toLocaleString()}</p></div>
+                <div><p style={{ margin: '0 0 3px 0', fontWeight: '700', color: '#92400e', fontSize: '0.88rem' }}>Feature This Listing</p><p style={{ margin: 0, color: '#b45309', fontSize: '0.76rem' }}>Get FEATURED badge for {currentConfig.symbol}{featuredPrice.toLocaleString()}</p></div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}><input type="checkbox" checked={wantsFeatured} onChange={e => setWantsFeatured(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#f59e0b' }} /><span style={{ fontSize: '0.80rem', fontWeight: '600', color: '#92400e' }}>Yes</span></label>
               </div>
-              {wantsFeatured && !featuredPaid && <button type="button" onClick={handleFeaturedPayment} style={{ width: '100%', padding: '11px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay {currentConfig.symbol}{currentConfig.featured.toLocaleString()} to Feature</button>}
+              {wantsFeatured && !featuredPaid && <button type="button" onClick={handleFeaturedPayment} style={{ width: '100%', padding: '11px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay {currentConfig.symbol}{featuredPrice.toLocaleString()} to Feature</button>}
               {featuredPaid && <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '8px', padding: '8px 12px' }}><span style={{ color: '#27ae60', fontWeight: '700' }}>v</span><span style={{ color: '#166534', fontSize: '0.82rem', fontWeight: '600' }}>Featured payment confirmed!</span></div>}
             </div>
           )}
@@ -3920,6 +3924,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [settingsSaving, setSettingsSaving]             = useState(false);
   const [promoEnabled, setPromoEnabled]                 = useState(false);
   const [promoDetails, setPromoDetails]                 = useState({ title: '', description: '', discount_percent: 0, promo_code: '', applies_to: 'premium', expires_at: '' });
+  const [featuredFeeInput, setFeaturedFeeInput]         = useState('5000');
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -3955,6 +3960,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.payment_whatsapp) setPaymentWhatsapp(data.payment_whatsapp);
         if (data.promo_enabled) setPromoEnabled(data.promo_enabled === 'true');
         if (data.promo_details) setPromoDetails(data.promo_details);
+        if (data.featured_listing_fee) setFeaturedFeeInput(data.featured_listing_fee);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -8367,6 +8373,50 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     Save WhatsApp Number
                   </button>
                 </div>
+                )}
+
+                {/* Featured Listing Fee — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Featured Listing Fee</h3>
+                    <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Amount agents pay to feature their listing at the top of search results. Currently: ₦{parseFloat(appSettings.featured_listing_fee || 5000).toLocaleString()}
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600', fontSize: '0.84rem' }}>₦</span>
+                        <input type='number' min='0'
+                          placeholder='5000'
+                          value={featuredFeeInput}
+                          onChange={function(e) { setFeaturedFeeInput(e.target.value); }}
+                          style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <button onClick={async function() {
+                        if (!featuredFeeInput || parseFloat(featuredFeeInput) < 0) {
+                          setSettingsMsg('Error: Please enter a valid amount');
+                          return;
+                        }
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({
+                              setting_key: 'featured_listing_fee',
+                              setting_value: String(parseFloat(featuredFeeInput)),
+                            }),
+                          });
+                          var data = await res.json();
+                          if (!res.ok) throw new Error(data.error || 'Failed');
+                          setSettingsMsg('Featured listing fee updated to ₦' + parseFloat(featuredFeeInput).toLocaleString());
+                          fetchAppSettings(); // refresh so current price shows immediately
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ flexShrink: 0, padding: '10px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
+                        Update Fee
+                      </button>
+                    </div>
+                  </div>
                 )}
 
                 {/* Admin Management — visible only to the super admin */}
@@ -14544,7 +14594,7 @@ function AppContent() {
               </div>
             )}
             {user && isAgent
-              ? <AgentUploadPortal user={user} isApproved={isApproved} allProperties={properties} activePromo={activePromo} onListingPublished={function(p){ setProperties(prev => [p, ...prev]); }} onListingUpdated={function(p){ setProperties(prev => prev.map(x => x.id === p.id ? p : x)); }} onListingDeleted={function(id){ setProperties(prev => prev.filter(x => x.id !== id)); }} />
+              ? <AgentUploadPortal user={user} isApproved={isApproved} allProperties={properties} activePromo={activePromo} globalSettings={globalSettings} onListingPublished={function(p){ setProperties(prev => [p, ...prev]); }} onListingUpdated={function(p){ setProperties(prev => prev.map(x => x.id === p.id ? p : x)); }} onListingDeleted={function(id){ setProperties(prev => prev.filter(x => x.id !== id)); }} />
               : <div style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '440px', margin: '0 auto' }}><h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.4px' }}>Agent Access Required</h2><p style={{ color: '#64748b', margin: '0 0 24px 0', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>Sign in or create an agent account to upload listings.</p><InlineAuthForm actionLabel="access the upload portal" onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); navigateTab('upload'); }} /></div>
             }
           </section>
