@@ -2318,11 +2318,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
             </p>
           )}
         </div>
-      ) : (
-        <div style={{ padding: '10px', backgroundColor: '#f1f5f9', borderRadius: '8px', marginBottom: '12px', fontSize: '0.76rem', color: '#94a3b8' }}>
-          No active promotion at the moment
-        </div>
-      )}
+      ) : null}
       {isAgencyAccount && (
         <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #bfdbfe' }}>
           <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.5 }}>
@@ -2682,7 +2678,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   );
   const handleSubmit = async (e) => {
     e.preventDefault();
-    var commissionRequired = (globalSettings.agency_commission_enabled === 'true') &&
+    var commissionRequired = (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) &&
       (user?.agent_type === 'agency');
     if (commissionRequired && !commissionAgreed) {
       alert('Please read and agree to the commission policy before publishing.');
@@ -3545,7 +3541,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                 })}
               </div>
             )}
-            {form.agency_fee ? (
+            {form.agency_fee && (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) ? (
               <div style={{ backgroundColor: '#f0fff4', border: '1px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginTop: '8px' }}>
                 <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#166534', fontSize: '0.82rem' }}>GetHome Commission (2.5% of agency fee)</p>
                 <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#166534', fontSize: '0.9rem' }}>{fmtNGN(Math.round(parseFloat(form.agency_fee) * COMMISSION_RATE))}</p>
@@ -3723,7 +3719,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   <p style={{ margin: 0, color: '#b91c1c', fontWeight: '700', fontSize: '0.88rem' }}>{limitError}</p>
                 </div>
               )}
-              {(globalSettings.agency_commission_enabled === 'true') &&
+              {(globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) &&
                (user?.agent_type === 'agency') && (
                 <div style={{ backgroundColor: '#fff7ed', borderRadius: '12px', padding: '14px 16px', marginBottom: '14px', border: '1.5px solid #fed7aa' }}>
                   <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.84rem' }}>
@@ -4052,6 +4048,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [promoDetails, setPromoDetails]                 = useState({ title: '', description: '', discount_percent: 0, promo_code: '', applies_to: 'premium', expires_at: '' });
   const [featuredFeeInput, setFeaturedFeeInput]         = useState('5000');
   const [agencyCommissionEnabled, setAgencyCommissionEnabled] = useState(false);
+  const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
+  const [saCommissionRate, setSaCommissionRate]         = useState('5');
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -4091,6 +4089,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.agency_commission_enabled !== undefined) {
           setAgencyCommissionEnabled(data.agency_commission_enabled === 'true' || data.agency_commission_enabled === true);
         }
+        if (data.gha_commission_rate) setGhaCommissionRate(data.gha_commission_rate);
+        if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -8702,6 +8702,94 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: agencyCommissionEnabled ? '#27ae60' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
                         <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fff', position: 'absolute', top: '3px', left: agencyCommissionEnabled ? '31px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Staff Commission Rates — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Staff Commission Rates</h3>
+                    <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Set the percentage commission earned by GHAs and SAs on each agent subscription payment. Changes apply to all future payments.
+                    </p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
+                          GHA Commission Rate
+                          <span style={{ marginLeft: '6px', color: '#94a3b8', fontWeight: '400' }}>Current: {ghaCommissionRate}%</span>
+                        </label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <input type='number' min='0' max='50' step='0.5' placeholder='5'
+                              value={ghaCommissionRate}
+                              onChange={function(e) { setGhaCommissionRate(e.target.value); }}
+                              style={{ width: '100%', padding: '9px 32px 9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>%</span>
+                          </div>
+                          <button onClick={async function() {
+                            try {
+                              var token = localStorage.getItem('gh_token');
+                              var res = await fetch(API_URL + '/api/admin/settings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                body: JSON.stringify({ setting_key: 'gha_commission_rate', setting_value: String(ghaCommissionRate) }),
+                              });
+                              if (!res.ok) throw new Error('Failed');
+                              setSettingsMsg('GHA commission rate updated to ' + ghaCommissionRate + '%');
+                              fetchAppSettings();
+                              setTimeout(function() { setSettingsMsg(''); }, 3000);
+                            } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                          }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                            Save
+                          </button>
+                        </div>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>
+                          GHA earns {ghaCommissionRate}% of each agent subscription (e.g. ₦{Math.round(8500 * (parseFloat(ghaCommissionRate) || 5) / 100).toLocaleString()} per Premium agent)
+                        </p>
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: '700', color: '#374151', marginBottom: '6px' }}>
+                          SA Commission Rate
+                          <span style={{ marginLeft: '6px', color: '#94a3b8', fontWeight: '400' }}>Current: {saCommissionRate}%</span>
+                        </label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <div style={{ position: 'relative', flex: 1 }}>
+                            <input type='number' min='0' max='50' step='0.5' placeholder='5'
+                              value={saCommissionRate}
+                              onChange={function(e) { setSaCommissionRate(e.target.value); }}
+                              style={{ width: '100%', padding: '9px 32px 9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                            <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>%</span>
+                          </div>
+                          <button onClick={async function() {
+                            try {
+                              var token = localStorage.getItem('gh_token');
+                              var res = await fetch(API_URL + '/api/admin/settings', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                body: JSON.stringify({ setting_key: 'sa_commission_rate', setting_value: String(saCommissionRate) }),
+                              });
+                              if (!res.ok) throw new Error('Failed');
+                              setSettingsMsg('SA commission rate updated to ' + saCommissionRate + '%');
+                              fetchAppSettings();
+                              setTimeout(function() { setSettingsMsg(''); }, 3000);
+                            } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                          }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                            Save
+                          </button>
+                        </div>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>
+                          SA earns {saCommissionRate}% of each agent subscription (e.g. ₦{Math.round(8500 * (parseFloat(saCommissionRate) || 5) / 100).toLocaleString()} per Premium agent)
+                        </p>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '14px', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                      <p style={{ margin: 0, fontSize: '0.74rem', color: '#1e40af' }}>
+                        ℹ Rate changes apply to <strong>future payments only</strong> — existing earnings rows are not retroactively updated.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -14043,7 +14131,7 @@ function AppContent() {
     return pCountry === activeName || pCountry === activeCode || pCountry.includes(activeName);
   });
   const featuredProperties = countryProperties.filter(function(p) {
-    return p.is_featured === true;
+    return !!p.is_featured;
   });
   const rentProperties = countryProperties.filter(function(p) {
     var pur = (p.purpose || '').toLowerCase().trim();
@@ -14449,7 +14537,7 @@ function AppContent() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: isMobile ? '20px' : '28px', marginTop: '22px', flexWrap: 'wrap' }}>
-                  {[{ value: countryProperties.length, label: 'Verified Listings' }, { value: '6+', label: 'Cities Covered' }, { value: '100%', label: 'Fee Transparent' }].map(function(s){ return <div key={s.label}><span style={{ fontSize: isMobile ? '1.15rem' : '1.4rem', fontWeight: '800', color: '#22c55e', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{s.value}</span><span style={{ fontSize: '0.72rem', display: 'block', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontFamily: "'Inter', sans-serif", letterSpacing: '0.02em' }}>{s.label}</span></div>; })}
+                  {[{ value: countryProperties.length, label: 'Verified Listings' }, { value: '20+', label: 'Cities Covered' }, { value: '100%', label: 'Fee Transparent' }].map(function(s){ return <div key={s.label}><span style={{ fontSize: isMobile ? '1.15rem' : '1.4rem', fontWeight: '800', color: '#22c55e', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>{s.value}</span><span style={{ fontSize: '0.72rem', display: 'block', color: 'rgba(255,255,255,0.45)', marginTop: '2px', fontFamily: "'Inter', sans-serif", letterSpacing: '0.02em' }}>{s.label}</span></div>; })}
                 </div>
               </div>
             </div>
