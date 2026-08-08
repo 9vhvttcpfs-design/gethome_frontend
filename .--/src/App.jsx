@@ -2502,7 +2502,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     // has none of the subscription_* columns. Fetched in parallel and merged.
     return Promise.all([
       supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
-      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited').eq('id', user.id).single(),
     ])
       .then(function(results) {
         var agentData = results[0] && results[0].data;
@@ -2513,6 +2513,9 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             subscription_tier: (subData && subData.subscription_tier) || prev?.subscription_tier || 'free',
             subscription_status: (subData && subData.subscription_status) || prev?.subscription_status || 'inactive',
             subscription_end: (subData && subData.subscription_end) || prev?.subscription_end || null,
+            // Fresh DB read — takes priority over user.is_unlimited (set at login,
+            // can go stale if admin grants/revokes it mid-session).
+            is_unlimited: (subData && subData.is_unlimited) === true,
           });
         });
       })
@@ -2689,7 +2692,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     const limit = AGENT_TIERS[agentTier]?.listingLimit || 3;
     // Admins and unlimited agents skip the cap check
     const _isMasterAdmin = user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
-    if (!isEditMode && user?.role !== 'admin' && !user?.is_unlimited && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
+    if (!isEditMode && user?.role !== 'admin' && !hasUnlimitedListings && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
       setErrorMsg(`You have reached your ${AGENT_TIERS[agentTier]?.label} plan limit of ${limit} listings. Please upgrade.`);
       return;
     }
@@ -2853,6 +2856,9 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     }
   }, [plan.isExpired, subscriptionStatus]);
   var planColor = plan.colors;
+  // Fresh agentProfile read wins over the session-cached user.is_unlimited —
+  // an admin grant/revoke mid-session should take effect without re-login.
+  var hasUnlimitedListings = agentProfile?.is_unlimited === true || user?.is_unlimited === true;
   var goToUpgrade = function() {
     setPortalTab('listings');
     setTimeout(function() {
@@ -3024,6 +3030,14 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           )}
         </div>
       </div>
+      {hasUnlimitedListings && (
+        <div style={{ backgroundColor: '#faf5ff', borderRadius: '10px', padding: '8px 14px', marginBottom: '16px', border: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontWeight: '900', color: '#7e22ce', fontSize: '1rem' }}>∞</span>
+          <p style={{ margin: 0, fontSize: '0.78rem', color: '#7e22ce', fontWeight: '700' }}>
+            You have unlimited listing uploads — granted by GetHome
+          </p>
+        </div>
+      )}
       {/* Portal sub-tabs */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {[['listings', 'My Listings'], ['verify', 'Complete Profile'], ['account', 'Account Details']].map(function([t, label]) {
@@ -4053,6 +4067,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [agencyCommissionEnabled, setAgencyCommissionEnabled] = useState(false);
   const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
+  const [inspectionTiers, setInspectionTiers]           = useState({
+    tier1: { min: 1, max: 10, fee: 1200 },
+    tier2: { min: 11, max: 20, fee: 1500 },
+    tier3: { min: 21, max: null, fee: 1700 },
+  });
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -4094,6 +4113,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         }
         if (data.gha_commission_rate) setGhaCommissionRate(data.gha_commission_rate);
         if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
+        if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -5213,6 +5233,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agent.sa_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>SA: {agent.sa_code}</span>}
                                 {agent.gha_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>GHA: {agent.gha_code}</span>}
+                                {agent.is_unlimited && (
+                                  <span style={{ backgroundColor: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
+                                    ∞ UNLIMITED
+                                  </span>
+                                )}
                               </div>
                               <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '5px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
                                 <button onClick={function(){ setExpandedAgent(isExpanded ? null : agent.id); }}
@@ -5243,6 +5268,38 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <button onClick={function() { setManualUpgradeAgent(agent); setManualUpgradeTier('premium'); }}
                                     style={{ backgroundColor: 'transparent', border: '1px solid #27ae60', color: '#27ae60', borderRadius: '6px', padding: '4px 10px', fontSize: '0.70rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
                                     ⬆ Upgrade
+                                  </button>
+                                )}
+                                {agentSubTab === 'approved' && !isDisapproved && (
+                                  <button onClick={async function() {
+                                    var newVal = !agent.is_unlimited;
+                                    if (!window.confirm(
+                                      newVal
+                                        ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They will be able to upload as many listings as they want regardless of their subscription plan.'
+                                        : 'Revoke unlimited listings from ' + (agent.full_name || agent.email) + '? They will return to their plan limits.'
+                                    )) return;
+                                    try {
+                                      var token = localStorage.getItem('gh_token');
+                                      // Toggles the same is_unlimited column already read at login (user.is_unlimited)
+                                      // and checked in AgentUploadPortal — one flag, not a parallel one.
+                                      var res = await fetch(API_URL + '/api/admin/set-unlimited-listings', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ agent_id: agent.id, unlimited: newVal }),
+                                      });
+                                      var data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || 'Failed');
+                                      alert(data.message);
+                                      fetchApprovedAgents();
+                                    } catch(err) { alert('Error: ' + err.message); }
+                                  }} style={{
+                                    backgroundColor: agent.is_unlimited ? '#fff7ed' : '#f0fff4',
+                                    color: agent.is_unlimited ? '#c2410c' : '#166534',
+                                    border: '1.5px solid ' + (agent.is_unlimited ? '#fed7aa' : '#bbf7d0'),
+                                    borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem',
+                                    fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
+                                  }}>
+                                    {agent.is_unlimited ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
                                   </button>
                                 )}
                                 {isRejectedTab && (
@@ -6039,7 +6096,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
                   {inspectionsSubTab === 'gha-payments' && (function() {
                     var payments = ghaPayments && ghaPayments.gha_payments ? ghaPayments.gha_payments : [];
-                    var TIER_RATE = { tier1: 1200, tier2: 1500, tier3: 1700 };
+                    var savedTiers = (window.__gethomeSettings && window.__gethomeSettings.inspection_fee_tiers) || {};
+                    var TIER_RATE = {
+                      tier1: (savedTiers.tier1 && savedTiers.tier1.fee) || 1200,
+                      tier2: (savedTiers.tier2 && savedTiers.tier2.fee) || 1500,
+                      tier3: (savedTiers.tier3 && savedTiers.tier3.fee) || 1700,
+                    };
                     var TIER_LABEL = { tier1: '1-10 inspections', tier2: '11-20 inspections', tier3: '21-30 inspections' };
                     function fmtNaira(n) { return '₦' + Number(n || 0).toLocaleString('en-NG'); }
                     function fmtDate(d) {
@@ -6079,9 +6141,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px' }}>
                           <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#1e40af', fontSize: '0.82rem' }}>Payment Tiers</p>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>1-10 inspections &nbsp;&nbsp;→ ₦1,200 each</p>
-                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>11-20 inspections &nbsp;→ ₦1,500 each</p>
-                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>21-30 inspections &nbsp;→ ₦1,700 each</p>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>1-10 inspections &nbsp;&nbsp;→ ₦{TIER_RATE.tier1.toLocaleString('en-NG')} each</p>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>11-20 inspections &nbsp;→ ₦{TIER_RATE.tier2.toLocaleString('en-NG')} each</p>
+                            <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>21-30 inspections &nbsp;→ ₦{TIER_RATE.tier3.toLocaleString('en-NG')} each</p>
                           </div>
                         </div>
 
@@ -6391,6 +6453,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           var saKey = sa.id || sa.sa_code || sa.staff_id;
                           var isExpanded = expandedSAGhas === saKey;
                           var saGhas = allGHAsAdmin.filter(function(g){ return g.sa_id === sa.id; });
+                          var globalSaRate = parseFloat((window.__gethomeSettings || {}).sa_commission_rate || saCommissionRate || 5);
+                          var effectiveSaRate = sa.commission_rate || globalSaRate;
+                          var isCustomSaRate = !!sa.commission_rate && parseFloat(sa.commission_rate) !== globalSaRate;
                           return (
                             <div key={saKey} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '13px 15px' }}>
                               <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
@@ -6409,13 +6474,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{sa.listing_count || 0} Listings</span>
                                   <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{sa.active_subscriptions || 0} Active / {sa.expired_subscriptions || 0} Expired Subs</span>
                                   <span style={{ fontSize: '0.58rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: sa.is_active === false ? '#fef2f2' : '#f0fff4', color: sa.is_active === false ? '#b91c1c' : '#166534', border: '1px solid ' + (sa.is_active === false ? '#fecaca' : '#86efac') }}>{sa.is_active === false ? 'INACTIVE' : 'ACTIVE'}</span>
-                                  <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
-                                    {sa.commission_rate || 5}% commission
+                                  <span style={{ backgroundColor: isCustomSaRate ? '#fef3c7' : '#f0fff4', color: isCustomSaRate ? '#92400e' : '#166534', border: '1px solid ' + (isCustomSaRate ? '#fde68a' : '#bbf7d0'), borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                    {effectiveSaRate}% {isCustomSaRate ? '(custom)' : 'commission'}
                                   </span>
                                 </div>
                                 <button onClick={function(){
-                                  setPromotingStaff({ id: sa.id, type: 'SA', name: sa.full_name || sa.sa_code, current_rate: sa.commission_rate || 5 });
-                                  setPromoteRate(String(sa.commission_rate || 5));
+                                  setPromotingStaff({ id: sa.id, type: 'SA', name: sa.full_name || sa.sa_code, current_rate: effectiveSaRate });
+                                  setPromoteRate(String(effectiveSaRate));
                                 }} style={{ backgroundColor: 'transparent', border: '1.5px solid #27ae60', color: '#27ae60', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
                                   ⬆ Set Commission
                                 </button>
@@ -6781,6 +6846,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 {group.map(function(g) {
                                   var gKey = g.id || g.gha_code || g.staff_id;
+                                  var globalGhaRate = parseFloat((window.__gethomeSettings || {}).gha_commission_rate || ghaCommissionRate || 5);
+                                  var effectiveGhaRate = g.commission_rate || globalGhaRate;
+                                  var isCustomGhaRate = !!g.commission_rate && parseFloat(g.commission_rate) !== globalGhaRate;
                                   return (
                                     <div key={gKey} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '11px 13px' }}>
                                       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '8px' }}>
@@ -6793,13 +6861,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{g.agent_count || 0} Agents</span>
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{g.listing_count || 0} Listings</span>
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{g.active_subscriptions || 0} Active / {g.expired_subscriptions || 0} Expired Subs</span>
-                                          <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
-                                            {g.commission_rate || 5}% commission
+                                          <span style={{ backgroundColor: isCustomGhaRate ? '#fef3c7' : '#f0fff4', color: isCustomGhaRate ? '#92400e' : '#166534', border: '1px solid ' + (isCustomGhaRate ? '#fde68a' : '#bbf7d0'), borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                            {effectiveGhaRate}% {isCustomGhaRate ? '(custom)' : 'commission'}
                                           </span>
                                         </div>
                                         <button onClick={function(){
-                                          setPromotingStaff({ id: g.id, type: 'GHA', name: g.full_name || g.gha_code, current_rate: g.commission_rate || 5 });
-                                          setPromoteRate(String(g.commission_rate || 5));
+                                          setPromotingStaff({ id: g.id, type: 'GHA', name: g.full_name || g.gha_code, current_rate: effectiveGhaRate });
+                                          setPromoteRate(String(effectiveGhaRate));
                                         }} style={{ backgroundColor: 'transparent', border: '1.5px solid #27ae60', color: '#27ae60', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
                                           ⬆ Set Commission
                                         </button>
@@ -7396,6 +7464,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
             {/* ── STAFF PAYMENTS ── */}
             {adminTab === 'staff-payments' && (function() {
+              var tiers = (window.__gethomeSettings && window.__gethomeSettings.inspection_fee_tiers) || {
+                tier1: { fee: 1200 }, tier2: { fee: 1500 }, tier3: { fee: 1700 },
+              };
               var totals = (staffPayments && staffPayments.totals) || {};
               var currentList = staffPaymentTab === 'GHA' ? (staffPayments.gha_payments || []) : (staffPayments.sa_payments || []);
               var pendingList = currentList.filter(function(p) { return p.payment_status !== 'paid' && p.total_payment > 0; });
@@ -7468,9 +7539,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px' }}>
                       <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#1e40af', fontSize: '0.82rem' }}>Payment Tier Legend</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,200/inspection (1-10)</p>
-                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,500/inspection (11-20)</p>
-                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>₦1,700/inspection (21+)</p>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>Tier 1 (1-10): ₦{Number(tiers.tier1?.fee || 1200).toLocaleString()}/inspection</p>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>Tier 2 (11-20): ₦{Number(tiers.tier2?.fee || 1500).toLocaleString()}/inspection</p>
+                        <p style={{ margin: 0, fontSize: '0.80rem', color: '#1e3a5f' }}>Tier 3 (21+): ₦{Number(tiers.tier3?.fee || 1700).toLocaleString()}/inspection</p>
                       </div>
                     </div>
                   )}
@@ -8836,6 +8907,79 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 )}
 
+                {/* GHA Inspection Fee Tiers — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>GHA Inspection Fee Tiers</h3>
+                    <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      GHAs earn a per-inspection fee based on how many confirmed customer inspections they complete per month.
+                    </p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {[
+                        { key: 'tier1', label: '1 – 10 inspections', color: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
+                        { key: 'tier2', label: '11 – 20 inspections', color: '#f0fff4', border: '#bbf7d0', text: '#166534' },
+                        { key: 'tier3', label: '21+ inspections', color: '#faf5ff', border: '#e9d5ff', text: '#7e22ce' },
+                      ].map(function(tier) {
+                        return (
+                          <div key={tier.key} style={{ backgroundColor: tier.color, borderRadius: '10px', padding: '12px 14px', border: '1px solid ' + tier.border }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: tier.text, fontSize: '0.82rem' }}>{tier.label}</p>
+                                <p style={{ margin: 0, color: tier.text, fontSize: '0.74rem', opacity: 0.8 }}>
+                                  Current: ₦{parseFloat(inspectionTiers[tier.key]?.fee || 0).toLocaleString()} per inspection
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <div style={{ position: 'relative' }}>
+                                  <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.78rem', fontWeight: '600' }}>₦</span>
+                                  <input type='number' min='0' step='50'
+                                    value={inspectionTiers[tier.key]?.fee || ''}
+                                    onChange={function(e) {
+                                      var val = parseFloat(e.target.value) || 0;
+                                      setInspectionTiers(function(prev) {
+                                        return Object.assign({}, prev, {
+                                          [tier.key]: Object.assign({}, prev[tier.key], { fee: val })
+                                        });
+                                      });
+                                    }}
+                                    style={{ width: '110px', padding: '7px 8px 7px 24px', borderRadius: '8px', border: '1.5px solid ' + tier.border, fontSize: '0.84rem', boxSizing: 'border-box', backgroundColor: '#fff' }} />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/admin/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                          body: JSON.stringify({
+                            setting_key: 'inspection_fee_tiers',
+                            setting_json: inspectionTiers,
+                          }),
+                        });
+                        if (!res.ok) throw new Error('Failed');
+                        setSettingsMsg('Inspection fee tiers updated successfully');
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{ width: '100%', marginTop: '14px', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
+                      Save Inspection Fee Tiers
+                    </button>
+
+                    <div style={{ marginTop: '10px', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                      <p style={{ margin: 0, fontSize: '0.74rem', color: '#1e40af' }}>
+                        ℹ Changes apply to the next payment calculation. Example: GHA with 15 confirmed inspections this month earns ₦{(15 * (inspectionTiers.tier2?.fee || 1500)).toLocaleString()} at current tier 2 rate.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Admin Management — visible only to the super admin */}
                 {isSuperAdmin && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '2px solid #0a2240', boxShadow: '0 2px 8px rgba(10,34,64,0.10)' }}>
@@ -9116,6 +9260,14 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
   var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
   function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
+  // Re-render when admin changes global settings so currentGhaRate below picks up the fresh value
+  const [, forceGhaSettingsRerender]                = useState(0);
+  useEffect(function() {
+    var handler = function() { forceGhaSettingsRerender(function(n) { return n + 1; }); };
+    window.addEventListener('gethome-settings-changed', handler);
+    return function() { window.removeEventListener('gethome-settings-changed', handler); };
+  }, []);
+  var currentGhaRate = parseFloat((window.__gethomeSettings || {}).gha_commission_rate || 5);
 
   const [staffUser, setStaffUser]                   = useState(initialStaffUser);
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
@@ -9736,7 +9888,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {/* Earnings card */}
                 <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div>
-                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS (5%)</p>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS ({currentGhaRate}%)</p>
                     <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{'₦' + (ghaOverview.monthly_commission || 0).toLocaleString()}</p>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -10397,7 +10549,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     {[
                       { label: 'TOTAL AGENTS ACTIVE', value: totalAgentsActive, borderColor: '#0a2240' },
                       { label: 'TOTAL REVENUE GENERATED', value: fmtMoney(totalRevenue), borderColor: '#27ae60' },
-                      { label: 'YOUR COMMISSION (5%)', value: fmtMoney(yourCommission), borderColor: '#27ae60' },
+                      { label: 'YOUR COMMISSION (' + currentGhaRate + '%)', value: fmtMoney(yourCommission), borderColor: '#27ae60' },
                     ].map(function(s) {
                       return (
                         <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 160px' }}>
@@ -10494,7 +10646,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ ...cardSt, padding: '22px 24px', marginBottom: '24px' }}>
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
                     <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
-                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>5% of total agent subscriptions</p>
+                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{currentGhaRate}% of total agent subscriptions</p>
                   </div>
 
                   {/* Individual earnings rows */}
@@ -10516,7 +10668,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                               <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(r.subscription_amount)}</p>
                             </div>
                             <div style={{ textAlign: 'right' }}>
-                              <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>COMMISSION (5%)</p>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>COMMISSION ({currentGhaRate}%)</p>
                               <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>{fmtMoney(r.commission_amount)}</p>
                             </div>
                           </div>
@@ -10854,6 +11006,14 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   var cardSt = { backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0' };
   function fmtMoney(n) { return '₦' + Number(n || 0).toLocaleString(); }
   var TIER_PRICE = { free: 0, premium: 8500, agency: 35000 };
+  // Re-render when admin changes global settings so currentSaRate below picks up the fresh value
+  const [, forceSaSettingsRerender]           = useState(0);
+  useEffect(function() {
+    var handler = function() { forceSaSettingsRerender(function(n) { return n + 1; }); };
+    window.addEventListener('gethome-settings-changed', handler);
+    return function() { window.removeEventListener('gethome-settings-changed', handler); };
+  }, []);
+  var currentSaRate = parseFloat((window.__gethomeSettings || {}).sa_commission_rate || 5);
 
   const [staffUser, setStaffUser]             = useState(initialStaffUser);
   const [saTab, setSaTab]                     = useState('overview');
@@ -12224,7 +12384,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{s.tier || s.subscription_tier}</span>
                         <span style={{ fontWeight: '800', color: '#166534', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>₦{Number(s.amount || 0).toLocaleString()}</span>
                         <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: s.paid ? '#f0fff4' : '#fffbeb', color: s.paid ? '#166534' : '#92400e', border: '1px solid ' + (s.paid ? '#86efac' : '#fde68a') }}>{s.paid ? 'PAID' : 'UNPAID'}</span>
-                        <span style={{ fontSize: '0.70rem', color: '#7c3aed', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>5%: {fmtMoney((s.amount || 0) * 0.05)}</span>
+                        <span style={{ fontSize: '0.70rem', color: '#7c3aed', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>{currentSaRate}%: {fmtMoney((s.amount || 0) * (currentSaRate / 100))}</span>
                       </div>
                     );
                   })}
@@ -13268,7 +13428,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ ...cardSt, padding: '22px 24px', marginBottom: '24px' }}>
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
                     <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
-                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>5% of total agent subscriptions</p>
+                    <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{currentSaRate}% of total agent subscriptions</p>
                   </div>
 
                   {/* GHA breakdown table */}
