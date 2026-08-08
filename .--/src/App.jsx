@@ -443,7 +443,7 @@ function RateGHAModal({ ghaId, ghaName, inspectionId, customerEmail, onClose, on
     </div>
   );
 }
-function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
+function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, globalSettings = {} }) {
   const [mode, setMode]                               = useState(initialMode || 'login');
   const [email, setEmail]                             = useState('');
   const [password, setPassword]                       = useState('');
@@ -1086,7 +1086,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
             {agentType === 'agency' && (
               <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #bfdbfe' }}>
                 <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af', lineHeight: 1.5 }}>
-                  <strong>Agency accounts</strong> list properties under your company name, have access to the Agency plan (₦35,000/month — up to 100 listings), and do not require NIN verification.
+                  <strong>Agency accounts</strong> list properties under your company name, have access to the Agency plan (₦35,000/month, up to 100 listings).
                 </p>
               </div>
             )}
@@ -1537,6 +1537,15 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode }) {
             {confirmPassword && confirmPassword !== password && (
               <p style={{ color: '#ef4444', fontSize: '0.72rem', margin: '3px 0 0 2px' }}>Passwords do not match</p>
             )}
+          </div>
+        )}
+
+        {isSignUp && (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) && (
+          <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1px solid #fed7aa' }}>
+            <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.80rem' }}>⚠ Commission Policy Active</p>
+            <p style={{ margin: 0, color: '#78350f', fontSize: '0.76rem', lineHeight: 1.5 }}>
+              GetHome currently applies a <strong>2.5% commission</strong> on all completed property transactions for agency accounts. By registering you acknowledge and agree to this commission policy. You will be reminded to agree each time you publish a listing.
+            </p>
           </div>
         )}
 
@@ -2132,7 +2141,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
             <p style={{ margin: '0 0 16px 0', fontWeight: '800', fontSize: '1rem', color: '#0a2240', textAlign: 'center' }}>
               Sign in to {{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]}
             </p>
-            <InlineAuthForm actionLabel={{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]} onSuccess={handleAuthSuccess} />
+            <InlineAuthForm actionLabel={{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]} onSuccess={handleAuthSuccess} globalSettings={globalSettings} />
           </div>
         </div>
       )}
@@ -2479,6 +2488,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   const [soldListings, setSoldListings]             = useState([]);
   const [soldListingsLoading, setSoldListingsLoading] = useState(false);
   const [uploadSuccess, setUploadSuccess]           = useState(false);
+  const [commissionAgreed, setCommissionAgreed]     = useState(false);
   useEffect(function() {
     if (!user?.id) return;
     if (user?.role === 'admin' || user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase()) {
@@ -2638,13 +2648,17 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     try {
       const res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + (localStorage.getItem('gh_token') || ''),
+        },
         body: JSON.stringify({
           amount: featuredPrice,
           customer_email: user.email,
           customer_name: user.email,
           purpose: 'Featured Listing - ' + (property?.title || form.title || 'New Listing'),
           property_id: property?.id || null,
+          redirect_url: 'https://trygethome.online/?featured_return=true',
           meta: {
             payment_type: 'featured_listing',
             property_id: property?.id || null,
@@ -2653,7 +2667,9 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         }),
       });
       const data = await res.json();
+      console.log('Featured payment init response:', JSON.stringify(data));
       if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      if (!data.checkout_url) throw new Error('No checkout URL returned — ' + JSON.stringify(data));
       window.location.href = data.checkout_url;
     } catch (err) {
       alert('Error: ' + err.message);
@@ -2666,6 +2682,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   );
   const handleSubmit = async (e) => {
     e.preventDefault();
+    var commissionRequired = (globalSettings.agency_commission_enabled === 'true') &&
+      (user?.agent_type === 'agency');
+    if (commissionRequired && !commissionAgreed) {
+      alert('Please read and agree to the commission policy before publishing.');
+      return;
+    }
     if (!pendingSubmit) { setShowAgreementModal(true); return; }
     setPendingSubmit(false);
     const limit = AGENT_TIERS[agentTier]?.listingLimit || 3;
@@ -2727,7 +2749,14 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       if (form.purpose === 'sale') purposeLabel = ' (For SALE)';
       else if (form.purpose === 'shortlet') purposeLabel = ' (Shortlet)';
       else purposeLabel = ' (For RENT)';
-      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: (form.location === 'Other' ? customCity : form.location).trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid };
+      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: (form.location === 'Other' ? customCity : form.location).trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid,
+        commission_applicable: commissionRequired && commissionAgreed,
+        commission_rate: commissionRequired && commissionAgreed ? 2.5 : 0,
+        commission_agreed_at: commissionRequired && commissionAgreed ? new Date().toISOString() : null,
+        commission_amount: commissionRequired && commissionAgreed
+          ? Math.round(parseFloat(form.rent || form.price || 0) * 0.025)
+          : 0,
+      };
       if (isEditMode) {
         const { data: updData, error: updateError } = await supabase
           .from('properties')
@@ -3694,6 +3723,26 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   <p style={{ margin: 0, color: '#b91c1c', fontWeight: '700', fontSize: '0.88rem' }}>{limitError}</p>
                 </div>
               )}
+              {(globalSettings.agency_commission_enabled === 'true') &&
+               (user?.agent_type === 'agency') && (
+                <div style={{ backgroundColor: '#fff7ed', borderRadius: '12px', padding: '14px 16px', marginBottom: '14px', border: '1.5px solid #fed7aa' }}>
+                  <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.84rem' }}>
+                    ⚠ Commission Agreement Required
+                  </p>
+                  <p style={{ margin: '0 0 12px 0', color: '#78350f', fontSize: '0.78rem', lineHeight: 1.6 }}>
+                    By publishing this listing you agree that GetHome will apply a <strong>2.5% commission</strong> on any successful property transaction generated through this listing. The commission amount will be based on the final transaction value and will be deducted or invoiced at completion.
+                  </p>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer' }}>
+                    <input type='checkbox'
+                      checked={commissionAgreed}
+                      onChange={function(e) { setCommissionAgreed(e.target.checked); }}
+                      style={{ width: '16px', height: '16px', marginTop: '2px', flexShrink: 0, accentColor: '#c2410c' }} />
+                    <span style={{ fontSize: '0.78rem', color: '#78350f', fontWeight: '600' }}>
+                      I understand and agree to the 2.5% commission policy for this listing
+                    </span>
+                  </label>
+                </div>
+              )}
               <button type="submit" disabled={submitting} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
                 {submitting ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Agree and Publish Listing')}
               </button>
@@ -3834,6 +3883,21 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [markingSoldId, setMarkingSoldId]               = useState(null);
   const [listingMsg, setListingMsg]                     = useState('');
   const [listingFilter, setListingFilter]               = useState('all');
+  const [listingsSubTab, setListingsSubTab]             = useState('all');
+  const [commissionListings, setCommissionListings]     = useState({ listings: [], totals: {} });
+  const [commissionLoading, setCommissionLoading]       = useState(false);
+  const fetchCommissionListings = async function() {
+    setCommissionLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/commission-listings', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setCommissionListings(data);
+    } catch(e) { console.error('Commission listings error:', e.message); }
+    finally { setCommissionLoading(false); }
+  };
   // Inspection Fees tab state
   const [inspectionFees, setInspectionFees]             = useState([]);
   const [feeSearch, setFeeSearch]                       = useState('');
@@ -5308,8 +5372,107 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
                     <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: 0 }}>Listings</h2>
-                    <button onClick={fetchListings} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                    <button onClick={function(){ listingsSubTab === 'commission' ? fetchCommissionListings() : fetchListings(); }} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
                   </div>
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    {[['all','All Listings'],['commission','Commission']].map(function([key, label]) {
+                      var isActive = listingsSubTab === key;
+                      return (
+                        <button key={key} onClick={function(){ setListingsSubTab(key); if (key === 'commission') fetchCommissionListings(); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 14px', borderRadius: '9px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {listingsSubTab === 'commission' ? (
+                    <div>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
+                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Total Commission Listings</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#0a2240', fontSize: '1.1rem' }}>{commissionListings.totals?.total_listings || 0}</p>
+                        </div>
+                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
+                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Commission Due</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#c2410c', fontSize: '1.1rem' }}>₦{(commissionListings.totals?.commission_due || 0).toLocaleString()}</p>
+                        </div>
+                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
+                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Commission Paid</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1.1rem' }}>₦{(commissionListings.totals?.commission_paid || 0).toLocaleString()}</p>
+                        </div>
+                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
+                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Unpaid Count</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#ef4444', fontSize: '1.1rem' }}>{commissionListings.totals?.unpaid_count || 0}</p>
+                        </div>
+                      </div>
+                      {commissionLoading ? (
+                        <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>Loading…</p></div>
+                      ) : (commissionListings.listings || []).length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8' }}>No commission-applicable listings found.</p></div>
+                      ) : (
+                        (commissionListings.listings || []).map(function(listing) {
+                          return (
+                            <div key={listing.id} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px 16px', marginBottom: '10px', border: '1px solid ' + (listing.commission_paid ? '#bbf7d0' : '#fed7aa') }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+                                <div>
+                                  <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>{listing.title}</p>
+                                  <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>📍 {listing.location}</p>
+                                  <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.72rem' }}>
+                                    Agent: {listing.agent_name} · {listing.agent_email}
+                                  </p>
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '700' }}>
+                                      Property: ₦{parseFloat(listing.display_price || 0).toLocaleString()}
+                                    </span>
+                                    <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '700' }}>
+                                      Commission ({listing.commission_rate}%): ₦{parseFloat(listing.commission_due || 0).toLocaleString()}
+                                    </span>
+                                    <span style={{ backgroundColor: listing.deposit_confirmed ? '#f0fff4' : '#f8fafc', color: listing.deposit_confirmed ? '#166534' : '#94a3b8', borderRadius: '6px', padding: '2px 8px', fontSize: '0.70rem', fontWeight: '700' }}>
+                                      {listing.deposit_confirmed ? 'Customer Paid ✓' : 'Awaiting Customer Payment'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  {listing.commission_paid ? (
+                                    <div>
+                                      <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '4px 12px', fontSize: '0.72rem', fontWeight: '800' }}>
+                                        ✓ COMMISSION PAID
+                                      </span>
+                                      {listing.commission_paid_at && (
+                                        <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>
+                                          {new Date(listing.commission_paid_at).toLocaleDateString()}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button onClick={async function() {
+                                      if (!window.confirm('Mark commission of ₦' + parseFloat(listing.commission_due || 0).toLocaleString() + ' as paid for ' + listing.title + '?')) return;
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/mark-listing-commission-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ property_id: listing.id }),
+                                        });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        fetchCommissionListings();
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '7px 14px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+                                      Mark Commission Paid
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <p style={{ margin: '8px 0 0 0', fontSize: '0.70rem', color: '#94a3b8' }}>
+                                Agent agreed to commission on {listing.commission_agreed_at ? new Date(listing.commission_agreed_at).toLocaleDateString() : 'N/A'}
+                              </p>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  ) : (<>
                   {listingMsg && (
                     <div style={{ backgroundColor: listingMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (listingMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
                       <p style={{ margin: 0, color: listingMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.84rem' }}>{listingMsg}</p>
@@ -5389,6 +5552,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       })}
                     </div>
                   )}
+                  </>)}
                 </div>
               );
             })()}
@@ -14059,7 +14223,7 @@ function AppContent() {
                 <p style={{ margin: 0, color: '#15803d', fontSize: '0.82rem', lineHeight: '1.5' }}>Your GetHome account is now active. Sign in below to continue.</p>
               </div>
             )}
-            <InlineAuthForm actionLabel="continue" initialMode={authInitialMode} onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); setShowNavAuth(false); setEmailConfirmed(false); setAuthInitialMode(null); if (u.role === 'agent' && u.status === 'approved') { navigateTab('upload'); } else if (u.role === 'admin') { navigateTab('admin'); } }} />
+            <InlineAuthForm actionLabel="continue" initialMode={authInitialMode} globalSettings={globalSettings} onSuccess={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); setShowNavAuth(false); setEmailConfirmed(false); setAuthInitialMode(null); if (u.role === 'agent' && u.status === 'approved') { navigateTab('upload'); } else if (u.role === 'admin') { navigateTab('admin'); } }} />
           </div>
         </div>
       )}
@@ -14320,7 +14484,7 @@ function AppContent() {
                 <div style={{ background: 'linear-gradient(135deg, #0a2240 0%, #0d2d4e 100%)', borderRadius: isMobile ? '16px' : '20px', padding: isMobile ? '22px 18px' : '40px', marginBottom: isMobile ? '24px' : '36px', border: '1px solid rgba(255,255,255,0.06)' }}>
                   <div style={{ textAlign: 'center', marginBottom: isMobile ? '18px' : '28px' }}>
                     <h2 style={{ color: '#fff', fontSize: isMobile ? '1.05rem' : '1.4rem', fontWeight: '800', margin: '0 0 8px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Why Pay Through GetHome?</h2>
-                    <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: isMobile ? '0.76rem' : '0.85rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Zero risk of agent fraud — your money is always protected.</p>
+                    <p style={{ color: 'rgba(255,255,255,0.48)', fontSize: isMobile ? '0.76rem' : '0.85rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Zero risk of agent fraud, your money is always protected.</p>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: isMobile ? '10px' : '16px' }}>
                     {[
