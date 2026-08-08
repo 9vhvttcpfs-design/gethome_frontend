@@ -1624,13 +1624,12 @@ function PropertyCard({ house, onSelect }) {
       <div style={{ position: 'relative' }}>
         <img src={house.image_url} alt={house.title} loading="lazy" style={{ width: '100%', height: isMobile ? '112px' : '160px', objectFit: 'cover', display: 'block' }}
           onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
-        <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', padding: '2px 8px', borderRadius: '20px', fontSize: isMobile ? '0.52rem' : '0.60rem', fontWeight: '700', letterSpacing: '0.04em', backdropFilter: 'blur(4px)' }}>VERIFIED</div>
         {house.property_type && house.property_type !== 'apartment' && (
-          <div style={{ position: 'absolute', top: isMobile ? '26px' : '30px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', borderRadius: '6px', padding: '3px 8px', fontSize: '0.68rem', fontWeight: '700', backdropFilter: 'blur(4px)' }}>
+          <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', borderRadius: '6px', padding: '3px 8px', fontSize: '0.68rem', fontWeight: '700', backdropFilter: 'blur(4px)' }}>
             {(PROPERTY_TYPES.find(function(t) { return t.value === house.property_type; }) || {}).icon || ''} {(house.property_type || '').toUpperCase()}
           </div>
         )}
-        {house.gha_verified && (
+        {house.gha_verified === true && (
           <div style={{
             position: 'absolute',
             top: '8px',
@@ -1916,11 +1915,13 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                   <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Listed By</p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
                     <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
-                      {property.agent_display_name || 'Verified Agent'}
+                      {property.agent_display_name || 'Agent'}
                     </p>
-                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                      <CheckCircle size={10} /> Verified
-                    </span>
+                    {property.gha_verified === true && (
+                      <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '1px 7px', fontSize: '0.64rem', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                        <CheckCircle size={10} /> Verified
+                      </span>
+                    )}
                   </div>
                   {property.agent_phone && (
                     <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
