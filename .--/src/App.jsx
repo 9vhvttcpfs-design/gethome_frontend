@@ -5522,6 +5522,30 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <button onClick={function(){ setMarkingSoldId(p.id); }}
                                     style={{ padding: '5px 10px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>Mark Sold</button>
                                 )}
+                                <button onClick={async function() {
+                                  try {
+                                    var token = localStorage.getItem('gh_token');
+                                    var endpoint = p.is_featured
+                                      ? '/api/admin/unfeature-listing'
+                                      : '/api/admin/mark-property-featured';
+                                    var res = await fetch(API_URL + endpoint, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                      body: JSON.stringify({ property_id: p.id }),
+                                    });
+                                    var data = await res.json();
+                                    if (!res.ok) throw new Error(data.error || 'Failed');
+                                    fetchListings();
+                                  } catch(err) { alert('Error: ' + err.message); }
+                                }} style={{
+                                  backgroundColor: p.is_featured ? '#fff7ed' : '#f0fff4',
+                                  color: p.is_featured ? '#c2410c' : '#166534',
+                                  border: '1.5px solid ' + (p.is_featured ? '#fed7aa' : '#bbf7d0'),
+                                  borderRadius: '7px', padding: '5px 10px', fontSize: '0.68rem',
+                                  fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
+                                }}>
+                                  {p.is_featured ? '★ Unfeature' : '☆ Mark Featured'}
+                                </button>
                               </div>
                             </div>
                             {isMarking && !p.is_sold && (
