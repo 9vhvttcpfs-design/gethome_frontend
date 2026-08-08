@@ -2215,7 +2215,7 @@ var isPromoValid = function(promoDetails) {
   var expiryDate = expiryStr.length === 10 ? new Date(expiryStr + 'T23:59:59+01:00') : new Date(expiryStr);
   return expiryDate > new Date();
 };
-function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus, activePromo }) {
+function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentStatus, activePromo, agentProfile, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
@@ -2336,6 +2336,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
           <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: 0 }}>You'll be able to subscribe once your account is approved.</p>
         </div>
       ) : (
+        <>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
             var promoPrice = getPromoPrice(tierKey);
@@ -2375,6 +2376,96 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
             </div>);
           })}
         </div>
+        {(function() {
+          var unlimitedPrice = parseFloat(globalSettings.unlimited_plan_price || window.__gethomeSettings?.unlimited_plan_price || 100000);
+          var isUnlimitedActive = agentProfile?.is_unlimited === true &&
+            agentProfile?.unlimited_expires_at &&
+            new Date(agentProfile.unlimited_expires_at) > new Date();
+
+          return (
+            <div style={{ backgroundColor: '#faf5ff', borderRadius: '16px', padding: '20px', border: '2px solid #7e22ce', marginTop: '14px', position: 'relative', overflow: 'hidden' }}>
+              {/* Background decoration */}
+              <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '100px', height: '100px', borderRadius: '50%', backgroundColor: 'rgba(126,34,206,0.08)' }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>∞</span>
+                    <h3 style={{ margin: 0, fontWeight: '900', color: '#7e22ce', fontSize: '1rem' }}>Unlimited Plan</h3>
+                    <span style={{ backgroundColor: '#7e22ce', color: '#fff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.64rem', fontWeight: '800' }}>6 MONTHS</span>
+                  </div>
+                  <p style={{ margin: 0, color: '#6b21a8', fontSize: '0.78rem' }}>One-time payment · Upload as many listings as you want</p>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <span style={{ fontWeight: '900', color: '#7e22ce', fontSize: '1.4rem' }}>
+                  ₦{unlimitedPrice.toLocaleString()}
+                </span>
+                <span style={{ fontSize: '0.76rem', color: '#6b21a8', marginLeft: '4px' }}>one-time · 6 months</span>
+              </div>
+
+              <div style={{ marginBottom: '14px' }}>
+                {[
+                  'Unlimited property listings for 6 months',
+                  'No monthly subscription needed',
+                  'All listing types — Rent, Sale, Shortlet',
+                  'GHA verification available on all listings',
+                  'Featured listing option available',
+                ].map(function(feature, i) {
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                      <span style={{ color: '#7e22ce', fontWeight: '800', fontSize: '0.80rem' }}>✓</span>
+                      <span style={{ fontSize: '0.78rem', color: '#4c1d95' }}>{feature}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {isUnlimitedActive ? (
+                <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                  <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.84rem' }}>∞ Unlimited Plan Active</p>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: '#166534' }}>
+                    Expires: {new Date(agentProfile.unlimited_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              ) : (
+                <button onClick={async function() {
+                  try {
+                    var token = localStorage.getItem('gh_token');
+                    var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+                      body: JSON.stringify({
+                        amount: unlimitedPrice,
+                        customer_email: agentEmail,
+                        customer_name: agentEmail,
+                        purpose: 'GetHome Unlimited Plan — 6 Months',
+                        redirect_url: 'https://trygethome.online/?payment=success&type=unlimited',
+                        meta: {
+                          payment_type: 'unlimited_plan',
+                          agent_id: agentId,
+                          plan: 'unlimited',
+                          duration_months: 6,
+                        },
+                      }),
+                    });
+                    var data = await res.json();
+                    console.log('Unlimited plan payment init:', JSON.stringify(data));
+                    if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+                    if (!data.checkout_url) throw new Error('No checkout URL returned');
+                    window.location.href = data.checkout_url;
+                  } catch(err) {
+                    alert('Error: ' + err.message);
+                  }
+                }} style={{ width: '100%', padding: '13px', backgroundColor: '#7e22ce', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer' }}>
+                  ∞ Get Unlimited Plan — ₦{unlimitedPrice.toLocaleString()}
+                </button>
+              )}
+            </div>
+          );
+        })()}
+        </>
       )}
     </div>
   );
@@ -2502,7 +2593,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     // has none of the subscription_* columns. Fetched in parallel and merged.
     return Promise.all([
       supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
-      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited, unlimited_expires_at').eq('id', user.id).single(),
     ])
       .then(function(results) {
         var agentData = results[0] && results[0].data;
@@ -2516,6 +2607,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             // Fresh DB read — takes priority over user.is_unlimited (set at login,
             // can go stale if admin grants/revokes it mid-session).
             is_unlimited: (subData && subData.is_unlimited) === true,
+            unlimited_expires_at: (subData && subData.unlimited_expires_at) || null,
           });
         });
       })
@@ -3030,7 +3122,22 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           )}
         </div>
       </div>
-      {hasUnlimitedListings && (
+      {agentProfile?.is_unlimited && agentProfile?.unlimited_expires_at && new Date(agentProfile.unlimited_expires_at) > new Date() ? (
+        <div style={{ backgroundColor: '#faf5ff', borderRadius: '12px', padding: '12px 16px', marginBottom: '14px', border: '2px solid #7e22ce' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '800', color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Plan</p>
+              <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: '#7e22ce', fontSize: '1.05rem' }}>∞ Unlimited Plan</p>
+              <p style={{ margin: 0, fontSize: '0.74rem', color: '#6b21a8' }}>
+                ✓ Active · Unlimited uploads · Expires {new Date(agentProfile.unlimited_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </p>
+            </div>
+            <span style={{ backgroundColor: '#7e22ce', color: '#fff', borderRadius: '20px', padding: '4px 12px', fontSize: '0.70rem', fontWeight: '800' }}>
+              ACTIVE
+            </span>
+          </div>
+        </div>
+      ) : hasUnlimitedListings && (
         <div style={{ backgroundColor: '#faf5ff', borderRadius: '10px', padding: '8px 14px', marginBottom: '16px', border: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontWeight: '900', color: '#7e22ce', fontSize: '1rem' }}>∞</span>
           <p style={{ margin: 0, fontSize: '0.78rem', color: '#7e22ce', fontWeight: '700' }}>
@@ -3796,7 +3903,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             </p>
           </div>
         )}
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} />
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} agentProfile={agentProfile} globalSettings={globalSettings} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -4067,6 +4174,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [agencyCommissionEnabled, setAgencyCommissionEnabled] = useState(false);
   const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
+  const [unlimitedPlanPrice, setUnlimitedPlanPrice]     = useState('100000');
   const [inspectionTiers, setInspectionTiers]           = useState({
     tier1: { min: 1, max: 10, fee: 1200 },
     tier2: { min: 11, max: 20, fee: 1500 },
@@ -4113,6 +4221,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         }
         if (data.gha_commission_rate) setGhaCommissionRate(data.gha_commission_rate);
         if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
+        if (data.unlimited_plan_price) setUnlimitedPlanPrice(data.unlimited_plan_price);
         if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
@@ -7588,6 +7697,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <span style={{ color: '#94a3b8', fontSize: '0.76rem' }}>under {payment.sa_code}</span>
                                   )}
                                 </div>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>
+                                  Rate: {payment.commission_rate || 5}%
+                                  {payment.commission_rate_source === 'individual' && (
+                                    <span style={{ marginLeft: '4px', backgroundColor: '#fef3c7', color: '#92400e', borderRadius: '4px', padding: '1px 5px', fontSize: '0.66rem', fontWeight: '700' }}>
+                                      CUSTOM
+                                    </span>
+                                  )}
+                                </p>
                                 {isPaid && payment.paid_at && (
                                   <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8' }}>
                                     Paid on {new Date(payment.paid_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -8807,6 +8924,45 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 )}
 
+                {/* Unlimited Plan Price — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Unlimited Plan Price</h3>
+                    <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      One-time payment for 6 months of unlimited listing uploads. Currently: ₦{parseFloat(appSettings.unlimited_plan_price || 100000).toLocaleString()}
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600' }}>₦</span>
+                        <input type='number' min='0' step='1000'
+                          value={unlimitedPlanPrice}
+                          onChange={function(e) { setUnlimitedPlanPrice(e.target.value); }}
+                          style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <button onClick={async function() {
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'unlimited_plan_price', setting_value: String(parseFloat(unlimitedPlanPrice)) }),
+                          });
+                          if (!res.ok) throw new Error('Failed');
+                          setSettingsMsg('Unlimited plan price updated to ₦' + parseFloat(unlimitedPlanPrice).toLocaleString());
+                          fetchAppSettings(); // refresh so current price shows immediately
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ flexShrink: 0, padding: '10px 18px', backgroundColor: '#7e22ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
+                        Update
+                      </button>
+                    </div>
+                    <p style={{ margin: '8px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                      SA and GHA earn their commission % on this payment. Duration: 6 months from payment date.
+                    </p>
+                  </div>
+                )}
+
                 {/* Staff Commission Rates — super admin only */}
                 {isSuperAdmin && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
@@ -8845,7 +9001,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 gha_commission_rate: ghaCommissionRate,
                                 sa_commission_rate: saCommissionRate,
                               });
+                              // Dispatch event so all components refresh
                               window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                              // Re-fetch staff payments to show updated calculations
+                              fetchStaffPayments();
+                              fetchAllPayments(paymentsMonth);
                               setTimeout(function() { setSettingsMsg(''); }, 3000);
                             } catch(err) { setSettingsMsg('Error: ' + err.message); }
                           }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
@@ -8886,7 +9046,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 gha_commission_rate: ghaCommissionRate,
                                 sa_commission_rate: saCommissionRate,
                               });
+                              // Dispatch event so all components refresh
                               window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                              // Re-fetch staff payments to show updated calculations
+                              fetchStaffPayments();
+                              fetchAllPayments(paymentsMonth);
                               setTimeout(function() { setSettingsMsg(''); }, 3000);
                             } catch(err) { setSettingsMsg('Error: ' + err.message); }
                           }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
@@ -9235,9 +9399,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   var data = await res.json();
                   if (!res.ok) throw new Error(data.error || 'Failed');
                   setPromoteMsg(data.message);
-                  // Refresh staff lists
-                  if (promotingStaff.type === 'GHA') fetchAllGHAsAdmin();
-                  else fetchAllSAs();
+                  // After successful staff commission update, notify dashboards to refresh
+                  window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                  // Refresh staff lists to show the new rate badge, and staff payments for updated calculations
+                  if (promotingStaff.type === 'GHA') { fetchAllGHAsAdmin(); fetchStaffPayments(); }
+                  else { fetchAllSAs(); fetchStaffPayments(); }
                   setTimeout(function() {
                     setPromotingStaff(null);
                     setPromoteRate('');
@@ -9267,7 +9433,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     window.addEventListener('gethome-settings-changed', handler);
     return function() { window.removeEventListener('gethome-settings-changed', handler); };
   }, []);
-  var currentGhaRate = parseFloat((window.__gethomeSettings || {}).gha_commission_rate || 5);
 
   const [staffUser, setStaffUser]                   = useState(initialStaffUser);
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
@@ -9290,6 +9455,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [inspLoading, setInspLoading]               = useState(false);
   const [ghaOverview, setGhaOverview]                = useState({});
   const [overviewLoading, setOverviewLoading]       = useState(false);
+  // GHA commission rate comes from ghaOverview returned by /api/gha/overview,
+  // falling back to the global setting so it still renders before overview loads.
+  var currentGhaRate = parseFloat(ghaOverview.commission_rate || (window.__gethomeSettings || {}).gha_commission_rate || 5);
   const [ghaEarningsOverview, setGhaEarningsOverview] = useState({ total_commission: 0, is_paid: false });
   const [ghaRatings, setGhaRatings]                 = useState(null);
   const [ghaRatingsLoading, setGhaRatingsLoading]   = useState(false);
@@ -9346,6 +9514,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         setGhaOverview(data);
         // Also sync agents list if returned
         if (data.agents) setAgents(data.agents);
+        // Store this GHA's individual commission rate for display elsewhere
+        if (data.commission_rate) window.__ghaCommissionRate = data.commission_rate;
       }
     } catch(e) { console.error('GHA overview error:', e.message); }
     finally { setOverviewLoading(false); }
@@ -9889,7 +10059,11 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
                   <div>
                     <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS ({currentGhaRate}%)</p>
-                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{'₦' + (ghaOverview.monthly_commission || 0).toLocaleString()}</p>
+                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {/* Fall back to computing from total_revenue * commission rate if the backend hasn't pre-calculated monthly_commission */}
+                      {'₦' + (ghaOverview.monthly_commission || Math.round((ghaOverview.total_revenue || 0) * currentGhaRate / 100)).toLocaleString()}
+                    </p>
+                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
@@ -10647,6 +10821,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
                     <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
                     <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{currentGhaRate}% of total agent subscriptions</p>
+                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
                   </div>
 
                   {/* Individual earnings rows */}
@@ -11013,7 +11188,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     window.addEventListener('gethome-settings-changed', handler);
     return function() { window.removeEventListener('gethome-settings-changed', handler); };
   }, []);
-  var currentSaRate = parseFloat((window.__gethomeSettings || {}).sa_commission_rate || 5);
 
   const [staffUser, setStaffUser]             = useState(initialStaffUser);
   const [saTab, setSaTab]                     = useState('overview');
@@ -11108,6 +11282,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saEarningsData, setSaEarningsData]         = useState(null);
   const [saOverview, setSaOverview]                 = useState({});
+  // SA commission rate comes from saOverview returned by /api/sa/overview,
+  // falling back to the global setting so it still renders before overview loads.
+  var currentSaRate = parseFloat(saOverview.commission_rate || (window.__gethomeSettings || {}).sa_commission_rate || 5);
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
   // Listings tab state
   const [saListings, setSaListings]                 = useState([]);
@@ -11187,7 +11364,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
-      if (res.ok) setSaOverview(data);
+      if (res.ok) {
+        setSaOverview(data);
+        // Store this SA's individual commission rate for display elsewhere
+        if (data.commission_rate) window.__saCommissionRate = data.commission_rate;
+      }
     } catch(e) { console.error('SA overview error:', e.message); }
   };
 
@@ -11677,7 +11858,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         )}
 
         {/* ── OVERVIEW ── */}
-        {saTab === 'overview' && (
+        {saTab === 'overview' && (function() {
+          // Fall back to computing from total_revenue * commission rate if the
+          // backend hasn't pre-calculated monthly_earnings for this SA.
+          var saEarningsDisplay = saOverview.monthly_earnings || Math.round((saOverview.total_revenue || 0) * currentSaRate / 100);
+          return (
           <div>
             <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
             <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
@@ -11686,7 +11871,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 { label: 'ACTIVE SUBSCRIPTIONS',    value: saOverview.active_subscriptions || 0,                     borderColor: '#27ae60' },
                 { label: 'EXPIRED',                 value: saOverview.expired_subscriptions || 0,                    borderColor: '#ef4444' },
                 { label: 'TOTAL GHAs',               value: saOverview.total_ghas || 0,                              borderColor: '#0d9488' },
-                { label: 'MONTHLY EARNINGS',         value: '₦' + (saOverview.monthly_earnings || 0).toLocaleString(), borderColor: '#7c3aed' },
+                { label: 'MONTHLY EARNINGS',         value: '₦' + saEarningsDisplay.toLocaleString(), borderColor: '#7c3aed' },
                 { label: 'PENDING AGENTS',           value: saOverview.pending_agents || 0,                          borderColor: '#f59e0b' },
                 { label: 'INSPECTIONS CONFIRMED',    value: saOverview.inspections_confirmed || 0,                   borderColor: '#1e40af' },
               ].map(function(s) {
@@ -11695,9 +11880,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <p style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
                     <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
                     {s.label === 'MONTHLY EARNINGS' && (
-                      <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: saOverview.earnings_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {saOverview.earnings_paid ? <><CheckCircle size={11} /> Paid this month</> : '● Pending payment'}
-                      </p>
+                      <>
+                        <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: saOverview.earnings_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {saOverview.earnings_paid ? <><CheckCircle size={11} /> Paid this month</> : '● Pending payment'}
+                        </p>
+                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentSaRate}%</span>
+                      </>
                     )}
                   </div>
                 );
@@ -11726,7 +11914,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── MY GHAs ── */}
         {saTab === 'ghas' && (
@@ -13429,6 +13618,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <p style={{ margin: '0 0 6px 0', fontSize: '0.76rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Your Commission This Month</p>
                     <p style={{ margin: 0, fontSize: '2.2rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{fmtMoney(earningsData.total_commission)}</p>
                     <p style={{ margin: '6px 0 0 0', fontSize: '0.78rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{currentSaRate}% of total agent subscriptions</p>
+                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentSaRate}%</span>
                   </div>
 
                   {/* GHA breakdown table */}
@@ -13998,7 +14188,7 @@ function AppContent() {
     try {
       var { data, error } = await supabase
         .from('profiles')
-        .select('subscription_tier, subscription_status, subscription_end, subscription_amount')
+        .select('subscription_tier, subscription_status, subscription_end, subscription_amount, is_unlimited, unlimited_expires_at')
         .eq('id', userId)
         .single();
       if (error || !data) return;
@@ -14010,6 +14200,8 @@ function AppContent() {
           subscription_status: data.subscription_status || 'inactive',
           subscription_end: data.subscription_end || null,
           subscription_amount: data.subscription_amount || 0,
+          is_unlimited: data.is_unlimited === true,
+          unlimited_expires_at: data.unlimited_expires_at || null,
         });
       });
       setAgentTier(data.subscription_tier || 'free');
@@ -14021,6 +14213,8 @@ function AppContent() {
         stored.subscription_status = data.subscription_status || 'inactive';
         stored.subscription_end = data.subscription_end || null;
         stored.subscription_amount = data.subscription_amount || 0;
+        stored.is_unlimited = data.is_unlimited === true;
+        stored.unlimited_expires_at = data.unlimited_expires_at || null;
         localStorage.setItem('gh_user', JSON.stringify(stored));
       } catch(e) {}
 
@@ -14490,8 +14684,25 @@ function AppContent() {
     try {
       var urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('staff_payment') === 'complete' || urlParams.get('payment') === 'success') {
+        var isUnlimitedReturn = urlParams.get('type') === 'unlimited';
         if (user?.id) {
-          setTimeout(function() { fetchAgentSubscription(user.id); }, 2000);
+          // Unlimited plan payments take a moment longer for the webhook to
+          // flip is_unlimited/unlimited_expires_at than a plain subscription.
+          setTimeout(async function() {
+            await fetchAgentSubscription(user.id);
+            if (isUnlimitedReturn) {
+              try {
+                var { data: freshProfile } = await supabase
+                  .from('profiles')
+                  .select('is_unlimited, unlimited_expires_at')
+                  .eq('id', user.id)
+                  .single();
+                if (freshProfile?.is_unlimited) {
+                  alert('🎉 Unlimited Plan activated! You can now upload unlimited listings for 6 months.');
+                }
+              } catch(e) {}
+            }
+          }, isUnlimitedReturn ? 3000 : 2000);
         }
         window.history.replaceState(null, '', window.location.pathname);
       }
