@@ -2915,9 +2915,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             </div>
             <div style={{ overflowY: 'auto', padding: '20px 24px', flex: 1 }}>
               <p style={{ fontWeight: '700', color: '#0a2240', marginBottom: '12px', fontSize: '0.88rem' }}>By publishing you confirm that:</p>
-              {['All property details, pricing, and fees are accurate and truthful','You have the legal authority to list this property','You will provide property access within 48 hours of a paid inspection','Fraudulent or duplicate listings will result in immediate account termination','GetHome escrow funds will only be released after successful property verification','2.5% platform commission on the agreed agency fee will be deducted by GetHome upon successful property transaction through the platform.'].map(function(item, i) {
+              {['All property details, pricing, and fees are accurate and truthful','You have the legal authority to list this property','You will provide property access within 48 hours of a paid inspection','Fraudulent or duplicate listings will result in immediate account termination','GetHome escrow funds will only be released after successful property verification'].map(function(item, i) {
                 return (<div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'flex-start' }}><span style={{ color: '#27ae60', fontWeight: '700', flexShrink: 0 }}>v</span><span style={{ color: '#475569', fontSize: '0.84rem', lineHeight: '1.5' }}>{item}</span></div>);
               })}
+              {(globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'flex-start' }}><span style={{ color: '#27ae60', fontWeight: '700', flexShrink: 0 }}>v</span><span style={{ color: '#475569', fontSize: '0.84rem', lineHeight: '1.5' }}>Agency accounts are subject to a 2.5% commission on completed transactions.</span></div>
+              )}
             </div>
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', flexShrink: 0 }}>
               <button onClick={function(){ setShowAgreementModal(false); }} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer' }}>Go Back and Edit</button>
@@ -3151,7 +3154,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         <>
         <div style={{ ...cardStyle, padding: isMobile ? '18px 16px' : '32px' }}>
           <div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px' }}>
-            <p style={{ margin: 0, color: '#1e40af', fontSize: '0.83rem', lineHeight: '1.55' }}>Add your bank details so GetHome can process your payments when a property transaction is completed. GetHome deducts 2.5% platform commission from the agency fee.</p>
+            <p style={{ margin: 0, color: '#1e40af', fontSize: '0.83rem', lineHeight: '1.55' }}>Add your bank details so GetHome can process your payments when a property transaction is completed.</p>
           </div>
           {bankSaveMsg && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.86rem' }}>{bankSaveMsg}</p></div>}
           {bankErrorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.86rem' }}>{bankErrorMsg}</p></div>}
@@ -3984,6 +3987,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [promoEnabled, setPromoEnabled]                 = useState(false);
   const [promoDetails, setPromoDetails]                 = useState({ title: '', description: '', discount_percent: 0, promo_code: '', applies_to: 'premium', expires_at: '' });
   const [featuredFeeInput, setFeaturedFeeInput]         = useState('5000');
+  const [agencyCommissionEnabled, setAgencyCommissionEnabled] = useState(false);
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -4020,6 +4024,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.promo_enabled) setPromoEnabled(data.promo_enabled === 'true');
         if (data.promo_details) setPromoDetails(data.promo_details);
         if (data.featured_listing_fee) setFeaturedFeeInput(data.featured_listing_fee);
+        if (data.agency_commission_enabled !== undefined) {
+          setAgencyCommissionEnabled(data.agency_commission_enabled === 'true' || data.agency_commission_enabled === true);
+        }
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -8473,6 +8480,39 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ flexShrink: 0, padding: '10px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
                         Update Fee
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Agency Commission toggle — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Agency Commission (2.5%)</h3>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem' }}>
+                          {agencyCommissionEnabled
+                            ? 'Agency accounts pay 2.5% commission — shown in agent agreement'
+                            : 'Agency commission is OFF — not shown anywhere in the app'}
+                        </p>
+                      </div>
+                      <button onClick={async function() {
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var newVal = agencyCommissionEnabled ? 'false' : 'true';
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'agency_commission_enabled', setting_value: newVal }),
+                          });
+                          if (!res.ok) throw new Error('Failed');
+                          setAgencyCommissionEnabled(!agencyCommissionEnabled);
+                          setSettingsMsg('Agency commission ' + (!agencyCommissionEnabled ? 'enabled' : 'disabled'));
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: agencyCommissionEnabled ? '#27ae60' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
+                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fff', position: 'absolute', top: '3px', left: agencyCommissionEnabled ? '31px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
                       </button>
                     </div>
                   </div>
