@@ -3935,6 +3935,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [markingGHAPaid, setMarkingGHAPaid]             = useState({});
   const [ghaSalaryMonths, setGhaSalaryMonths]           = useState({});
   const [expandedGHAAgents, setExpandedGHAAgents]       = useState(null);
+  const [promotingStaff, setPromotingStaff]             = useState(null);
+  const [promoteRate, setPromoteRate]                   = useState('');
+  const [promoteMsg, setPromoteMsg]                     = useState('');
   // Staff Earnings state
   const [earningsMonth, setEarningsMonth]               = useState(new Date().toISOString().slice(0, 7));
   const [staffEarnings, setStaffEarnings]               = useState(null);
@@ -6406,7 +6409,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{sa.listing_count || 0} Listings</span>
                                   <span style={{ fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{sa.active_subscriptions || 0} Active / {sa.expired_subscriptions || 0} Expired Subs</span>
                                   <span style={{ fontSize: '0.58rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: sa.is_active === false ? '#fef2f2' : '#f0fff4', color: sa.is_active === false ? '#b91c1c' : '#166534', border: '1px solid ' + (sa.is_active === false ? '#fecaca' : '#86efac') }}>{sa.is_active === false ? 'INACTIVE' : 'ACTIVE'}</span>
+                                  <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                    {sa.commission_rate || 5}% commission
+                                  </span>
                                 </div>
+                                <button onClick={function(){
+                                  setPromotingStaff({ id: sa.id, type: 'SA', name: sa.full_name || sa.sa_code, current_rate: sa.commission_rate || 5 });
+                                  setPromoteRate(String(sa.commission_rate || 5));
+                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #27ae60', color: '#27ae60', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
+                                  ⬆ Set Commission
+                                </button>
                                 <button onClick={function(){ setExpandedSAGhas(isExpanded ? null : saKey); if (!isExpanded && allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }}
                                   style={{ padding: '4px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>
                                   {isExpanded ? 'Hide GHAs' : 'View GHAs'}
@@ -6781,7 +6793,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#0a2240', border: '1px solid #c7d2fe', fontFamily: "'Inter', sans-serif" }}>{g.agent_count || 0} Agents</span>
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>{g.listing_count || 0} Listings</span>
                                           <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>{g.active_subscriptions || 0} Active / {g.expired_subscriptions || 0} Expired Subs</span>
+                                          <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                            {g.commission_rate || 5}% commission
+                                          </span>
                                         </div>
+                                        <button onClick={function(){
+                                          setPromotingStaff({ id: g.id, type: 'GHA', name: g.full_name || g.gha_code, current_rate: g.commission_rate || 5 });
+                                          setPromoteRate(String(g.commission_rate || 5));
+                                        }} style={{ backgroundColor: 'transparent', border: '1.5px solid #27ae60', color: '#27ae60', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
+                                          ⬆ Set Commission
+                                        </button>
                                         <button onClick={function(){ setExpandedGHAAgents(expandedGHAAgents === gKey ? null : gKey); }}
                                           style={{ padding: '4px 8px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '6px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
                                           {expandedGHAAgents === gKey ? 'Hide' : 'Agents'}
@@ -8342,6 +8363,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         if (!res.ok) throw new Error(data.error || 'Failed');
                         setAdsEnabled(data.ads_enabled);
                         setSettingsMsg('Ads ' + (data.ads_enabled ? 'enabled' : 'disabled') + ' successfully');
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                         setTimeout(function() { setSettingsMsg(''); }, 3000);
                       } catch(err) { setSettingsMsg('Error: ' + err.message); }
                     }} style={{
@@ -8413,6 +8435,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           });
                           if (!res.ok) throw new Error('Failed to save');
                           setSettingsMsg('AdSense configuration saved successfully');
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                           setTimeout(function() { setSettingsMsg(''); }, 3000);
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
@@ -8473,6 +8496,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       var data = await res.json();
                       if (!res.ok) throw new Error(data.error || 'Failed');
                       setSettingsMsg('Bank details saved successfully');
+                      window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                       setTimeout(function() { setSettingsMsg(''); }, 3000);
                     } catch(err) { setSettingsMsg('Error: ' + err.message); }
                     finally { setSettingsSaving(false); }
@@ -8500,6 +8524,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       if (res.ok) {
                         setPromoEnabled(!promoEnabled);
                         setSettingsMsg('Promo ' + (!promoEnabled ? 'activated' : 'deactivated'));
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                         setTimeout(function() { setSettingsMsg(''); }, 3000);
                       }
                     }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: promoEnabled ? '#27ae60' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
@@ -8566,6 +8591,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           });
                           if (!res.ok) throw new Error('Failed');
                           setSettingsMsg('Promo details saved successfully');
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                           setTimeout(function() { setSettingsMsg(''); }, 3000);
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ width: '100%', padding: '10px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
@@ -8594,6 +8620,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       });
                       if (!res.ok) throw new Error('Failed');
                       setSettingsMsg('Loan link updated successfully');
+                      window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                       setTimeout(function() { setSettingsMsg(''); }, 3000);
                     } catch(err) { setSettingsMsg('Error: ' + err.message); }
                   }} style={{ width: '100%', padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
@@ -8621,6 +8648,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       });
                       if (!res.ok) throw new Error('Failed');
                       setSettingsMsg('Payment WhatsApp number updated');
+                      window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                       setTimeout(function() { setSettingsMsg(''); }, 3000);
                     } catch(err) { setSettingsMsg('Error: ' + err.message); }
                   }} style={{ width: '100%', padding: '10px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
@@ -8664,6 +8692,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           if (!res.ok) throw new Error(data.error || 'Failed');
                           setSettingsMsg('Featured listing fee updated to ₦' + parseFloat(featuredFeeInput).toLocaleString());
                           fetchAppSettings(); // refresh so current price shows immediately
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                           setTimeout(function() { setSettingsMsg(''); }, 3000);
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ flexShrink: 0, padding: '10px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
@@ -8697,6 +8726,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           if (!res.ok) throw new Error('Failed');
                           setAgencyCommissionEnabled(!agencyCommissionEnabled);
                           setSettingsMsg('Agency commission ' + (!agencyCommissionEnabled ? 'enabled' : 'disabled'));
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                           setTimeout(function() { setSettingsMsg(''); }, 3000);
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: agencyCommissionEnabled ? '#27ae60' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
@@ -8739,6 +8769,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               if (!res.ok) throw new Error('Failed');
                               setSettingsMsg('GHA commission rate updated to ' + ghaCommissionRate + '%');
                               fetchAppSettings();
+                              // Update window.__gethomeSettings immediately so all dashboards reflect new rate
+                              window.__gethomeSettings = Object.assign(window.__gethomeSettings || {}, {
+                                gha_commission_rate: ghaCommissionRate,
+                                sa_commission_rate: saCommissionRate,
+                              });
+                              window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                               setTimeout(function() { setSettingsMsg(''); }, 3000);
                             } catch(err) { setSettingsMsg('Error: ' + err.message); }
                           }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
@@ -8774,6 +8810,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               if (!res.ok) throw new Error('Failed');
                               setSettingsMsg('SA commission rate updated to ' + saCommissionRate + '%');
                               fetchAppSettings();
+                              // Update window.__gethomeSettings immediately so all dashboards reflect new rate
+                              window.__gethomeSettings = Object.assign(window.__gethomeSettings || {}, {
+                                gha_commission_rate: ghaCommissionRate,
+                                sa_commission_rate: saCommissionRate,
+                              });
+                              window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                               setTimeout(function() { setSettingsMsg(''); }, 3000);
                             } catch(err) { setSettingsMsg('Error: ' + err.message); }
                           }} style={{ flexShrink: 0, padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
@@ -8977,6 +9019,89 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               }} disabled={composing}
                 style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: composing ? '#94a3b8' : '#27ae60', color: '#fff', fontWeight: '700', cursor: composing ? 'not-allowed' : 'pointer' }}>
                 {composing ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {promotingStaff && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '360px', width: '100%' }}>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 4px 0', fontSize: '1rem' }}>
+              Set Commission Rate
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 6px 0' }}>
+              {promotingStaff.type}: <strong>{promotingStaff.name}</strong>
+            </p>
+            <p style={{ color: '#94a3b8', fontSize: '0.76rem', margin: '0 0 16px 0' }}>
+              Current rate: {promotingStaff.current_rate}% · Global {promotingStaff.type} rate: {promotingStaff.type === 'GHA' ? ghaCommissionRate : saCommissionRate}%
+            </p>
+
+            <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+              New Commission Rate
+            </label>
+            <div style={{ position: 'relative', marginBottom: '12px' }}>
+              <input type='number' min='0' max='50' step='0.5'
+                value={promoteRate}
+                onChange={function(e) { setPromoteRate(e.target.value); }}
+                style={{ width: '100%', padding: '10px 32px 10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.90rem', boxSizing: 'border-box' }} />
+              <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '700' }}>%</span>
+            </div>
+
+            {promoteRate && (
+              <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', border: '1px solid #bbf7d0' }}>
+                <p style={{ margin: '0 0 2px 0', fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>Preview:</p>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534' }}>
+                  Premium agent subscription: ₦{Math.round(8500 * parseFloat(promoteRate || 0) / 100).toLocaleString()} commission
+                </p>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534' }}>
+                  Agency subscription: ₦{Math.round(35000 * parseFloat(promoteRate || 0) / 100).toLocaleString()} commission
+                </p>
+              </div>
+            )}
+
+            {promoteMsg && (
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontWeight: '600', color: promoteMsg.startsWith('Error') ? '#ef4444' : '#27ae60' }}>
+                {promoteMsg}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() { setPromotingStaff(null); setPromoteRate(''); setPromoteMsg(''); }}
+                style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={async function() {
+                if (!promoteRate || parseFloat(promoteRate) < 0) {
+                  setPromoteMsg('Error: Enter a valid rate');
+                  return;
+                }
+                try {
+                  var token = localStorage.getItem('gh_token');
+                  var res = await fetch(API_URL + '/api/admin/update-staff-commission', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      staff_id: promotingStaff.id,
+                      staff_type: promotingStaff.type,
+                      commission_rate: parseFloat(promoteRate),
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed');
+                  setPromoteMsg(data.message);
+                  // Refresh staff lists
+                  if (promotingStaff.type === 'GHA') fetchAllGHAsAdmin();
+                  else fetchAllSAs();
+                  setTimeout(function() {
+                    setPromotingStaff(null);
+                    setPromoteRate('');
+                    setPromoteMsg('');
+                  }, 2000);
+                } catch(err) { setPromoteMsg('Error: ' + err.message); }
+              }} style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '800', cursor: 'pointer', fontSize: '0.88rem' }}>
+                Save Commission Rate
               </button>
             </div>
           </div>
@@ -13679,6 +13804,17 @@ function AppContent() {
     fetchGlobalSettings();
     var settingsInterval = setInterval(fetchGlobalSettings, 5 * 60 * 1000); // every 5 minutes
     return function() { clearInterval(settingsInterval); };
+  }, []);
+  useEffect(function() {
+    // Admin settings saves dispatch this event so open sessions (SA/GHA/agent
+    // dashboards reading window.__gethomeSettings) pick up the change immediately
+    // instead of waiting on the 5-minute poll above.
+    var handler = function() {
+      console.log('Settings changed event received - refreshing global settings');
+      fetchGlobalSettings();
+    };
+    window.addEventListener('gethome-settings-changed', handler);
+    return function() { window.removeEventListener('gethome-settings-changed', handler); };
   }, []);
   const [user, setUser]                         = useState(null);
   const [authChecked, setAuthChecked]           = useState(false);
