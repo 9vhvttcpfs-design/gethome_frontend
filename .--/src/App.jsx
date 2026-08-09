@@ -3878,9 +3878,18 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           )}
           {/* Lock submit if agent not approved */}
           {localIsApproved === false ? (
-            <div style={{ padding: '16px', backgroundColor: '#f1f5f9', borderRadius: '12px', textAlign: 'center', border: '2px dashed #cbd5e1' }}>
-              <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#64748b', fontSize: '0.88rem' }}>Listing uploads locked pending approval</p>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.78rem' }}>Your form is ready. As soon as admin approves your account you can publish immediately.</p>
+            <div style={{ backgroundColor: '#fff7ed', borderRadius: '14px', padding: '20px', border: '1px solid #fed7aa', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '1.2rem' }}>⏳</p>
+              <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.94rem' }}>Account Pending Approval</p>
+              <p style={{ margin: '0 0 12px 0', color: '#78350f', fontSize: '0.80rem', lineHeight: 1.6 }}>
+                Your account is awaiting approval from your Service Agent (SA). Once approved you can start uploading listings.
+                {agentTier && agentTier !== 'free' && (
+                  <span> Your <strong>{agentTier}</strong> plan payment has been received and will be active once approved.</span>
+                )}
+              </p>
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#92400e' }}>
+                Contact your SA or email <strong>support@trygethome.online</strong> if you need help.
+              </p>
             </div>
           ) : (
             <>
@@ -12576,6 +12585,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             )}
                             {a.city && <span style={{ backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '600' }}>{a.city}</span>}
                             {verLevel && <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '20px', backgroundColor: verColor.bg, color: verColor.color, border: '1px solid ' + verColor.border, fontWeight: '800' }}>{verLevel}</span>}
+                            {(a.has_paid || a.subscription_tier && a.subscription_tier !== 'free' || a.is_unlimited) && (
+                              <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                                ✓ Has Paid — {a.is_unlimited ? '∞ Unlimited' : a.subscription_tier}
+                              </span>
+                            )}
                           </div>
                           <button onClick={function(){ setExpandedPendingId(expandedPendingId === a.id ? null : a.id); }}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#0a2240', fontSize: '0.74rem', fontWeight: '700', padding: '0 0 10px 0', fontFamily: "'Inter', sans-serif", textDecoration: 'underline', textUnderlineOffset: '2px' }}>
