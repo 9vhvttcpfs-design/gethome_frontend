@@ -2396,6 +2396,12 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
         </div>
         {(globalSettings.unlimited_plan_enabled === 'true' || globalSettings.unlimited_plan_enabled === true || window.__gethomeSettings?.unlimited_plan_enabled === 'true') && (function() {
           var unlimitedPrice = PLAN_BASE_PRICES.unlimited;
+          // Get duration from settings
+          var unlimitedDuration = parseInt(
+            globalSettings.unlimited_plan_duration_months ||
+            window.__gethomeSettings?.unlimited_plan_duration_months ||
+            6
+          );
           var isUnlimitedActive = agentProfile?.is_unlimited === true &&
             agentProfile?.unlimited_expires_at &&
             new Date(agentProfile.unlimited_expires_at) > new Date();
@@ -2410,7 +2416,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <span style={{ fontSize: '1.2rem' }}>∞</span>
                     <h3 style={{ margin: 0, fontWeight: '900', color: '#7e22ce', fontSize: '1rem' }}>Unlimited Plan</h3>
-                    <span style={{ backgroundColor: '#7e22ce', color: '#fff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.64rem', fontWeight: '800' }}>6 MONTHS</span>
+                    <span style={{ backgroundColor: '#7e22ce', color: '#fff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.64rem', fontWeight: '800' }}>{unlimitedDuration} MONTHS</span>
                   </div>
                   <p style={{ margin: 0, color: '#6b21a8', fontSize: '0.78rem' }}>One-time payment · Upload as many listings as you want</p>
                 </div>
@@ -2420,12 +2426,12 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                 <span style={{ fontWeight: '900', color: '#7e22ce', fontSize: '1.4rem' }}>
                   ₦{unlimitedPrice.toLocaleString()}
                 </span>
-                <span style={{ fontSize: '0.76rem', color: '#6b21a8', marginLeft: '4px' }}>one-time · 6 months</span>
+                <span style={{ fontSize: '0.76rem', color: '#6b21a8', marginLeft: '4px' }}>one-time · {unlimitedDuration} months</span>
               </div>
 
               <div style={{ marginBottom: '14px' }}>
                 {[
-                  'Unlimited property listings for 6 months',
+                  'Unlimited property listings for ' + unlimitedDuration + ' months',
                   'No monthly subscription needed',
                   'All listing types — Rent, Sale, Shortlet',
                   'GHA verification available on all listings',
@@ -2471,13 +2477,13 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                         amount: unlimitedPrice,
                         customer_email: agentEmail,
                         customer_name: agentEmail,
-                        purpose: 'GetHome Unlimited Plan — 6 Months',
+                        purpose: 'GetHome Unlimited Plan — ' + unlimitedDuration + ' Months',
                         redirect_url: 'https://trygethome.online/?payment=success&type=unlimited',
                         meta: {
                           payment_type: 'unlimited_plan',
                           agent_id: resolvedAgentId,
                           plan: 'unlimited',
-                          duration_months: 6,
+                          duration_months: unlimitedDuration,
                         },
                       }),
                     });
@@ -10799,7 +10805,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length} Pending / Assigned
               </span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} Done
+                {inspections.filter(function(i){ return i.status === 'gha_done' || (i.gha_done_at && i.status !== 'confirmed' && i.status !== 'cancelled'); }).length} Done
               </span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
                 {inspections.filter(function(i){ return i.status === 'confirmed'; }).length} Confirmed
@@ -13284,7 +13290,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               var pendingInspections = inspections.filter(function(i) {
                 return !i.status || i.status === 'pending' || i.status === 'assigned';
               });
-              var doneInspections = inspections.filter(function(i) { return i.status === 'gha_done'; });
+              var doneInspections = inspections.filter(function(i) {
+                return i.status === 'gha_done' || (i.gha_done_at && i.status !== 'confirmed' && i.status !== 'cancelled');
+              });
               var confirmedInspections = inspections.filter(function(i) { return i.status === 'confirmed'; });
               var cancelledInspections = inspections.filter(function(i) { return i.status === 'cancelled'; });
 
