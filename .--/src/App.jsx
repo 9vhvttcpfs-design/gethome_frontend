@@ -2828,7 +2828,8 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); clearMessages(); }} /></div>
   );
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
     var commissionRequired = (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) &&
       (user?.agent_type === 'agency');
     if (commissionRequired && !commissionAgreed) {
@@ -2844,8 +2845,9 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       setErrorMsg(`You have reached your ${AGENT_TIERS[agentTier]?.label} plan limit of ${limit} listings. Please upgrade.`);
       return;
     }
-    if (submitLockRef.current) return; // guards against a double-fired synthetic submit event
+    if (submitLockRef.current) { console.log('Submit blocked by lock'); return; } // guards against a double-fired synthetic submit event
     submitLockRef.current = true;
+    console.log('Submit started - lock acquired');
     setSubmitting(true); clearMessages();
     let responseData = null;
     try {
@@ -2942,7 +2944,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         setShowFeaturedUpsell(true);
       }
     } catch (err) { setErrorMsg((err.message || 'Something went wrong. Please try again.') + (responseData ? ' | Server: ' + JSON.stringify(responseData) : '')); }
-    finally { submitLockRef.current = false; setSubmitting(false); }
+    finally { submitLockRef.current = false; setSubmitting(false); console.log('Submit lock released'); }
   };
   const handleDelete = async (property) => {
     if (!window.confirm(`Delete "${property.title}"? This cannot be undone.`)) return;
@@ -3517,7 +3519,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         {isEditMode && (<div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><p style={{ margin: 0, fontWeight: '700', color: '#1e40af', fontSize: '0.88rem' }}>Editing: {editingProperty.title}</p><button onClick={cancelEdit} style={{ backgroundColor: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer' }}>Cancel Edit</button></div>)}
         {successMsg && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.86rem' }}>{successMsg}</p></div>}
         {errorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.86rem' }}>{errorMsg}</p></div>}
-        <form id="agent-upload-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form id="agent-upload-form" onSubmit={function(e) {
+          if (e && e.preventDefault) e.preventDefault();
+          if (e && e.stopPropagation) e.stopPropagation();
+          handleSubmit(e);
+        }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {field('title', 'Property Listing Title', 'text', 'e.g., Luxury 4 Bedroom Duplex, Ikoyi')}
           <div>
             <label style={ls2}>Property Description</label>
@@ -3944,7 +3950,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   </label>
                 </div>
               )}
-              <button type="submit" disabled={submitting} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              <button type="button" onClick={handleSubmit} disabled={submitting} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
                 {submitting ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Agree and Publish Listing')}
               </button>
             </>
