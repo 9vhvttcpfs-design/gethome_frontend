@@ -2232,8 +2232,13 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
   var isAgencyAccount = agentType === 'agency';
-  var premiumPriceText = isGhana ? 'GH₵ 73.84'  : '₦ 8,500';
-  var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ 35,000';
+  var PLAN_BASE_PRICES = {
+    premium: parseFloat(globalSettings.premium_plan_price || window.__gethomeSettings?.premium_plan_price || 8500),
+    agency: parseFloat(globalSettings.agency_plan_price || window.__gethomeSettings?.agency_plan_price || 35000),
+    unlimited: parseFloat(globalSettings.unlimited_plan_price || window.__gethomeSettings?.unlimited_plan_price || 100000),
+  };
+  var premiumPriceText = isGhana ? 'GH₵ 73.84'  : '₦ ' + PLAN_BASE_PRICES.premium.toLocaleString();
+  var agencyPriceText  = isGhana ? 'GH₵ 304.05' : '₦ ' + PLAN_BASE_PRICES.agency.toLocaleString();
   var tierPriceDisplay = { premium: premiumPriceText, agency: agencyPriceText };
   var canSubscribe  = agentStatus === 'approved';
   var isDisapproved = agentStatus === 'disapproved' || agentStatus === 'rejected';
@@ -2252,7 +2257,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
     if (!appliesToThisPlan) return null;
     if (!activePromo.discount_percent || activePromo.discount_percent <= 0) return null;
     if (!isPromoValid(activePromo)) { console.log('Promo not valid - expired'); return null; }
-    var basePrice = AGENT_TIERS[tierKey]?.price;
+    var basePrice = PLAN_BASE_PRICES[tierKey] || AGENT_TIERS[tierKey]?.price;
     console.log('basePrice:', basePrice, '| discount:', activePromo.discount_percent);
     if (!basePrice) return null;
     return Math.round(basePrice * (1 - activePromo.discount_percent / 100));
@@ -2260,6 +2265,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   const handleUpgrade = async (tierKey, amount) => {
     if (!canSubscribe) return;
     const tier = AGENT_TIERS[tierKey];
+    const tierPrice = PLAN_BASE_PRICES[tierKey] || tier.price;
     const promoPriceForTier = getPromoPrice(tierKey);
     setUpgrading(tierKey);
     try {
@@ -2267,7 +2273,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: amount || promoPriceForTier || tier.price,
+          amount: amount || promoPriceForTier || tierPrice,
           customer_email: agentEmail,
           customer_name: agentEmail,
           purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[tierKey],
@@ -2275,7 +2281,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
             payment_type: 'subscription',
             agent_id: agentId,
             tier: tierKey,
-            original_price: tier.price,
+            original_price: tierPrice,
             promo_price: promoPriceForTier,
             promo_code: activePromo?.promo_code || null,
           },
@@ -2369,7 +2375,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                 <p style={{ color: '#27ae60', fontWeight: '800', fontSize: '1.1rem', margin: '0 0 4px 0' }}>{tierPriceDisplay[tierKey]}<span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>/mo</span></p>
               )}
               <p style={{ color: '#64748b', fontSize: '0.76rem', margin: '0 0 12px 0' }}>Up to {tier.listingLimit} listings</p>
-              <button onClick={() => handleUpgrade(tierKey, promoPrice || tier.price)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+              <button onClick={() => handleUpgrade(tierKey, promoPrice || PLAN_BASE_PRICES[tierKey] || tier.price)} disabled={upgrading === tierKey} style={{ width: '100%', padding: '9px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
                 {upgrading === tierKey ? 'Processing...' : (
                   <>
                     {currentTier === 'free' ? `Upgrade to ${tier.label}` : `Renew ${tier.label}`}
@@ -2377,7 +2383,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                       <span style={{ marginLeft: '6px', fontWeight: '400' }}>
                         — ₦{promoPrice.toLocaleString()}
                         <span style={{ marginLeft: '4px', textDecoration: 'line-through', opacity: 0.7, fontSize: '0.76rem' }}>
-                          ₦{tier.price.toLocaleString()}
+                          ₦{(PLAN_BASE_PRICES[tierKey] || tier.price).toLocaleString()}
                         </span>
                       </span>
                     )}
@@ -2389,7 +2395,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
           })}
         </div>
         {(globalSettings.unlimited_plan_enabled === 'true' || globalSettings.unlimited_plan_enabled === true || window.__gethomeSettings?.unlimited_plan_enabled === 'true') && (function() {
-          var unlimitedPrice = parseFloat(globalSettings.unlimited_plan_price || window.__gethomeSettings?.unlimited_plan_price || 100000);
+          var unlimitedPrice = PLAN_BASE_PRICES.unlimited;
           var isUnlimitedActive = agentProfile?.is_unlimited === true &&
             agentProfile?.unlimited_expires_at &&
             new Date(agentProfile.unlimited_expires_at) > new Date();
@@ -4231,6 +4237,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
   const [unlimitedPlanPrice, setUnlimitedPlanPrice]     = useState('100000');
+  const [premiumPlanPrice, setPremiumPlanPrice]         = useState('8500');
+  const [agencyPlanPrice, setAgencyPlanPrice]           = useState('35000');
   const [unlimitedPlanEnabled, setUnlimitedPlanEnabled] = useState(true);
   const [unlimitedDurationMonths, setUnlimitedDurationMonths] = useState('6');
   const [inspectionTiers, setInspectionTiers]           = useState({
@@ -4280,6 +4288,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.gha_commission_rate) setGhaCommissionRate(data.gha_commission_rate);
         if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
         if (data.unlimited_plan_price) setUnlimitedPlanPrice(data.unlimited_plan_price);
+        if (data.premium_plan_price) setPremiumPlanPrice(data.premium_plan_price);
+        if (data.agency_plan_price) setAgencyPlanPrice(data.agency_plan_price);
         if (data.unlimited_plan_enabled !== undefined) setUnlimitedPlanEnabled(data.unlimited_plan_enabled === 'true' || data.unlimited_plan_enabled === true);
         if (data.unlimited_plan_duration_months) setUnlimitedDurationMonths(data.unlimited_plan_duration_months);
         if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
@@ -9098,6 +9108,67 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </button>
                     <p style={{ margin: '8px 0 0 0', fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center' }}>
                       SA and GHA earn their commission % on this payment. Agents pay ₦{parseFloat(unlimitedPlanPrice || 100000).toLocaleString()} once for {unlimitedDurationMonths} months of unlimited uploads.
+                    </p>
+                  </div>
+                )}
+
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Subscription Plan Prices</h3>
+                    <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Change plan prices — updates automatically apply to all payment flows and webhook matching.
+                    </p>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                          Premium Plan Price (₦)
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600' }}>₦</span>
+                          <input type='number' min='0' step='500'
+                            value={premiumPlanPrice}
+                            onChange={function(e) { setPremiumPlanPrice(e.target.value); }}
+                            style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                          Agency Plan Price (₦)
+                        </label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600' }}>₦</span>
+                          <input type='number' min='0' step='1000'
+                            value={agencyPlanPrice}
+                            onChange={function(e) { setAgencyPlanPrice(e.target.value); }}
+                            style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        await Promise.all([
+                          fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'premium_plan_price', setting_value: String(parseFloat(premiumPlanPrice)) }),
+                          }),
+                          fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'agency_plan_price', setting_value: String(parseFloat(agencyPlanPrice)) }),
+                          }),
+                        ]);
+                        setSettingsMsg('Plan prices updated — Premium: ₦' + parseFloat(premiumPlanPrice).toLocaleString() + ' · Agency: ₦' + parseFloat(agencyPlanPrice).toLocaleString());
+                        fetchAppSettings(); // refresh so current prices show immediately
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{ width: '100%', padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                      Save Plan Prices
+                    </button>
+                    <p style={{ margin: '8px 0 0 0', fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center' }}>
+                      ℹ Webhook matching uses 10% tolerance — payments within 10% of plan price are matched automatically
                     </p>
                   </div>
                 )}
