@@ -2376,7 +2376,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
             </div>);
           })}
         </div>
-        {(function() {
+        {(globalSettings.unlimited_plan_enabled === 'true' || globalSettings.unlimited_plan_enabled === true || window.__gethomeSettings?.unlimited_plan_enabled === 'true') && (function() {
           var unlimitedPrice = parseFloat(globalSettings.unlimited_plan_price || window.__gethomeSettings?.unlimited_plan_price || 100000);
           var isUnlimitedActive = agentProfile?.is_unlimited === true &&
             agentProfile?.unlimited_expires_at &&
@@ -4175,6 +4175,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
   const [unlimitedPlanPrice, setUnlimitedPlanPrice]     = useState('100000');
+  const [unlimitedPlanEnabled, setUnlimitedPlanEnabled] = useState(true);
   const [inspectionTiers, setInspectionTiers]           = useState({
     tier1: { min: 1, max: 10, fee: 1200 },
     tier2: { min: 11, max: 20, fee: 1500 },
@@ -4222,6 +4223,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.gha_commission_rate) setGhaCommissionRate(data.gha_commission_rate);
         if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
         if (data.unlimited_plan_price) setUnlimitedPlanPrice(data.unlimited_plan_price);
+        if (data.unlimited_plan_enabled !== undefined) setUnlimitedPlanEnabled(data.unlimited_plan_enabled === 'true' || data.unlimited_plan_enabled === true);
         if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
@@ -8928,6 +8930,32 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 {isSuperAdmin && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                     <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Unlimited Plan Price</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', paddingBottom: '14px', borderBottom: '1px solid #f1f5f9' }}>
+                      <div>
+                        <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>Unlimited Plan Visibility</p>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>
+                          {unlimitedPlanEnabled ? 'Agents can see and purchase the Unlimited Plan' : 'Unlimited Plan is hidden from agents'}
+                        </p>
+                      </div>
+                      <button onClick={async function() {
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var newVal = !unlimitedPlanEnabled;
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'unlimited_plan_enabled', setting_value: newVal ? 'true' : 'false' }),
+                          });
+                          if (!res.ok) throw new Error('Failed');
+                          setUnlimitedPlanEnabled(newVal);
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                          setSettingsMsg('Unlimited plan ' + (newVal ? 'enabled' : 'hidden from agents'));
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ width: '56px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: unlimitedPlanEnabled ? '#7e22ce' : '#e2e8f0', position: 'relative', flexShrink: 0 }}>
+                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fff', position: 'absolute', top: '3px', left: unlimitedPlanEnabled ? '31px' : '3px', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
+                      </button>
+                    </div>
                     <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>
                       One-time payment for 6 months of unlimited listing uploads. Currently: ₦{parseFloat(appSettings.unlimited_plan_price || 100000).toLocaleString()}
                     </p>
