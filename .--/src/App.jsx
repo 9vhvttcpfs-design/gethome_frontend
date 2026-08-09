@@ -1700,7 +1700,13 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [depositRef, setDepositRef]               = useState('');
   const [paymentMethod, setPaymentMethod]         = useState(null);
   const [showBankDetails, setShowBankDetails]     = useState(false);
-  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); }, [property?.id]);
+  const [showInspectionModal, setShowInspectionModal] = useState(false);
+  const [inspectionBooking, setInspectionBooking]     = useState(null);
+  const [inspCustomerName, setInspCustomerName]       = useState('');
+  const [inspCustomerEmail, setInspCustomerEmail]     = useState('');
+  const [inspCustomerPhone, setInspCustomerPhone]     = useState('');
+  const [inspBookingLoading, setInspBookingLoading]   = useState(false);
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); setShowInspectionModal(false); setInspectionBooking(null); setInspCustomerName(''); setInspCustomerEmail(''); setInspCustomerPhone(''); setInspBookingLoading(false); }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
   // Shortlet calculations
@@ -1742,42 +1748,50 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const ghBank = globalSettings.bank_details || { bank_name: GETHOME_BANK_NAME, account_number: GETHOME_ACCOUNT_NUMBER, account_name: GETHOME_ACCOUNT_NAME };
   const requireAuth = (key) => { if (user) return true; setAuthWall(key); return false; };
   const handleAuthSuccess = (newUser) => { onUserChange(newUser); setAuthWall(null); };
-  const handleWhatsAppInspection = async function() {
-    var targetNumber = WHATSAPP_NUMBER;
+  // Resolve the SA's WhatsApp number for this property — prefers a live
+  // lookup (the property row itself rarely carries sa_whatsapp), falling
+  // back to whatever static number is available if that lookup fails.
+  const resolveSaWhatsapp = async function(prop) {
+    var targetNumber = prop.sa_whatsapp || globalSettings.payment_whatsapp || WHATSAPP_NUMBER || '';
     var saName = 'GetHome';
-
     try {
-      var res = await fetch(API_URL + '/api/property-sa/' + property.id);
+      var res = await fetch(API_URL + '/api/property-sa/' + prop.id);
       if (res.ok) {
         var data = await res.json();
         if (data.sa_whatsapp && data.sa_whatsapp.trim() !== '') {
-          targetNumber = data.sa_whatsapp.replace(/[^0-9]/g, '');
-          if (targetNumber.startsWith('0')) targetNumber = '234' + targetNumber.substring(1);
+          targetNumber = data.sa_whatsapp;
           saName = data.sa_name || 'GetHome Agent';
         }
       }
     } catch(e) {
       console.log('Could not fetch SA details, using default number');
     }
+    targetNumber = String(targetNumber).replace(/[^0-9]/g, '');
+    if (targetNumber.startsWith('0')) targetNumber = '234' + targetNumber.substring(1);
+    return { targetNumber: targetNumber, saName: saName };
+  };
+
+  const openInspectionWhatsApp = async function(prop, customerName, resolvedSa) {
+    var resolved = resolvedSa || await resolveSaWhatsapp(prop);
 
     // Get the first property image
     var propertyImage = null;
-    if (Array.isArray(property.image_urls) && property.image_urls.length > 0) {
-      propertyImage = property.image_urls[0];
-    } else if (Array.isArray(property.images) && property.images.length > 0) {
-      propertyImage = property.images[0];
+    if (Array.isArray(prop.image_urls) && prop.image_urls.length > 0) {
+      propertyImage = prop.image_urls[0];
+    } else if (Array.isArray(prop.images) && prop.images.length > 0) {
+      propertyImage = prop.images[0];
     }
 
     var disclaimerMessage =
-      'Hello ' + saName + ',\n\n' +
-      'I would like to book a FREE inspection for:\n\n' +
-      'Property: ' + property.title + '\n' +
-      'Location: ' + (property.location || property.address || '') + '\n' +
+      'Hello ' + resolved.saName + ',\n\n' +
+      'I would like to book a ' + (inspectionFeeAmount > 0 ? 'PAID' : 'FREE') + ' inspection for:\n\n' +
+      'Property: ' + prop.title + '\n' +
+      'Location: ' + (prop.location || prop.address || '') + '\n' +
       (inspectionFeeAmount > 0
-        ? 'Inspection Fee: ₦' + inspectionFeeAmount.toLocaleString() + ' (payable before visit)\n'
+        ? 'Inspection Fee: ₦' + inspectionFeeAmount.toLocaleString() + ' (already paid)\n'
         : 'Inspection: FREE\n') +
       (propertyImage ? 'Property Image: ' + propertyImage + '\n' : '') +
-      'My Name/Email: ' + (user ? user.email : 'Customer') + '\n\n' +
+      'My Name/Email: ' + (customerName ? customerName : (user ? user.email : 'Customer')) + '\n\n' +
       '---\n' +
       '🛡️ IMPORTANT NOTICE FROM GETHOME:\n\n' +
       'GetHome is a property discovery platform that connects potential buyers and tenants with property listings. We do not own, manage, or control any of the properties listed on our platform.\n\n' +
@@ -1787,13 +1801,33 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
       '• However, GetHome is NOT liable for any individual agent who may attempt to defraud or mislead you outside of our verified process.\n\n' +
       '⚠️ If any agent asks you for money outside the official GetHome payment process, pressures you, or behaves suspiciously:\n' +
       '1. Do NOT make any payment directly to an agent\n' +
-      '2. Report immediately to your SA (' + saName + ') via this chat\n' +
+      '2. Report immediately to your SA (' + resolved.saName + ') via this chat\n' +
       '3. We will investigate and permanently ban confirmed bad actors from our platform\n\n' +
       'GetHome is committed to making property search safe, transparent and trustworthy for everyone.\n' +
       'Thank you for using GetHome 🏠';
 
     var encodedMsg = encodeURIComponent(disclaimerMessage);
-    window.open('https://wa.me/' + targetNumber + '?text=' + encodedMsg, '_blank');
+    window.open('https://wa.me/' + resolved.targetNumber + '?text=' + encodedMsg, '_blank');
+  };
+
+  // Payment-first inspection booking: a paid inspection fee must clear
+  // before WhatsApp opens, so the customer's contact details and payment
+  // are collected in a modal instead of jumping straight to WhatsApp.
+  const handleBookInspection = async function(prop) {
+    var targetProperty = prop || property;
+    if (inspectionFeeAmount > 0) {
+      var resolved = await resolveSaWhatsapp(targetProperty);
+      setInspectionBooking({
+        property: targetProperty,
+        fee: inspectionFeeAmount,
+        sa_whatsapp: resolved.targetNumber,
+        sa_name: resolved.saName,
+        step: 'details',
+      });
+      setShowInspectionModal(true);
+    } else {
+      openInspectionWhatsApp(targetProperty, null);
+    }
   };
   const triggerProxyInspection = async (u) => {
     const usr = u || user;
@@ -2013,7 +2047,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 </div>);
               })}
             </div>
-            {inspectionMode === 'whatsapp' ? <button onClick={handleWhatsAppInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+            {inspectionMode === 'whatsapp' ? <button onClick={function() { handleBookInspection(property); }} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
                 {inspectionFeeAmount > 0
                   ? 'Book Inspection (₦' + inspectionFeeAmount.toLocaleString() + ')'
                   : 'Book FREE WhatsApp Inspection'}
@@ -2154,6 +2188,114 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               Sign in to {{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]}
             </p>
             <InlineAuthForm actionLabel={{ escrow: 'secure your deposit', proxy: 'book proxy inspection', loan: 'apply for a loan' }[authWall]} onSuccess={handleAuthSuccess} globalSettings={globalSettings} />
+          </div>
+        </div>
+      )}
+      {showInspectionModal && inspectionBooking && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '400px', width: '100%' }}>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1rem' }}>Book Inspection</h3>
+              <button onClick={function() { setShowInspectionModal(false); }}
+                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+            </div>
+
+            <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px' }}>
+              <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                {inspectionBooking.property.title}
+              </p>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.76rem' }}>
+                📍 {inspectionBooking.property.location}
+              </p>
+            </div>
+
+            {inspectionBooking.fee > 0 && (
+              <div style={{ backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #fde68a' }}>
+                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#92400e', fontSize: '0.84rem' }}>
+                  Inspection Fee: ₦{parseFloat(inspectionBooking.fee).toLocaleString()}
+                </p>
+                <p style={{ margin: 0, color: '#78350f', fontSize: '0.74rem' }}>
+                  Payment required before inspection is scheduled
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Your Name *</label>
+                <input type='text' placeholder='Full name'
+                  value={inspCustomerName}
+                  onChange={function(e) { setInspCustomerName(e.target.value); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Email Address *</label>
+                <input type='email' placeholder='your@email.com'
+                  value={inspCustomerEmail}
+                  onChange={function(e) { setInspCustomerEmail(e.target.value); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Phone Number *</label>
+                <input type='tel' placeholder='08012345678'
+                  value={inspCustomerPhone}
+                  onChange={function(e) { setInspCustomerPhone(e.target.value); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            {inspectionBooking.fee > 0 ? (
+              <button onClick={async function() {
+                if (!inspCustomerName.trim() || !inspCustomerEmail.trim() || !inspCustomerPhone.trim()) {
+                  alert('Please fill in all your contact details');
+                  return;
+                }
+                setInspBookingLoading(true);
+                try {
+                  var res = await fetch(API_URL + '/api/inspections/initialize-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      property_id: inspectionBooking.property.id,
+                      customer_email: inspCustomerEmail.trim(),
+                      customer_name: inspCustomerName.trim(),
+                      customer_phone: inspCustomerPhone.trim(),
+                      sa_whatsapp: inspectionBooking.sa_whatsapp,
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed');
+
+                  if (data.requires_payment && data.checkout_url) {
+                    setShowInspectionModal(false);
+                    window.location.href = data.checkout_url;
+                  } else {
+                    // No payment needed - open WhatsApp directly
+                    setShowInspectionModal(false);
+                    openInspectionWhatsApp(inspectionBooking.property, inspCustomerName, { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name });
+                  }
+                } catch(err) {
+                  alert('Error: ' + err.message);
+                } finally {
+                  setInspBookingLoading(false);
+                }
+              }} disabled={inspBookingLoading}
+                style={{ width: '100%', padding: '13px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: inspBookingLoading ? 'not-allowed' : 'pointer', opacity: inspBookingLoading ? 0.7 : 1 }}>
+                {inspBookingLoading ? 'Processing...' : 'Pay ₦' + parseFloat(inspectionBooking.fee).toLocaleString() + ' to Book Inspection'}
+              </button>
+            ) : (
+              <button onClick={function() {
+                if (!inspCustomerName.trim() || !inspCustomerPhone.trim()) {
+                  alert('Please fill in your name and phone number');
+                  return;
+                }
+                setShowInspectionModal(false);
+                openInspectionWhatsApp(inspectionBooking.property, inspCustomerName, { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name });
+              }} style={{ width: '100%', padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer' }}>
+                📱 Continue to WhatsApp
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -12121,13 +12263,26 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       var days = Math.floor(hrs / 24);
                       return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
                     })();
+                    // Distinguish notification types at a glance — a paid-fee
+                    // confirmation, an agent verification request, and a
+                    // confirmed inspection all land in this same feed and
+                    // shouldn't look identical to a fresh customer request.
+                    var notifIcon = notif.type === 'inspection_fee_paid' ? '💰'
+                      : notif.type === 'inspection_request' ? '🔍'
+                      : notif.type === 'agent_verification_request' ? '👤'
+                      : notif.type === 'inspection_confirmed' ? '✓'
+                      : '🔔';
+                    var notifFallbackTitle = notif.type === 'agent_verification_request' ? 'Agent verification request'
+                      : notif.type === 'inspection_fee_paid' ? 'Inspection fee paid'
+                      : notif.type === 'inspection_confirmed' ? 'Inspection confirmed'
+                      : 'Inspection request';
                     return (
                       <div key={notif.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
                         onClick={function() { setSaTab('inspections'); setShowNotifDropdown(false); }}>
                         <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0, marginTop: '5px' }} />
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.72rem' }}>{notifIcon}</div>
                           <div style={{ flex: 1 }}>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.82rem' }}>{notif.customer_name || notif.user_name || 'Inspection request'}</p>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.82rem' }}>{notif.customer_name || notif.user_name || notifFallbackTitle}</p>
                             <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.76rem', lineHeight: '1.4' }}>{notif.property_title || notif.property_location || notif.property_address || ''}</p>
                             <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{notifTimeAgo}</p>
                           </div>
@@ -13182,11 +13337,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       var days = Math.floor(hrs / 24);
                       return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
                     })();
+                    // Same type → icon/label mapping as the bell dropdown, so
+                    // agent verification requests don't get mistaken for an
+                    // actual customer inspection request in this list.
+                    var notifIcon = notif.type === 'inspection_fee_paid' ? '💰'
+                      : notif.type === 'inspection_request' ? '🔍'
+                      : notif.type === 'agent_verification_request' ? '👤'
+                      : notif.type === 'inspection_confirmed' ? '✓'
+                      : '🔔';
+                    var notifTypeLabel = notif.type === 'inspection_fee_paid' ? 'FEE PAID'
+                      : notif.type === 'agent_verification_request' ? 'AGENT VERIFICATION'
+                      : notif.type === 'inspection_confirmed' ? 'CONFIRMED'
+                      : 'INSPECTION REQUEST';
+                    var notifBadgeColors = notif.type === 'agent_verification_request' ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' }
+                      : notif.type === 'inspection_fee_paid' ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0' }
+                      : notif.type === 'inspection_confirmed' ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0' }
+                      : { bg: '#fef3c7', color: '#92400e', border: '#fde68a' };
                     return (
                       <div key={notif.id} style={{ borderRadius: '12px', border: '1.5px solid #fde68a', borderLeft: '5px solid #f59e0b', backgroundColor: '#fffef0', padding: '16px 18px', boxShadow: '0 2px 8px rgba(245,158,11,0.10)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '800', backgroundColor: '#fef3c7', color: '#92400e', border: '1.5px solid #fde68a', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>INSPECTION REQUEST</span>
+                            <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '800', backgroundColor: notifBadgeColors.bg, color: notifBadgeColors.color, border: '1.5px solid ' + notifBadgeColors.border, letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{notifIcon} {notifTypeLabel}</span>
                             <span style={{ fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{notifTimeAgo}</span>
                           </div>
                           <div style={{ display: 'flex', gap: '7px', flexShrink: 0 }}>
@@ -15107,6 +15278,19 @@ function AppContent() {
     } catch(e) {}
     return function() { if (pollUnlimited) clearInterval(pollUnlimited); };
   }, [user?.id]);
+  // Handle return from a paid inspection-fee checkout
+  useEffect(function() {
+    try {
+      var urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('inspection_payment') === 'success') {
+        var inspPropertyId = urlParams.get('property_id');
+        var inspRef = urlParams.get('ref');
+        console.log('Inspection payment confirmed', { property_id: inspPropertyId, ref: inspRef });
+        window.history.replaceState(null, '', window.location.pathname);
+        alert('✓ Inspection fee payment confirmed! Our team will contact you shortly to schedule your inspection.');
+      }
+    } catch(e) {}
+  }, []);
   const searchFiltered = function(list) {
     var result = list;
     if (searchQuery.trim()) {
