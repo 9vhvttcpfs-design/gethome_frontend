@@ -2443,6 +2443,19 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                 </div>
               ) : (
                 <button onClick={async function() {
+                  // Resolve agent ID from multiple sources
+                  var resolvedAgentId = agentId ||
+                    agentProfile?.id ||
+                    JSON.parse(localStorage.getItem('gh_user') || '{}').id ||
+                    null;
+
+                  console.log('Unlimited plan button clicked - agentId:', agentId, '| resolvedAgentId:', resolvedAgentId, '| unlimitedPrice:', unlimitedPrice, '| agentEmail:', agentEmail);
+
+                  if (!resolvedAgentId) {
+                    alert('Error: Could not identify your account. Please log out and log back in.');
+                    return;
+                  }
+
                   try {
                     var token = localStorage.getItem('gh_token');
                     var res = await fetch(API_URL + '/api/flutterwave/initialize-transaction', {
@@ -2456,16 +2469,16 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                         redirect_url: 'https://trygethome.online/?payment=success&type=unlimited',
                         meta: {
                           payment_type: 'unlimited_plan',
-                          agent_id: agentId,
+                          agent_id: resolvedAgentId,
                           plan: 'unlimited',
                           duration_months: 6,
                         },
                       }),
                     });
                     var data = await res.json();
-                    console.log('Unlimited plan payment init:', JSON.stringify(data));
+                    console.log('Unlimited plan payment init response:', JSON.stringify(data));
                     if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
-                    if (!data.checkout_url) throw new Error('No checkout URL returned');
+                    if (!data.checkout_url) throw new Error('No checkout URL returned — response: ' + JSON.stringify(data));
                     window.location.href = data.checkout_url;
                   } catch(err) {
                     alert('Error: ' + err.message);
