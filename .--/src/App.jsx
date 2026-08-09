@@ -11533,6 +11533,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [agentSearchMsg, setAgentSearchMsg]     = useState('');
   const [assigningToGha, setAssigningToGha]     = useState(false);
   const [inspections, setInspections]           = useState([]);
+  const [inspectionCounts, setInspectionCounts] = useState({ pending: 0, done: 0, confirmed: 0, cancelled: 0 });
   const [inspLoading, setInspLoading]           = useState(false);
   const [showCreateInsp, setShowCreateInsp]     = useState(false);
   const [inspMsg, setInspMsg]                   = useState('');
@@ -11705,7 +11706,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     try {
       var res = await fetch(API_URL + '/api/sa/inspections', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      setInspections(Array.isArray(data) ? data : []);
+      console.log('SA inspections response:', JSON.stringify(data).substring(0, 500));
+      console.log('SA inspections count:', Array.isArray(data) ? data.length : Array.isArray(data?.inspections) ? data.inspections.length : 'not array');
+      var inspList = Array.isArray(data) ? data :
+        Array.isArray(data?.inspections) ? data.inspections : [];
+      setInspections(inspList);
+
+      // Also update counts if available
+      if (data?.counts) setInspectionCounts(data.counts);
+
+      console.log('SA inspections set:', inspList.length, 'inspections');
     } catch(e) { console.error(e); }
     finally { if (!silent) setInspLoading(false); }
   }
@@ -13265,15 +13275,21 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 : inspectionSubTab === 'confirmed' ? confirmedInspections
                 : cancelledInspections;
 
+              // Use API counts when available, fall back to local filter counts
+              var pendingCount = inspectionCounts.pending || pendingInspections.length;
+              var doneCount = inspectionCounts.done || doneInspections.length;
+              var confirmedCount = inspectionCounts.confirmed || confirmedInspections.length;
+              var cancelledCount = inspectionCounts.cancelled || cancelledInspections.length;
+
               return (
                 <div>
                   {/* Sub-tab bar */}
                   <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
                     {[
-                      { key: 'pending', label: 'Pending / Assigned', count: pendingInspections.length, color: '#f59e0b' },
-                      { key: 'done', label: 'Done', count: doneInspections.length, color: '#3b82f6' },
-                      { key: 'confirmed', label: 'Confirmed', count: confirmedInspections.length, color: '#27ae60' },
-                      { key: 'cancelled', label: 'Cancelled', count: cancelledInspections.length, color: '#ef4444' },
+                      { key: 'pending', label: 'Pending / Assigned', count: pendingCount, color: '#f59e0b' },
+                      { key: 'done', label: 'Done', count: doneCount, color: '#3b82f6' },
+                      { key: 'confirmed', label: 'Confirmed', count: confirmedCount, color: '#27ae60' },
+                      { key: 'cancelled', label: 'Cancelled', count: cancelledCount, color: '#ef4444' },
                     ].map(function(tab) {
                       return (
                         <button key={tab.key}
