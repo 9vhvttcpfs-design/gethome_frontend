@@ -2784,7 +2784,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     const limit = AGENT_TIERS[agentTier]?.listingLimit || 3;
     // Admins and unlimited agents skip the cap check
     const _isMasterAdmin = user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
-    if (!isEditMode && user?.role !== 'admin' && !hasUnlimitedListings && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
+    if (!isEditMode && user?.role !== 'admin' && !effectivelyUnlimited && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
       setErrorMsg(`You have reached your ${AGENT_TIERS[agentTier]?.label} plan limit of ${limit} listings. Please upgrade.`);
       return;
     }
@@ -2950,7 +2950,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   var planColor = plan.colors;
   // Fresh agentProfile read wins over the session-cached user.is_unlimited —
   // an admin grant/revoke mid-session should take effect without re-login.
-  var hasUnlimitedListings = agentProfile?.is_unlimited === true || user?.is_unlimited === true;
+  var hasUnlimitedListings = agentProfile?.is_unlimited === true ||
+    agentProfile?.unlimited_listings === true;
+  // Check expiry
+  var unlimitedExpired = agentProfile?.unlimited_expires_at &&
+    new Date(agentProfile.unlimited_expires_at) < new Date();
+  var effectivelyUnlimited = hasUnlimitedListings && !unlimitedExpired;
   var goToUpgrade = function() {
     setPortalTab('listings');
     setTimeout(function() {
@@ -3122,27 +3127,23 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           )}
         </div>
       </div>
-      {agentProfile?.is_unlimited && agentProfile?.unlimited_expires_at && new Date(agentProfile.unlimited_expires_at) > new Date() ? (
+      {effectivelyUnlimited && (
         <div style={{ backgroundColor: '#faf5ff', borderRadius: '12px', padding: '12px 16px', marginBottom: '14px', border: '2px solid #7e22ce' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '800', color: '#7e22ce', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Plan</p>
+              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '800', color: '#7e22ce', textTransform: 'uppercase' }}>Current Plan</p>
               <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: '#7e22ce', fontSize: '1.05rem' }}>∞ Unlimited Plan</p>
               <p style={{ margin: 0, fontSize: '0.74rem', color: '#6b21a8' }}>
-                ✓ Active · Unlimited uploads · Expires {new Date(agentProfile.unlimited_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                ✓ Unlimited uploads ·
+                {agentProfile?.unlimited_expires_at
+                  ? ' Expires ' + new Date(agentProfile.unlimited_expires_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })
+                  : ' No expiry set'}
               </p>
             </div>
             <span style={{ backgroundColor: '#7e22ce', color: '#fff', borderRadius: '20px', padding: '4px 12px', fontSize: '0.70rem', fontWeight: '800' }}>
               ACTIVE
             </span>
           </div>
-        </div>
-      ) : hasUnlimitedListings && (
-        <div style={{ backgroundColor: '#faf5ff', borderRadius: '10px', padding: '8px 14px', marginBottom: '16px', border: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontWeight: '900', color: '#7e22ce', fontSize: '1rem' }}>∞</span>
-          <p style={{ margin: 0, fontSize: '0.78rem', color: '#7e22ce', fontWeight: '700' }}>
-            You have unlimited listing uploads — granted by GetHome
-          </p>
         </div>
       )}
       {/* Portal sub-tabs */}
@@ -5312,6 +5313,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         var isRejectedTab = agentSubTab === 'rejected';
                         var isDisapproved = agent._status === 'disapproved';
                         var approvalDate = agent.updated_at || agent.created_at;
+                        var agentIsUnlimited = agent.is_unlimited === true || agent.unlimited_listings === true;
                         return (
                           <div key={agent.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '12px 14px' }}>
                             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
@@ -5349,7 +5351,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agent.sa_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>SA: {agent.sa_code}</span>}
                                 {agent.gha_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>GHA: {agent.gha_code}</span>}
-                                {agent.unlimited_listings && (
+                                {agentIsUnlimited && (
                                   <span style={{ backgroundColor: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
                                     ∞ UNLIMITED
                                   </span>
@@ -5388,7 +5390,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agentSubTab === 'approved' && !isDisapproved && (
                                   <button onClick={async function() {
-                                    var isCurrentlyUnlimited = agent.unlimited_listings === true;
+                                    var isCurrentlyUnlimited = agentIsUnlimited;
                                     var newVal = !isCurrentlyUnlimited;
                                     var confirmMsg = newVal
                                       ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They can upload unlimited listings for 6 months.'
@@ -5407,16 +5409,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       fetchApprovedAgents();
                                     } catch(err) { alert('Error: ' + err.message); }
                                   }} style={{
-                                    backgroundColor: agent.unlimited_listings ? '#fff7ed' : '#faf5ff',
-                                    color: agent.unlimited_listings ? '#c2410c' : '#7e22ce',
-                                    border: '1.5px solid ' + (agent.unlimited_listings ? '#fed7aa' : '#e9d5ff'),
+                                    backgroundColor: agentIsUnlimited ? '#fff7ed' : '#faf5ff',
+                                    color: agentIsUnlimited ? '#c2410c' : '#7e22ce',
+                                    border: '1.5px solid ' + (agentIsUnlimited ? '#fed7aa' : '#e9d5ff'),
                                     borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem',
                                     fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
                                   }}>
-                                    {agent.unlimited_listings ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
+                                    {agentIsUnlimited ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
                                   </button>
                                 )}
-                                {agent.unlimited_listings && agent.unlimited_expires_at && (
+                                {agentIsUnlimited && agent.unlimited_expires_at && (
                                   <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#7e22ce', width: '100%' }}>
                                     ∞ Unlimited until {new Date(agent.unlimited_expires_at).toLocaleDateString()}
                                   </p>
