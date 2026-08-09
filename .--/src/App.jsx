@@ -5344,7 +5344,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agent.sa_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>SA: {agent.sa_code}</span>}
                                 {agent.gha_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>GHA: {agent.gha_code}</span>}
-                                {agent.is_unlimited && (
+                                {agent.unlimited_listings && (
                                   <span style={{ backgroundColor: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
                                     ∞ UNLIMITED
                                   </span>
@@ -5383,16 +5383,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agentSubTab === 'approved' && !isDisapproved && (
                                   <button onClick={async function() {
-                                    var newVal = !agent.is_unlimited;
-                                    if (!window.confirm(
-                                      newVal
-                                        ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They will be able to upload as many listings as they want regardless of their subscription plan.'
-                                        : 'Revoke unlimited listings from ' + (agent.full_name || agent.email) + '? They will return to their plan limits.'
-                                    )) return;
+                                    var isCurrentlyUnlimited = agent.unlimited_listings === true;
+                                    var newVal = !isCurrentlyUnlimited;
+                                    var confirmMsg = newVal
+                                      ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They can upload unlimited listings for 6 months.'
+                                      : 'Revoke unlimited listings from ' + (agent.full_name || agent.email) + '? They will return to their plan limits immediately.';
+                                    if (!window.confirm(confirmMsg)) return;
                                     try {
                                       var token = localStorage.getItem('gh_token');
-                                      // Toggles the same is_unlimited column already read at login (user.is_unlimited)
-                                      // and checked in AgentUploadPortal — one flag, not a parallel one.
                                       var res = await fetch(API_URL + '/api/admin/set-unlimited-listings', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
@@ -5404,14 +5402,19 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       fetchApprovedAgents();
                                     } catch(err) { alert('Error: ' + err.message); }
                                   }} style={{
-                                    backgroundColor: agent.is_unlimited ? '#fff7ed' : '#f0fff4',
-                                    color: agent.is_unlimited ? '#c2410c' : '#166534',
-                                    border: '1.5px solid ' + (agent.is_unlimited ? '#fed7aa' : '#bbf7d0'),
+                                    backgroundColor: agent.unlimited_listings ? '#fff7ed' : '#faf5ff',
+                                    color: agent.unlimited_listings ? '#c2410c' : '#7e22ce',
+                                    border: '1.5px solid ' + (agent.unlimited_listings ? '#fed7aa' : '#e9d5ff'),
                                     borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem',
                                     fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
                                   }}>
-                                    {agent.is_unlimited ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
+                                    {agent.unlimited_listings ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
                                   </button>
+                                )}
+                                {agent.unlimited_listings && agent.unlimited_expires_at && (
+                                  <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#7e22ce', width: '100%' }}>
+                                    ∞ Unlimited until {new Date(agent.unlimited_expires_at).toLocaleDateString()}
+                                  </p>
                                 )}
                                 {isRejectedTab && (
                                   <button onClick={function(){ handleReinstate(agent.id, agent.email); }}
