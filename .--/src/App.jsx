@@ -4081,6 +4081,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [reassigningInspId, setReassigningInspId]       = useState(null);
   const [reassignGhaId, setReassignGhaId]               = useState('');
   const [reassignMsg, setReassignMsg]                   = useState('');
+  const [adminReschedulingInspection, setAdminReschedulingInspection] = useState(null);
+  const [adminRescheduleDate, setAdminRescheduleDate]                 = useState('');
+  const [adminReassignGhaId, setAdminReassignGhaId]                   = useState('');
+  const [adminRescheduleReason, setAdminRescheduleReason]             = useState('');
+  const [adminRescheduleMsg, setAdminRescheduleMsg]                   = useState('');
   const [confirmingInspId, setConfirmingInspId]         = useState(null);
   const [adminInspections, setAdminInspections]         = useState([]);
   const [adminInspLoading, setAdminInspLoading]         = useState(false);
@@ -6110,23 +6115,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <X size={11} /> Cancel
                                   </button>
 
-                                  <button onClick={async function() {
-                                    var newDate = window.prompt('Enter new inspection date (YYYY-MM-DD):');
-                                    if (!newDate) return;
-                                    try {
-                                      var token = localStorage.getItem('gh_token');
-                                      var res = await fetch(API_URL + '/api/admin/reschedule-inspection', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                        body: JSON.stringify({ inspection_id: insp.id, rescheduled_date: newDate }),
-                                      });
-                                      var data = await res.json();
-                                      if (!res.ok) throw new Error(data.error || 'Failed');
-                                      setActionMsg('Inspection rescheduled successfully');
-                                      fetchAdminInspections();
-                                    } catch(err) { setActionMsg('Error: ' + err.message); }
+                                  <button onClick={function() {
+                                    setAdminReschedulingInspection(insp);
+                                    setAdminRescheduleDate(insp.rescheduled_date ? insp.rescheduled_date.slice(0, 10) : '');
+                                    setAdminReassignGhaId(insp.gha_id || '');
+                                    setAdminRescheduleReason('');
                                   }} style={{ backgroundColor: 'transparent', border: '1.5px solid #f59e0b', color: '#f59e0b', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    📅 Reschedule
+                                    📅 Reschedule / Reassign
                                   </button>
                                 </>
                               )}
@@ -9443,6 +9438,102 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 } catch(err) { setPromoteMsg('Error: ' + err.message); }
               }} style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '800', cursor: 'pointer', fontSize: '0.88rem' }}>
                 Save Commission Rate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {adminReschedulingInspection && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '400px', width: '100%' }}>
+            <h3 style={{ color: '#0a2240', fontWeight: '800', margin: '0 0 4px 0' }}>Reschedule / Reassign Inspection</h3>
+            <p style={{ color: '#64748b', fontSize: '0.80rem', margin: '0 0 16px 0' }}>
+              {adminReschedulingInspection.property_address || 'Inspection #' + adminReschedulingInspection.id?.slice(0, 8)}
+            </p>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>New Date (optional)</label>
+              <input type='date'
+                value={adminRescheduleDate}
+                onChange={function(e) { setAdminRescheduleDate(e.target.value); }}
+                min={new Date().toISOString().slice(0, 10)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                Reassign to GHA (optional)
+                <span style={{ marginLeft: '4px', color: '#94a3b8', fontWeight: '400', fontSize: '0.70rem' }}>
+                  current: {adminReschedulingInspection.gha_code || 'unassigned'}
+                </span>
+              </label>
+              <select value={adminReassignGhaId}
+                onChange={function(e) { setAdminReassignGhaId(e.target.value); }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }}>
+                <option value=''>Keep current GHA</option>
+                {allGHAsAdmin.map(function(gha) {
+                  return (
+                    <option key={gha.id} value={gha.id}>
+                      {gha.gha_code} — {gha.full_name}
+                      {gha.id === adminReschedulingInspection.gha_id ? ' (current)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Reason (optional)</label>
+              <input type='text' placeholder='e.g. GHA unavailable, SA request...'
+                value={adminRescheduleReason}
+                onChange={function(e) { setAdminRescheduleReason(e.target.value); }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+            </div>
+
+            {adminRescheduleMsg && (
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontWeight: '600',
+                color: adminRescheduleMsg.startsWith('Error') ? '#ef4444' : '#27ae60' }}>
+                {adminRescheduleMsg}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={function() {
+                setAdminReschedulingInspection(null);
+                setAdminRescheduleMsg('');
+              }} style={{ flex: 1, padding: '11px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={async function() {
+                if (!adminRescheduleDate && !adminReassignGhaId) {
+                  setAdminRescheduleMsg('Please select a new date or a different GHA');
+                  return;
+                }
+                try {
+                  var token = localStorage.getItem('gh_token');
+                  var res = await fetch(API_URL + '/api/admin/reschedule-inspection', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                    body: JSON.stringify({
+                      inspection_id: adminReschedulingInspection.id,
+                      rescheduled_date: adminRescheduleDate || null,
+                      new_gha_id: adminReassignGhaId || null,
+                      reason: adminRescheduleReason || null,
+                    }),
+                  });
+                  var data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Failed');
+                  setAdminRescheduleMsg(data.message);
+                  fetchAdminInspections();
+                  setTimeout(function() {
+                    setAdminReschedulingInspection(null);
+                    setAdminRescheduleMsg('');
+                  }, 2000);
+                } catch(err) { setAdminRescheduleMsg('Error: ' + err.message); }
+              }} style={{ flex: 2, padding: '11px', border: 'none', borderRadius: '10px', backgroundColor: '#f59e0b', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>
+                {adminReassignGhaId && adminReassignGhaId !== adminReschedulingInspection.gha_id
+                  ? 'Reassign GHA' : 'Reschedule'}
               </button>
             </div>
           </div>
