@@ -4078,6 +4078,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [depositViewingProperty, setDepositViewingProperty] = useState(null);
   const [expandedListing, setExpandedListing]           = useState(null);
   const [expandedAgent, setExpandedAgent]               = useState(null);
+  const [selectedAgentDetails, setSelectedAgentDetails] = useState(null);
   const [manualUpgradeAgent, setManualUpgradeAgent]     = useState(null);
   const [manualUpgradeTier, setManualUpgradeTier]       = useState('premium');
   const [upgradeMsg, setUpgradeMsg]                     = useState('');
@@ -4625,6 +4626,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       var data = await res.json();
       setApprovedAgents(Array.isArray(data) ? data : []);
     } catch(e) { console.error('Fetch approved agents error:', e.message); }
+  };
+
+  const fetchAgentDetails = async function(agentId) {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/agent-details/' + agentId, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setSelectedAgentDetails(data);
+    } catch(e) { console.error('Agent details error:', e.message); }
   };
 
   const fetchTransactions = async function() {
@@ -5412,7 +5424,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                               </div>
                               <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '5px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
-                                <button onClick={function(){ setExpandedAgent(isExpanded ? null : agent.id); }}
+                                <button onClick={function(){
+                                    var next = isExpanded ? null : agent.id;
+                                    setExpandedAgent(next);
+                                    if (next) { setSelectedAgentDetails(null); fetchAgentDetails(agent.id); }
+                                  }}
                                   style={{ padding: '5px 10px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined }}>
                                   {isExpanded ? 'Hide' : 'Details'}
                                 </button>
@@ -5494,6 +5510,29 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   emailSubject: 'GetHome Agent — ' + (agent.full_name || ''),
                                   emailBody: 'Hello ' + (agent.full_name || '') + ',\n\nGetHome Admin here.\n\nBest regards,\nGetHome',
                                 })}
+                                <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px 16px', marginTop: '10px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
+                                  <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.84rem' }}>Bank Details</p>
+                                  {selectedAgentDetails?.bank_name || selectedAgentDetails?.profile_bank_name ? (
+                                    <div>
+                                      <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#374151', fontSize: '0.82rem' }}>
+                                        {selectedAgentDetails.bank_name || selectedAgentDetails.profile_bank_name}
+                                      </p>
+                                      <p style={{ margin: '0 0 4px 0', color: '#0a2240', fontSize: '0.90rem', fontWeight: '800', letterSpacing: '0.08em' }}>
+                                        {selectedAgentDetails.account_number || selectedAgentDetails.profile_account_number}
+                                      </p>
+                                      <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.80rem' }}>
+                                        {selectedAgentDetails.account_name || selectedAgentDetails.profile_account_name}
+                                      </p>
+                                      {selectedAgentDetails.bank_updated_at && (
+                                        <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
+                                          Updated: {new Date(selectedAgentDetails.bank_updated_at).toLocaleDateString()}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8' }}>No bank details provided yet</p>
+                                  )}
+                                </div>
                                 <div style={{ marginTop: '10px', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '10px', border: '1.5px solid #bfdbfe' }}>
                                   <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Assign to GHA</p>
                                   {agent.gha_code && (
@@ -11436,6 +11475,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [reassignGhaId, setReassignGhaId]                   = useState('');
   const [rescheduleReason, setRescheduleReason]             = useState('');
   const [rescheduleMsg, setRescheduleMsg]                   = useState('');
+  const [inspectionSubTab, setInspectionSubTab]              = useState('pending');
   const [notifications, setNotifications]           = useState([]);
   const [showNotifDropdown, setShowNotifDropdown]   = useState(false);
   const notifBellRef                                = useRef(null);
@@ -13141,224 +13181,152 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               </div>
             )}
 
-            {/* Summary row */}
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length} Pending / Assigned
-              </span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} GHA Done
-              </span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return i.status === 'confirmed'; }).length} Confirmed
-              </span>
-            </div>
+            {(function() {
+              var pendingInspections = inspections.filter(function(i) {
+                return !i.status || i.status === 'pending' || i.status === 'assigned';
+              });
+              var doneInspections = inspections.filter(function(i) { return i.status === 'gha_done'; });
+              var confirmedInspections = inspections.filter(function(i) { return i.status === 'confirmed'; });
+              var cancelledInspections = inspections.filter(function(i) { return i.status === 'cancelled'; });
 
-            {/* Board */}
-            {inspLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
-            ) : (
-              <div style={isMobile ? { display: 'flex', flexDirection: 'column', gap: '24px' } : { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', alignItems: 'start' }}>
+              var activeInspections = inspectionSubTab === 'pending' ? pendingInspections
+                : inspectionSubTab === 'done' ? doneInspections
+                : inspectionSubTab === 'confirmed' ? confirmedInspections
+                : cancelledInspections;
 
-                {/* PENDING column */}
+              return (
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94a3b8', flexShrink: 0 }}></div>
-                    <p style={{ margin: 0, fontWeight: '800', color: '#475569', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
-                      PENDING / ASSIGNED ({inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length})
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
-                      <div className="live-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#22c55e', flexShrink: 0 }}></div>
-                      <span style={{ fontSize: '0.60rem', fontWeight: '800', color: '#22c55e', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>LIVE</span>
-                    </div>
+                  {/* Sub-tab bar */}
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    {[
+                      { key: 'pending', label: 'Pending / Assigned', count: pendingInspections.length, color: '#f59e0b' },
+                      { key: 'done', label: 'Done', count: doneInspections.length, color: '#3b82f6' },
+                      { key: 'confirmed', label: 'Confirmed', count: confirmedInspections.length, color: '#27ae60' },
+                      { key: 'cancelled', label: 'Cancelled', count: cancelledInspections.length, color: '#ef4444' },
+                    ].map(function(tab) {
+                      return (
+                        <button key={tab.key}
+                          onClick={function() { setInspectionSubTab(tab.key); }}
+                          style={{
+                            padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                            fontWeight: '700', fontSize: '0.76rem',
+                            backgroundColor: inspectionSubTab === tab.key ? tab.color : '#f1f5f9',
+                            color: inspectionSubTab === tab.key ? '#fff' : '#64748b',
+                          }}>
+                          {tab.label} ({tab.count})
+                        </button>
+                      );
+                    })}
                   </div>
-                  {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #e2e8f0', borderRadius: '10px' }}>No pending or assigned inspections</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).map(function(insp) {
-                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
-                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                        return (
-                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #94a3b8' : undefined }}>
-                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
-                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
-                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
-                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
-                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
-                            </div>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
-                            {insp.created_at && <p style={{ margin: 0, fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
 
-                            {(insp.status === 'assigned' || insp.status === 'pending' || !insp.status) && (
-                              <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                                <button onClick={async function() {
-                                  var reason = window.prompt('Reason for cancellation (optional):');
-                                  if (reason === null) return;
-                                  try {
-                                    var token = localStorage.getItem('gh_staff_token');
-                                    var res = await fetch(API_URL + '/api/sa/cancel-inspection', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                      body: JSON.stringify({ inspection_id: insp.id, cancellation_reason: reason || null }),
-                                    });
-                                    var data = await res.json();
-                                    if (!res.ok) throw new Error(data.error || 'Failed');
-                                    setInspMsg('Inspection cancelled successfully');
-                                    fetchInspections();
-                                  } catch(err) { setInspMsg('Error: ' + err.message); }
-                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  <X size={11} /> Cancel
-                                </button>
-
-                                <button onClick={function() {
-                                  setReschedulingInspection(insp);
-                                  setRescheduleDate(insp.rescheduled_date ? insp.rescheduled_date.slice(0, 10) : '');
-                                  setReassignGhaId(insp.gha_id || '');
-                                  setRescheduleReason('');
-                                }} style={{ backgroundColor: 'transparent', border: '1.5px solid #f59e0b', color: '#f59e0b', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                  📅 Reschedule / Reassign
-                                </button>
-                              </div>
-                            )}
-
-                            {insp.status === 'cancelled' && (
-                              <div style={{ marginTop: '6px', padding: '6px 10px', backgroundColor: '#fff7ed', borderRadius: '6px', border: '1px solid #fed7aa' }}>
-                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#c2410c', fontWeight: '600' }}>
-                                  Cancelled {insp.cancelled_at ? '· ' + new Date(insp.cancelled_at).toLocaleDateString() : ''}
-                                  {insp.cancellation_reason ? ' · ' + insp.cancellation_reason : ''}
-                                </p>
-                              </div>
-                            )}
-
-                            {insp.rescheduled_date && insp.status !== 'cancelled' && (
-                              <div style={{ marginTop: '6px', padding: '6px 10px', backgroundColor: '#fefce8', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#92400e', fontWeight: '600' }}>
-                                  📅 Rescheduled to: {new Date(insp.rescheduled_date).toLocaleDateString()}
-                                </p>
-                              </div>
-                            )}
+                  {/* Cards */}
+                  {inspLoading ? (
+                    <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
+                  ) : activeInspections.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                      <p style={{ fontSize: '0.84rem' }}>No {inspectionSubTab} inspections</p>
+                    </div>
+                  ) : activeInspections.map(function(insp) {
+                    var isConfirming = confirmingId === insp.id;
+                    return (
+                      <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px 16px', marginBottom: '10px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(10,34,64,0.05)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                              {insp.customer_name}
+                            </p>
+                            <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                              📍 {insp.property_address || 'Address TBD'}
+                            </p>
+                            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>
+                              📞 {insp.customer_phone || 'No phone'} · ✉ {insp.customer_email}
+                            </p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '800',
+                              backgroundColor: insp.status === 'confirmed' ? '#f0fff4' : insp.status === 'gha_done' ? '#eff6ff' : insp.status === 'cancelled' ? '#fff7ed' : '#fef3c7',
+                              color: insp.status === 'confirmed' ? '#166534' : insp.status === 'gha_done' ? '#1e40af' : insp.status === 'cancelled' ? '#c2410c' : '#92400e',
+                            }}>
+                              {(insp.status === 'gha_done' ? 'DONE' : insp.status || 'PENDING').toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
 
-                {/* GHA DONE column */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#f59e0b', flexShrink: 0 }}></div>
-                    <p style={{ margin: 0, fontWeight: '800', color: '#92400e', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
-                      GHA DONE ({inspections.filter(function(i){ return i.status === 'gha_done'; }).length})
-                    </p>
-                  </div>
-                  {inspections.filter(function(i){ return i.status === 'gha_done'; }).length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #fde68a', borderRadius: '10px' }}>No completed inspections awaiting review</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inspections.filter(function(i){ return i.status === 'gha_done'; }).map(function(insp) {
-                        var isConfirming = confirmingId === insp.id;
-                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
-                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                        return (
-                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #f59e0b' : undefined }}>
-                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
-                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
-                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
-                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
-                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
-                            </div>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
-                            {insp.gha_notes && (
-                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', border: '1.5px solid #e2e8f0' }}>
-                                <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>GHA Inspection Report</p>
-                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
-                                {insp.gha_done_at && <p style={{ margin: '8px 0 0 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
-                              </div>
-                            )}
-                            {insp.created_at && <p style={{ margin: '4px 0 8px 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
-                            <button onClick={async function() {
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '0.72rem', color: '#64748b', marginBottom: '8px' }}>
+                          <span>GHA: {insp.gha_agents?.gha_code || insp.gha_code || 'Unassigned'}</span>
+                          {insp.inspection_date && <span>📅 {new Date(insp.inspection_date).toLocaleDateString()}</span>}
+                          {insp.rescheduled_date && <span>🔄 Rescheduled: {new Date(insp.rescheduled_date).toLocaleDateString()}</span>}
+                          {insp.inspection_type && <span>Type: {insp.inspection_type}</span>}
+                        </div>
+
+                        {insp.gha_notes && (
+                          <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px' }}>
+                            <p style={{ margin: 0, fontSize: '0.76rem', color: '#374151' }}>GHA Notes: {insp.gha_notes}</p>
+                          </div>
+                        )}
+
+                        {insp.cancellation_reason && (
+                          <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '6px 10px', marginBottom: '8px', border: '1px solid #fed7aa' }}>
+                            <p style={{ margin: 0, fontSize: '0.72rem', color: '#c2410c' }}>Cancelled: {insp.cancellation_reason}</p>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
+                          {insp.status === 'gha_done' && (
+                            <button disabled={isConfirming} onClick={async function() {
                               setConfirmingId(insp.id);
                               try {
+                                var token = localStorage.getItem('gh_staff_token');
                                 var res = await fetch(API_URL + '/api/sa/confirm-inspection', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                  body: JSON.stringify({ inspection_id: insp.id })
+                                  body: JSON.stringify({ inspection_id: insp.id }),
                                 });
                                 var data = await res.json();
-                                if (!res.ok) throw new Error(data.error || 'Failed');
-                                setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'confirmed', confirmed_at: new Date().toISOString() }) : x; }); });
-                                setInspMsg('Inspection confirmed successfully.');
-                                if (insp.customer_email) {
-                                  // Show rating prompt to customer via WhatsApp/email after confirmation
-                                  // The rating link goes to the app with query params
-                                  var ratingUrl = 'https://trygethome.online/?rate=true&gha=' + insp.gha_id + '&insp=' + insp.id;
-                                  console.log('Rating link for customer:', ratingUrl);
-                                }
-                              } catch(e) { setInspMsg('Error: ' + e.message); }
+                                if (!res.ok) throw new Error(data.error);
+                                fetchInspections();
+                              } catch(e) { alert('Error: ' + e.message); }
                               finally { setConfirmingId(null); }
-                            }} disabled={isConfirming}
-                              style={{ width: '100%', padding: '9px', backgroundColor: isConfirming ? '#94a3b8' : '#166534', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: isConfirming ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                              {isConfirming ? 'Confirming…' : 'Confirm Inspection'}
+                            }} style={{ backgroundColor: isConfirming ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer' }}>
+                              {isConfirming ? 'Confirming…' : '✓ Confirm'}
                             </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          )}
+                          {(!insp.status || insp.status === 'pending' || insp.status === 'assigned') && (
+                            <>
+                              <button onClick={function() {
+                                setReschedulingInspection(insp);
+                                setRescheduleDate(insp.rescheduled_date ? insp.rescheduled_date.slice(0, 10) : '');
+                                setReassignGhaId(insp.gha_id || '');
+                                setRescheduleReason('');
+                              }} style={{ backgroundColor: 'transparent', border: '1.5px solid #f59e0b', color: '#f59e0b', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                📅 Reschedule / Reassign
+                              </button>
+                              <button onClick={async function() {
+                                var reason = window.prompt('Reason for cancellation (optional):');
+                                if (reason === null) return;
+                                try {
+                                  var token = localStorage.getItem('gh_staff_token');
+                                  var res = await fetch(API_URL + '/api/sa/cancel-inspection', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ inspection_id: insp.id, cancellation_reason: reason }),
+                                  });
+                                  var data = await res.json();
+                                  if (!res.ok) throw new Error(data.error);
+                                  fetchInspections();
+                                } catch(e) { alert('Error: ' + e.message); }
+                              }} style={{ backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                ✕ Cancel
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                {/* SA CONFIRMED column */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#22c55e', flexShrink: 0 }}></div>
-                    <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
-                      SA CONFIRMED ({inspections.filter(function(i){ return i.status === 'confirmed'; }).length})
-                    </p>
-                  </div>
-                  {inspections.filter(function(i){ return i.status === 'confirmed'; }).length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #86efac', borderRadius: '10px' }}>No confirmed inspections yet</div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inspections.filter(function(i){ return i.status === 'confirmed'; }).map(function(insp) {
-                        var phone = (insp.customer_phone || '').replace(/\D/g, '');
-                        var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                        return (
-                          <div key={insp.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isMobile ? '4px solid #22c55e' : undefined }}>
-                            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{insp.property_address || insp.property_title || '—'}</p>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#334155', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
-                            {(insp.customer_email) && <a href={'mailto:' + insp.customer_email} style={{ display: 'block', fontSize: '0.74rem', color: '#1e40af', textDecoration: 'none', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email}</a>}
-                            {phone && <a href={'https://wa.me/' + phone} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: '0.74rem', color: '#25D366', fontWeight: '700', textDecoration: 'none', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>WhatsApp: {insp.customer_phone}</a>}
-                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px', alignItems: 'center' }}>
-                              {(insp.gha_code || insp.gha_name) && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontFamily: "'Inter', sans-serif" }}>{insp.gha_code} {insp.gha_name ? '· ' + insp.gha_name : ''}</span>}
-                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>{insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}</span>
-                              <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>CONFIRMED</span>
-                            </div>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '0.76rem', fontWeight: '700', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>📅 {dtFmt}</p>
-                            {insp.confirmed_at && <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>Confirmed on {new Date(insp.confirmed_at).toLocaleDateString()}</p>}
-                            {insp.gha_notes && (
-                              <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', margin: '8px 0', border: '1.5px solid #e2e8f0' }}>
-                                <p style={{ margin: '0 0 6px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif" }}>GHA Inspection Report</p>
-                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#334155', lineHeight: '1.7', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
-                                {insp.gha_done_at && <p style={{ margin: '8px 0 0 0', fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
-                              </div>
-                            )}
-                            {insp.created_at && <p style={{ margin: 0, fontSize: '0.66rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Created {new Date(insp.created_at).toLocaleDateString()}</p>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -14966,32 +14934,46 @@ function AppContent() {
   // that updates `agents` can lag the redirect back to the app slightly, so
   // give it a moment before re-reading.
   useEffect(function() {
+    var pollUnlimited;
     try {
       var urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('staff_payment') === 'complete' || urlParams.get('payment') === 'success') {
         var isUnlimitedReturn = urlParams.get('type') === 'unlimited';
         if (user?.id) {
-          // Unlimited plan payments take a moment longer for the webhook to
-          // flip is_unlimited/unlimited_expires_at than a plain subscription.
-          setTimeout(async function() {
-            await fetchAgentSubscription(user.id);
-            if (isUnlimitedReturn) {
+          if (isUnlimitedReturn) {
+            // Unlimited plan payments take a moment longer for the webhook to
+            // flip is_unlimited/unlimited_expires_at than a plain subscription —
+            // poll every 2s (up to 10x) until it lands instead of a single fixed wait.
+            var pollCount = 0;
+            pollUnlimited = setInterval(async function() {
+              pollCount++;
               try {
-                var { data: freshProfile } = await supabase
+                var { data } = await supabase
                   .from('profiles')
                   .select('is_unlimited, unlimited_expires_at')
                   .eq('id', user.id)
                   .single();
-                if (freshProfile?.is_unlimited) {
+
+                if (data?.is_unlimited) {
+                  clearInterval(pollUnlimited);
+                  await fetchAgentSubscription(user.id);
                   alert('🎉 Unlimited Plan activated! You can now upload unlimited listings for 6 months.');
                 }
               } catch(e) {}
-            }
-          }, isUnlimitedReturn ? 3000 : 2000);
+
+              if (pollCount >= 10) {
+                clearInterval(pollUnlimited);
+                alert('Payment received! Your account will be upgraded shortly. Please refresh if your plan does not update.');
+              }
+            }, 2000);
+          } else {
+            setTimeout(function() { fetchAgentSubscription(user.id); }, 2000);
+          }
         }
         window.history.replaceState(null, '', window.location.pathname);
       }
     } catch(e) {}
+    return function() { if (pollUnlimited) clearInterval(pollUnlimited); };
   }, [user?.id]);
   const searchFiltered = function(list) {
     var result = list;
