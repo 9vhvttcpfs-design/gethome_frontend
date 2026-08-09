@@ -9452,6 +9452,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               {adminReschedulingInspection.property_address || 'Inspection #' + adminReschedulingInspection.id?.slice(0, 8)}
             </p>
 
+            <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '8px 12px', marginBottom: '14px', border: '1px solid #bfdbfe' }}>
+              <p style={{ margin: 0, fontSize: '0.72rem', color: '#1e40af' }}>
+                ℹ This reschedules or reassigns without resetting GHA work. To reset a completed inspection from scratch use the <strong>Full Reset</strong> option on the inspection card.
+              </p>
+            </div>
+
             <div style={{ marginBottom: '12px' }}>
               <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>New Date (optional)</label>
               <input type='date'
