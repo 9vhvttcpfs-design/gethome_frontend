@@ -5314,6 +5314,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         var isDisapproved = agent._status === 'disapproved';
                         var approvalDate = agent.updated_at || agent.created_at;
                         var agentIsUnlimited = agent.is_unlimited === true || agent.unlimited_listings === true;
+                        var unlimitedExpired = agent.unlimited_expires_at &&
+                          new Date(agent.unlimited_expires_at) < new Date();
+                        var effectivelyUnlimited = agentIsUnlimited && !unlimitedExpired;
                         return (
                           <div key={agent.id} style={{ ...cardStyle, padding: isMobile ? '10px 12px' : '12px 14px' }}>
                             <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', gap: isMobile ? '6px' : '10px' }}>
@@ -5351,7 +5354,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agent.sa_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' }}>SA: {agent.sa_code}</span>}
                                 {agent.gha_code && <span style={{ fontSize: '0.60rem', padding: '2px 7px', borderRadius: '20px', fontWeight: '700', backgroundColor: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>GHA: {agent.gha_code}</span>}
-                                {agentIsUnlimited && (
+                                {effectivelyUnlimited && (
                                   <span style={{ backgroundColor: '#faf5ff', color: '#7e22ce', border: '1px solid #e9d5ff', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
                                     ∞ UNLIMITED
                                   </span>
@@ -5390,8 +5393,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 )}
                                 {agentSubTab === 'approved' && !isDisapproved && (
                                   <button onClick={async function() {
-                                    var isCurrentlyUnlimited = agentIsUnlimited;
-                                    var newVal = !isCurrentlyUnlimited;
+                                    var newVal = !effectivelyUnlimited;
                                     var confirmMsg = newVal
                                       ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They can upload unlimited listings for 6 months.'
                                       : 'Revoke unlimited listings from ' + (agent.full_name || agent.email) + '? They will return to their plan limits immediately.';
@@ -5409,16 +5411,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       fetchApprovedAgents();
                                     } catch(err) { alert('Error: ' + err.message); }
                                   }} style={{
-                                    backgroundColor: agentIsUnlimited ? '#fff7ed' : '#faf5ff',
-                                    color: agentIsUnlimited ? '#c2410c' : '#7e22ce',
-                                    border: '1.5px solid ' + (agentIsUnlimited ? '#fed7aa' : '#e9d5ff'),
+                                    backgroundColor: effectivelyUnlimited ? '#fff7ed' : '#faf5ff',
+                                    color: effectivelyUnlimited ? '#c2410c' : '#7e22ce',
+                                    border: '1.5px solid ' + (effectivelyUnlimited ? '#fed7aa' : '#e9d5ff'),
                                     borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem',
                                     fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', width: isMobile ? '100%' : undefined,
                                   }}>
-                                    {agentIsUnlimited ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
+                                    {effectivelyUnlimited ? '∞ Revoke Unlimited' : '∞ Grant Unlimited'}
                                   </button>
                                 )}
-                                {agentIsUnlimited && agent.unlimited_expires_at && (
+                                {effectivelyUnlimited && agent.unlimited_expires_at && (
                                   <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#7e22ce', width: '100%' }}>
                                     ∞ Unlimited until {new Date(agent.unlimited_expires_at).toLocaleDateString()}
                                   </p>
