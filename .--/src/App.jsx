@@ -42,23 +42,34 @@ var getAgentPlan = function(userObj, agentProfileObj) {
     userObj?.user_metadata?.subscription_tier ||
     'free';
 
+  var isUnlimited = agentProfileObj?.is_unlimited === true ||
+    agentProfileObj?.unlimited_listings === true ||
+    tier === 'unlimited';
+
+  var unlimitedExpired = agentProfileObj?.unlimited_expires_at &&
+    new Date(agentProfileObj.unlimited_expires_at) < new Date();
+
+  if (isUnlimited && !unlimitedExpired) tier = 'unlimited';
+
   var status = agentProfileObj?.subscription_status ||
     userObj?.subscription_status || 'inactive';
 
-  var endDate = agentProfileObj?.subscription_end ||
+  var endDate = agentProfileObj?.unlimited_expires_at ||
+    agentProfileObj?.subscription_end ||
     agentProfileObj?.subscription_expires_at ||
     userObj?.subscription_end || null;
 
   var now = new Date();
   var isExpired = !!(endDate && new Date(endDate) < now);
-  var isActive = (status === 'active' || tier === 'premium' || tier === 'agency') && !isExpired;
+  var isActive = (status === 'active' || tier === 'premium' || tier === 'agency' || isUnlimited) && !isExpired;
 
-  var planNames = { free: 'Free Plan', premium: 'Premium Plan', agency: 'Agency Plan' };
-  var planLimits = { free: 3, premium: 15, agency: 100 };
+  var planNames = { free: 'Free Plan', premium: 'Premium Plan', agency: 'Agency Plan', unlimited: '∞ Unlimited Plan' };
+  var planLimits = { free: 3, premium: 15, agency: 100, unlimited: Infinity };
   var planColors = {
     free: { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' },
     premium: { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' },
     agency: { bg: '#faf5ff', color: '#7e22ce', border: '#e9d5ff' },
+    unlimited: { bg: '#faf5ff', color: '#7e22ce', border: '#7e22ce' },
   };
 
   return {
@@ -67,6 +78,7 @@ var getAgentPlan = function(userObj, agentProfileObj) {
     status: status,
     isActive: isActive,
     isExpired: isExpired,
+    isUnlimited: isUnlimited && !unlimitedExpired,
     endDate: endDate ? new Date(endDate) : null,
     limit: planLimits[tier] || 3,
     colors: planColors[tier] || planColors.free,
@@ -2567,6 +2579,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   const [localIsApproved, setLocalIsApproved]       = useState(isApproved);
   const [agentStatus, setAgentStatus]               = useState(null);
   const [agentBankName, setAgentBankName]           = useState(user?.bank_name || '');
+  const [agentBankCode, setAgentBankCode]           = useState(user?.bank_code || '');
   const [agentAccountNumber, setAgentAccountNumber] = useState(user?.account_number || '');
   const [agentAccountName, setAgentAccountName]     = useState(user?.account_name || '');
   const [bankSaveMsg, setBankSaveMsg]               = useState('');
@@ -2593,7 +2606,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     // has none of the subscription_* columns. Fetched in parallel and merged.
     return Promise.all([
       supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
-      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited, unlimited_expires_at').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited, unlimited_expires_at, bank_name, bank_code, account_number, account_name').eq('id', user.id).single(),
     ])
       .then(function(results) {
         var agentData = results[0] && results[0].data;
@@ -2608,12 +2621,24 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             // can go stale if admin grants/revokes it mid-session).
             is_unlimited: (subData && subData.is_unlimited) === true,
             unlimited_expires_at: (subData && subData.unlimited_expires_at) || null,
+            bank_name: (subData && subData.bank_name) || prev?.bank_name || null,
+            bank_code: (subData && subData.bank_code) || prev?.bank_code || null,
+            account_number: (subData && subData.account_number) || prev?.account_number || null,
+            account_name: (subData && subData.account_name) || prev?.account_name || null,
           });
         });
       })
       .catch(function() {});
   };
   useEffect(function() { fetchAgentProfile(); }, [user?.id]);
+  // Prefill bank details form from the fresh agentProfile read — takes priority
+  // over the `user?.bank_*` values used as initial state above, which can be stale.
+  useEffect(function() {
+    if (agentProfile?.bank_name) setAgentBankName(agentProfile.bank_name);
+    if (agentProfile?.bank_code) setAgentBankCode(agentProfile.bank_code);
+    if (agentProfile?.account_number) setAgentAccountNumber(agentProfile.account_number);
+    if (agentProfile?.account_name) setAgentAccountName(agentProfile.account_name);
+  }, [agentProfile.bank_name, agentProfile.bank_code, agentProfile.account_number, agentProfile.account_name]);
   const [profileState, setProfileState]         = useState('');
   const [profileCity, setProfileCity]           = useState('');
   const [profileCustomCity, setProfileCustomCity] = useState('');
@@ -3308,8 +3333,18 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label style={ls2}>Bank Name</label>
-              <input style={is2} placeholder="e.g. First Bank, GTBank, Access Bank, UBA" value={agentBankName}
-                onChange={function(e){ setAgentBankName(e.target.value); setBankSaveMsg(''); setBankErrorMsg(''); }} />
+              <select style={is2} value={agentBankCode}
+                onChange={function(e){
+                  var selected = NIGERIAN_BANKS.find(function(b) { return b.code === e.target.value; });
+                  setAgentBankCode(e.target.value);
+                  setAgentBankName(selected ? selected.name : '');
+                  setBankSaveMsg(''); setBankErrorMsg('');
+                }}>
+                <option value=''>Select bank...</option>
+                {NIGERIAN_BANKS.map(function(bank) {
+                  return <option key={bank.code} value={bank.code}>{bank.name}</option>;
+                })}
+              </select>
             </div>
             <div>
               <label style={ls2}>Account Number</label>
@@ -3331,11 +3366,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   const res = await fetch(API_URL + '/api/agent/bank-details', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-                    body: JSON.stringify({ bank_name: agentBankName, account_number: agentAccountNumber, account_name: agentAccountName }),
+                    body: JSON.stringify({ bank_name: agentBankName, bank_code: agentBankCode, account_number: agentAccountNumber, account_name: agentAccountName }),
                   });
                   const data = await res.json();
                   if (!res.ok) throw new Error(data.error || 'Failed to save bank details');
                   setBankSaveMsg('Bank details saved. Admin will use these details to process your payments.');
+                  fetchAgentProfile();
                 } catch(e) { setBankErrorMsg(e.message); }
                 finally { setBankSaving(false); }
               }}
@@ -4182,6 +4218,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
   const [unlimitedPlanPrice, setUnlimitedPlanPrice]     = useState('100000');
   const [unlimitedPlanEnabled, setUnlimitedPlanEnabled] = useState(true);
+  const [unlimitedDurationMonths, setUnlimitedDurationMonths] = useState('6');
   const [inspectionTiers, setInspectionTiers]           = useState({
     tier1: { min: 1, max: 10, fee: 1200 },
     tier2: { min: 11, max: 20, fee: 1500 },
@@ -4230,6 +4267,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.sa_commission_rate) setSaCommissionRate(data.sa_commission_rate);
         if (data.unlimited_plan_price) setUnlimitedPlanPrice(data.unlimited_plan_price);
         if (data.unlimited_plan_enabled !== undefined) setUnlimitedPlanEnabled(data.unlimited_plan_enabled === 'true' || data.unlimited_plan_enabled === true);
+        if (data.unlimited_plan_duration_months) setUnlimitedDurationMonths(data.unlimited_plan_duration_months);
         if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
@@ -5395,7 +5433,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <button onClick={async function() {
                                     var newVal = !effectivelyUnlimited;
                                     var confirmMsg = newVal
-                                      ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They can upload unlimited listings for 6 months.'
+                                      ? 'Grant unlimited listing uploads to ' + (agent.full_name || agent.email) + '? They can upload unlimited listings for ' + unlimitedDurationMonths + ' months.'
                                       : 'Revoke unlimited listings from ' + (agent.full_name || agent.email) + '? They will return to their plan limits immediately.';
                                     if (!window.confirm(confirmMsg)) return;
                                     try {
@@ -8959,36 +8997,55 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       </button>
                     </div>
                     <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>
-                      One-time payment for 6 months of unlimited listing uploads. Currently: ₦{parseFloat(appSettings.unlimited_plan_price || 100000).toLocaleString()}
+                      One-time payment for {unlimitedDurationMonths} months of unlimited listing uploads. Currently: ₦{parseFloat(appSettings.unlimited_plan_price || 100000).toLocaleString()}
                     </p>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <div style={{ position: 'relative', flex: 1 }}>
-                        <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600' }}>₦</span>
-                        <input type='number' min='0' step='1000'
-                          value={unlimitedPlanPrice}
-                          onChange={function(e) { setUnlimitedPlanPrice(e.target.value); }}
-                          style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Plan Price</label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontWeight: '600' }}>₦</span>
+                          <input type='number' min='0' step='1000'
+                            value={unlimitedPlanPrice}
+                            onChange={function(e) { setUnlimitedPlanPrice(e.target.value); }}
+                            style={{ width: '100%', padding: '10px 10px 10px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                        </div>
                       </div>
-                      <button onClick={async function() {
-                        try {
-                          var token = localStorage.getItem('gh_token');
-                          var res = await fetch(API_URL + '/api/admin/settings', {
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Duration (months)</label>
+                        <div style={{ position: 'relative' }}>
+                          <input type='number' min='1' max='24' step='1'
+                            value={unlimitedDurationMonths}
+                            onChange={function(e) { setUnlimitedDurationMonths(e.target.value); }}
+                            style={{ width: '100%', padding: '10px 40px 10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                          <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.78rem' }}>mo</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        await Promise.all([
+                          fetch(API_URL + '/api/admin/settings', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                             body: JSON.stringify({ setting_key: 'unlimited_plan_price', setting_value: String(parseFloat(unlimitedPlanPrice)) }),
-                          });
-                          if (!res.ok) throw new Error('Failed');
-                          setSettingsMsg('Unlimited plan price updated to ₦' + parseFloat(unlimitedPlanPrice).toLocaleString());
-                          fetchAppSettings(); // refresh so current price shows immediately
-                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
-                          setTimeout(function() { setSettingsMsg(''); }, 3000);
-                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
-                      }} style={{ flexShrink: 0, padding: '10px 18px', backgroundColor: '#7e22ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>
-                        Update
-                      </button>
-                    </div>
-                    <p style={{ margin: '8px 0 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>
-                      SA and GHA earn their commission % on this payment. Duration: 6 months from payment date.
+                          }),
+                          fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'unlimited_plan_duration_months', setting_value: String(parseInt(unlimitedDurationMonths)) }),
+                          }),
+                        ]);
+                        setSettingsMsg('Unlimited plan updated — ₦' + parseFloat(unlimitedPlanPrice).toLocaleString() + ' for ' + unlimitedDurationMonths + ' months');
+                        fetchAppSettings(); // refresh so current price/duration show immediately
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{ width: '100%', padding: '10px', backgroundColor: '#7e22ce', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                      Save Unlimited Plan Settings
+                    </button>
+                    <p style={{ margin: '8px 0 0 0', fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center' }}>
+                      SA and GHA earn their commission % on this payment. Agents pay ₦{parseFloat(unlimitedPlanPrice || 100000).toLocaleString()} once for {unlimitedDurationMonths} months of unlimited uploads.
                     </p>
                   </div>
                 )}
@@ -10603,7 +10660,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
               <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length} Pending
+                {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length} Pending / Assigned
               </span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
                 {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} Done
@@ -13075,7 +13132,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
               <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length} Pending
+                {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length} Pending / Assigned
               </span>
               <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
                 {inspections.filter(function(i){ return i.status === 'gha_done'; }).length} GHA Done
@@ -13096,18 +13153,18 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#94a3b8', flexShrink: 0 }}></div>
                     <p style={{ margin: 0, fontWeight: '800', color: '#475569', fontSize: '0.72rem', letterSpacing: '0.07em', fontFamily: "'Inter', sans-serif" }}>
-                      PENDING ({inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length})
+                      PENDING / ASSIGNED ({inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length})
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '2px' }}>
                       <div className="live-dot" style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#22c55e', flexShrink: 0 }}></div>
                       <span style={{ fontSize: '0.60rem', fontWeight: '800', color: '#22c55e', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>LIVE</span>
                     </div>
                   </div>
-                  {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).length === 0 ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #e2e8f0', borderRadius: '10px' }}>No pending inspections</div>
+                  {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length === 0 ? (
+                    <div style={{ padding: '20px', textAlign: 'center', color: '#cbd5e1', fontSize: '0.80rem', fontFamily: "'Inter', sans-serif", border: '2px dashed #e2e8f0', borderRadius: '10px' }}>No pending or assigned inspections</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {inspections.filter(function(i){ return !i.status || i.status === 'pending'; }).map(function(insp) {
+                      {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).map(function(insp) {
                         var phone = (insp.customer_phone || '').replace(/\D/g, '');
                         var dtFmt = insp.inspection_date ? new Date(insp.inspection_date).toLocaleString('en-NG', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
                         return (
