@@ -9773,6 +9773,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [listings, setListings]                     = useState([]);
   const [listingsLoading, setListingsLoading]       = useState(false);
   const [inspections, setInspections]               = useState([]);
+  const [inspectionCounts, setInspectionCounts]     = useState({ pending: 0, done: 0, confirmed: 0, cancelled: 0 });
   const [inspLoading, setInspLoading]               = useState(false);
   const [ghaOverview, setGhaOverview]                = useState({});
   const [overviewLoading, setOverviewLoading]       = useState(false);
@@ -9882,9 +9883,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     try {
       var res = await fetch(API_URL + '/api/gha/inspections', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      var list = Array.isArray(data) ? data : [];
-      setInspections(list);
-      var pendingIds = list.filter(function(i){ return !i.status || i.status === 'pending'; }).map(function(i){ return i.id; });
+      var inspList = Array.isArray(data) ? data :
+        Array.isArray(data?.inspections) ? data.inspections : [];
+      setInspections(inspList);
+      if (data?.counts) setInspectionCounts(data.counts);
+      console.log('GHA inspections loaded:', inspList.length);
+      var pendingIds = inspList.filter(function(i){ return !i.status || i.status === 'pending'; }).map(function(i){ return i.id; });
       var brandNew = pendingIds.filter(function(id){ return !knownInspIdsRef.current.has(id); });
       if (brandNew.length > 0 && knownInspIdsRef.current.size > 0) {
         setNewInspIds(function(prev){ var next = new Set(prev); brandNew.forEach(function(id){ next.add(id); }); return next; });
