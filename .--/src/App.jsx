@@ -2722,6 +2722,15 @@ function RenewalBanner({ user, agentTier, isMobile }) {
     </div>
   );
 }
+// Module-level (not per-render-instance) submit lock for the agent upload
+// form. A useRef only guards a single mounted instance of
+// AgentUploadPortal — if the component ever remounts (tab switch, key
+// change) between a duplicate click/tap and the in-flight submit actually
+// resolving, a fresh ref starts back at false and the second submit slips
+// through. A plain module-level variable is shared by every mount and is
+// flipped synchronously, before any `await`, so it can't be reset out from
+// under an in-flight submit the way a ref tied to a stale render could be.
+var agentUploadSubmitLock = false;
 function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onListingPublished, onListingUpdated, onListingDeleted, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry, fmtCurrency, fmtListingPrice, SUPPORTED_COUNTRIES: COUNTRIES } = useCountry();
@@ -2731,7 +2740,6 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     ? parseFloat(globalSettings.featured_listing_fee || currentConfig.featured)
     : currentConfig.featured;
   const [showAgreementModal, setShowAgreementModal] = useState(false);
-  const [pendingSubmit, setPendingSubmit]           = useState(false);
   const [featuredPaid, setFeaturedPaid]             = useState(false);
   // Featuring payment now happens AFTER publish (see handleSubmit + this
   // upsell modal) instead of before — Flutterwave does a full-page redirect,
@@ -2835,12 +2843,6 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   const [customCity, setCustomCity]               = useState('');
   const [editingProperty, setEditingProperty]     = useState(null);
   const [submitting, setSubmitting]               = useState(false);
-  // Ref-based lock (in addition to `submitting` state) — the agreement modal
-  // dispatches a synthetic 'submit' event via setTimeout, and two back-to-back
-  // clicks/dispatches can both read a stale `submitting === false` from their
-  // own closures before React re-renders. A ref updates synchronously, so it
-  // actually blocks a second overlapping handleSubmit call from double-posting.
-  const submitLockRef                             = useRef(false);
   const [successMsg, setSuccessMsg]               = useState('');
   const [errorMsg, setErrorMsg]                   = useState('');
   const [deletingId, setDeletingId]               = useState(null);
@@ -2969,7 +2971,10 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       <input type={type} placeholder={placeholder} required={key !== 'image_url'} style={is2} value={form[key] || ''}
         onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); clearMessages(); }} /></div>
   );
-  const handleSubmit = async (e) => {
+  // Opens the agreement modal — this is the direct click handler for the
+  // main "Agree and Publish Listing" button. The actual submit (handleSubmit
+  // below) only ever runs from the modal's "I Accept" button.
+  const handleOpenAgreement = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
     var commissionRequired = (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) &&
@@ -2978,19 +2983,27 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       alert('Please read and agree to the commission policy before publishing.');
       return;
     }
-    if (!pendingSubmit) { setShowAgreementModal(true); return; }
-    setPendingSubmit(false);
+    setShowAgreementModal(true);
+  };
+  const handleSubmit = async () => {
+    // Check the module-level lock synchronously, first thing, and flip it
+    // before anything else runs — including before the first `await` below
+    // — so a duplicate call arriving in the same tick (double-tap, double
+    // dispatch) is blocked outright rather than racing an async gap.
+    if (agentUploadSubmitLock) { console.log('BLOCKED duplicate submit'); return; }
+    agentUploadSubmitLock = true;
+    setSubmitting(true); clearMessages();
+
     const limit = AGENT_TIERS[agentTier]?.listingLimit || 3;
     // Admins and unlimited agents skip the cap check
     const _isMasterAdmin = user?.email?.toLowerCase() === MASTER_ADMIN.toLowerCase();
     if (!isEditMode && user?.role !== 'admin' && !effectivelyUnlimited && !_isMasterAdmin && !isVIPAgent && agentListingCount >= limit) {
       setErrorMsg(`You have reached your ${AGENT_TIERS[agentTier]?.label} plan limit of ${limit} listings. Please upgrade.`);
+      agentUploadSubmitLock = false; setSubmitting(false);
       return;
     }
-    if (submitLockRef.current) { console.log('Submit blocked by lock'); return; } // guards against a double-fired synthetic submit event
-    submitLockRef.current = true;
-    console.log('Submit started - lock acquired');
-    setSubmitting(true); clearMessages();
+    var commissionRequired = (globalSettings.agency_commission_enabled === 'true' || globalSettings.agency_commission_enabled === true) &&
+      (user?.agent_type === 'agency');
     let responseData = null;
     try {
       // Safe JSON helper — prevents "Unexpected token '<'" when server returns HTML
@@ -3086,7 +3099,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         setShowFeaturedUpsell(true);
       }
     } catch (err) { setErrorMsg((err.message || 'Something went wrong. Please try again.') + (responseData ? ' | Server: ' + JSON.stringify(responseData) : '')); }
-    finally { submitLockRef.current = false; setSubmitting(false); console.log('Submit lock released'); }
+    finally { agentUploadSubmitLock = false; setSubmitting(false); console.log('Submit lock released'); }
   };
   const handleDelete = async (property) => {
     if (!window.confirm(`Delete "${property.title}"? This cannot be undone.`)) return;
@@ -3255,11 +3268,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '10px', flexShrink: 0 }}>
               <button onClick={function(){ setShowAgreementModal(false); }} style={{ flex: 1, padding: '12px', border: '1.5px solid #e2e8f0', borderRadius: '10px', backgroundColor: '#fff', color: '#64748b', fontWeight: '600', fontSize: '0.88rem', cursor: 'pointer' }}>Go Back and Edit</button>
               <button onClick={function(){
-                if (submitLockRef.current) return; // block a double-click/double-tap from dispatching two submits
-                setShowAgreementModal(false); setPendingSubmit(true);
+                if (agentUploadSubmitLock) return; // block a double-click/double-tap from calling handleSubmit twice
+                setShowAgreementModal(false);
                 fetch(`${API_URL}/api/legal/accept`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: user?.id, user_email: user?.email, agreement_type: 'agent_agreement', version: '1.0' }) }).catch(console.error);
-                setTimeout(function(){ var f = document.getElementById('agent-upload-form'); if (f) f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }, 150);
-              }} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
+                handleSubmit();
+              }} disabled={agentUploadSubmitLock} style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '10px', backgroundColor: '#27ae60', color: '#fff', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
                 I Accept - Publish Listing
               </button>
             </div>
@@ -3661,11 +3674,13 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         {isEditMode && (<div style={{ backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><p style={{ margin: 0, fontWeight: '700', color: '#1e40af', fontSize: '0.88rem' }}>Editing: {editingProperty.title}</p><button onClick={cancelEdit} style={{ backgroundColor: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '600', cursor: 'pointer' }}>Cancel Edit</button></div>)}
         {successMsg && <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#166534', fontWeight: '600', fontSize: '0.86rem' }}>{successMsg}</p></div>}
         {errorMsg && <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}><p style={{ margin: 0, color: '#b91c1c', fontWeight: '600', fontSize: '0.86rem' }}>{errorMsg}</p></div>}
-        <form id="agent-upload-form" onSubmit={function(e) {
-          if (e && e.preventDefault) e.preventDefault();
-          if (e && e.stopPropagation) e.stopPropagation();
-          handleSubmit(e);
-        }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* No button in this form is type="submit" and nothing dispatches a
+            synthetic submit event anymore — actual publishing happens via
+            handleSubmit(), called directly from the agreement modal's
+            "I Accept" button. This handler is just a safety net so a native
+            submit (e.g. Enter key in a text field) can never double-fire
+            the real submit path. */}
+        <form id="agent-upload-form" onSubmit={function(e) { if (e && e.preventDefault) e.preventDefault(); }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {field('title', 'Property Listing Title', 'text', 'e.g., Luxury 4 Bedroom Duplex, Ikoyi')}
           <div>
             <label style={ls2}>Property Description</label>
@@ -4092,7 +4107,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   </label>
                 </div>
               )}
-              <button type="button" onClick={handleSubmit} disabled={submitting} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
+              <button type="button" onClick={handleOpenAgreement} disabled={submitting || agentUploadSubmitLock} style={{ padding: '14px', border: 'none', borderRadius: '12px', background: submitting ? '#94a3b8' : isEditMode ? 'linear-gradient(135deg, #3b82f6, #1d4ed8)' : 'linear-gradient(135deg, #27ae60, #00b894)', color: '#fff', fontWeight: '700', fontSize: '0.95rem', cursor: submitting ? 'not-allowed' : 'pointer' }}>
                 {submitting ? (isEditMode ? 'Updating...' : 'Publishing...') : (isEditMode ? 'Update Listing' : 'Agree and Publish Listing')}
               </button>
             </>
