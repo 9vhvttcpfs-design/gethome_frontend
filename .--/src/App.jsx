@@ -1706,7 +1706,19 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [inspCustomerEmail, setInspCustomerEmail]     = useState('');
   const [inspCustomerPhone, setInspCustomerPhone]     = useState('');
   const [inspBookingLoading, setInspBookingLoading]   = useState(false);
-  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); setShowInspectionModal(false); setInspectionBooking(null); setInspCustomerName(''); setInspCustomerEmail(''); setInspCustomerPhone(''); setInspBookingLoading(false); }, [property?.id]);
+  // Keeps the inspection-booking modal fully self-contained: every piece of
+  // state it reads/writes (open flag, booking payload, contact fields, and
+  // the in-flight loading flag) lives on PricingModal and is cleared here
+  // together, so the modal never reopens with stale data from a prior property.
+  const closeInspectionModal = function() {
+    setShowInspectionModal(false);
+    setInspectionBooking(null);
+    setInspCustomerName('');
+    setInspCustomerEmail('');
+    setInspCustomerPhone('');
+    setInspBookingLoading(false);
+  };
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); closeInspectionModal(); }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
   // Shortlet calculations
@@ -2193,20 +2205,20 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
       )}
       {showInspectionModal && inspectionBooking && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '400px', width: '100%' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1rem' }}>Book Inspection</h3>
-              <button onClick={function() { setShowInspectionModal(false); }}
-                style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#64748b' }}>✕</button>
+              <button onClick={closeInspectionModal}
+                style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>✕</button>
             </div>
 
             <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px' }}>
               <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
-                {inspectionBooking.property.title}
+                {inspectionBooking.property?.title}
               </p>
               <p style={{ margin: 0, color: '#64748b', fontSize: '0.76rem' }}>
-                📍 {inspectionBooking.property.location}
+                📍 {inspectionBooking.property?.location}
               </p>
             </div>
 
@@ -2227,71 +2239,81 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 <input type='text' placeholder='Full name'
                   value={inspCustomerName}
                   onChange={function(e) { setInspCustomerName(e.target.value); }}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Email Address *</label>
                 <input type='email' placeholder='your@email.com'
                   value={inspCustomerEmail}
                   onChange={function(e) { setInspCustomerEmail(e.target.value); }}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Phone Number *</label>
                 <input type='tel' placeholder='08012345678'
                   value={inspCustomerPhone}
                   onChange={function(e) { setInspCustomerPhone(e.target.value); }}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
             </div>
 
             {inspectionBooking.fee > 0 ? (
               <button onClick={async function() {
-                if (!inspCustomerName.trim() || !inspCustomerEmail.trim() || !inspCustomerPhone.trim()) {
-                  alert('Please fill in all your contact details');
-                  return;
-                }
+                var name = inspCustomerName.trim();
+                var email = inspCustomerEmail.trim();
+                var phone = inspCustomerPhone.trim();
+
+                if (!name) { alert('Please enter your full name'); return; }
+                if (!email || !email.includes('@')) { alert('Please enter a valid email address'); return; }
+                if (!phone || phone.length < 10) { alert('Please enter a valid phone number'); return; }
+
                 setInspBookingLoading(true);
                 try {
                   var res = await fetch(API_URL + '/api/inspections/initialize-payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      property_id: inspectionBooking.property.id,
-                      customer_email: inspCustomerEmail.trim(),
-                      customer_name: inspCustomerName.trim(),
-                      customer_phone: inspCustomerPhone.trim(),
-                      sa_whatsapp: inspectionBooking.sa_whatsapp,
+                      property_id: inspectionBooking.property?.id,
+                      customer_email: email,
+                      customer_name: name,
+                      customer_phone: phone,
+                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349077246534',
                     }),
                   });
                   var data = await res.json();
-                  if (!res.ok) throw new Error(data.error || 'Failed');
+                  if (!res.ok) throw new Error(data.error || 'Failed to initialize payment');
 
                   if (data.requires_payment && data.checkout_url) {
-                    setShowInspectionModal(false);
-                    window.location.href = data.checkout_url;
+                    var checkoutUrl = data.checkout_url;
+                    closeInspectionModal();
+                    window.location.href = checkoutUrl;
                   } else {
                     // No payment needed - open WhatsApp directly
-                    setShowInspectionModal(false);
-                    openInspectionWhatsApp(inspectionBooking.property, inspCustomerName, { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name });
+                    var bookedProperty = inspectionBooking.property;
+                    var resolvedSa = { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name };
+                    closeInspectionModal();
+                    openInspectionWhatsApp(bookedProperty, name, resolvedSa);
                   }
                 } catch(err) {
-                  alert('Error: ' + err.message);
-                } finally {
+                  alert('Booking failed: ' + err.message + '\n\nPlease try again or contact support.');
                   setInspBookingLoading(false);
                 }
               }} disabled={inspBookingLoading}
-                style={{ width: '100%', padding: '13px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: inspBookingLoading ? 'not-allowed' : 'pointer', opacity: inspBookingLoading ? 0.7 : 1 }}>
-                {inspBookingLoading ? 'Processing...' : 'Pay ₦' + parseFloat(inspectionBooking.fee).toLocaleString() + ' to Book Inspection'}
+                style={{ width: '100%', padding: '13px', backgroundColor: inspBookingLoading ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: inspBookingLoading ? 'not-allowed' : 'pointer' }}>
+                {inspBookingLoading ? 'Processing...' : '💳 Pay ₦' + parseFloat(inspectionBooking.fee).toLocaleString() + ' to Book Inspection'}
               </button>
             ) : (
               <button onClick={function() {
-                if (!inspCustomerName.trim() || !inspCustomerPhone.trim()) {
+                var name = inspCustomerName.trim();
+                var phone = inspCustomerPhone.trim();
+                if (!name || !phone) {
                   alert('Please fill in your name and phone number');
                   return;
                 }
-                setShowInspectionModal(false);
-                openInspectionWhatsApp(inspectionBooking.property, inspCustomerName, { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name });
+                var bookedProperty = inspectionBooking.property;
+                var resolvedSa = { targetNumber: inspectionBooking.sa_whatsapp, saName: inspectionBooking.sa_name };
+                closeInspectionModal();
+                openInspectionWhatsApp(bookedProperty, name, resolvedSa);
               }} style={{ width: '100%', padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer' }}>
                 📱 Continue to WhatsApp
               </button>
@@ -13496,7 +13518,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 return !i.status || i.status === 'pending' || i.status === 'assigned';
               });
               var doneInspections = inspections.filter(function(i) {
-                return i.status === 'gha_done' || (i.gha_done_at && i.status !== 'confirmed' && i.status !== 'cancelled');
+                return i.status === 'gha_done' ||
+                  (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled' && i.status !== 'pending' && i.status !== 'assigned');
               });
               var confirmedInspections = inspections.filter(function(i) { return i.status === 'confirmed'; });
               var cancelledInspections = inspections.filter(function(i) { return i.status === 'cancelled'; });
@@ -13577,9 +13600,20 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           {insp.inspection_type && <span>Type: {insp.inspection_type}</span>}
                         </div>
 
-                        {insp.gha_notes && (
-                          <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px' }}>
-                            <p style={{ margin: 0, fontSize: '0.76rem', color: '#374151' }}>GHA Notes: {insp.gha_notes}</p>
+                        {inspectionSubTab === 'done' && (
+                          /* GHA Notes - shown prominently for SA to review */
+                          <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', border: '1px solid #bfdbfe' }}>
+                            <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', fontWeight: '800', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              📋 GHA Inspection Notes
+                            </p>
+                            <p style={{ margin: '0 0 6px 0', color: '#1e3a8a', fontSize: '0.84rem', lineHeight: 1.6, fontStyle: insp.gha_notes ? 'normal' : 'italic' }}>
+                              {insp.gha_notes || 'No notes provided by GHA'}
+                            </p>
+                            {insp.gha_done_at && (
+                              <p style={{ margin: 0, fontSize: '0.70rem', color: '#64748b' }}>
+                                Marked done: {new Date(insp.gha_done_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -13589,9 +13623,19 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                         )}
 
+                        {inspectionSubTab === 'done' && insp.status === 'confirmed' && (
+                          <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', marginTop: '8px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#27ae60', fontSize: '1rem' }}>✓</span>
+                            <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534', fontWeight: '700' }}>
+                              Confirmed by SA{insp.sa_confirmed_at ? ' · ' + new Date(insp.sa_confirmed_at).toLocaleDateString('en-NG') : ''}
+                            </p>
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
-                          {insp.status === 'gha_done' && (
+                          {inspectionSubTab === 'done' && insp.status !== 'confirmed' && (
                             <button disabled={isConfirming} onClick={async function() {
+                              if (!window.confirm('Confirm this inspection complete? This will count toward GHA payment this month.')) return;
                               setConfirmingId(insp.id);
                               try {
                                 var token = localStorage.getItem('gh_staff_token');
@@ -13605,8 +13649,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 fetchInspections();
                               } catch(e) { alert('Error: ' + e.message); }
                               finally { setConfirmingId(null); }
-                            }} style={{ backgroundColor: isConfirming ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer' }}>
-                              {isConfirming ? 'Confirming…' : '✓ Confirm'}
+                            }} style={{ width: '100%', backgroundColor: isConfirming ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px', fontSize: '0.86rem', fontWeight: '800', cursor: isConfirming ? 'not-allowed' : 'pointer' }}>
+                              {isConfirming ? 'Confirming…' : '✓ Confirm Inspection — Counts for GHA Payment'}
                             </button>
                           )}
                           {(!insp.status || insp.status === 'pending' || insp.status === 'assigned') && (
