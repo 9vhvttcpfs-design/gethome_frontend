@@ -12229,6 +12229,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     var q = agentSearch.toLowerCase();
     return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
   });
+  // Filter out inspection_request notifications for SA - they create noise
+  var saNotifications = notifications.filter(function(n) {
+    return n.type !== 'inspection_request';
+  });
   var saTabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'ghas', label: 'My GHAs' },
@@ -12270,9 +12274,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               onClick={function() { setShowNotifDropdown(function(v) { return !v; }); }}
               style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', position: 'relative' }}>
               <Bell size={20} />
-              {notifications.length > 0 && (
+              {saNotifications.length > 0 && (
                 <span style={{ position: 'absolute', top: '2px', right: '2px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.62rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {notifications.length > 9 ? '9+' : notifications.length}
+                  {saNotifications.length > 9 ? '9+' : saNotifications.length}
                 </span>
               )}
             </button>
@@ -12283,12 +12287,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
                 </div>
 
-                {notifications.length === 0 ? (
+                {saNotifications.length === 0 ? (
                   <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>
                     No notifications yet
                   </div>
                 ) : (
-                  notifications.map(function(notif) {
+                  saNotifications.map(function(notif) {
                     var notifTimeAgo = (function() {
                       if (!notif.created_at) return '';
                       var diff = Date.now() - new Date(notif.created_at).getTime();
@@ -12720,15 +12724,25 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               {agentsForThisGha.map(function(a) {
-                                var statusColors = { pending: { bg: '#fffbeb', color: '#92400e', border: '#fcd34d' }, approved: { bg: '#f0fff4', color: '#166534', border: '#86efac' }, rejected: { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' } };
-                                var sc = statusColors[a.status] || { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0' };
+                                // Admin-approved agents carry status: 'approved' (or 'active')
+                                // in profiles — show them as Active rather than falling
+                                // through to a generic/pending-looking badge.
+                                var agentStatus = a.status || 'pending';
+                                var isApproved = agentStatus === 'approved' || agentStatus === 'active';
                                 return (
                                   <div key={a.id || a.email} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px 12px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                       <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>{a.full_name || 'Name not provided'}</p>
                                       <p style={{ margin: '2px 0 0 0', color: '#64748b', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif" }}>{a.email}</p>
                                     </div>
-                                    <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: sc.bg, color: sc.color, border: '1px solid ' + sc.border }}>{(a.status || 'pending').toUpperCase()}</span>
+                                    <span style={{
+                                      backgroundColor: isApproved ? '#f0fff4' : '#fff7ed',
+                                      color: isApproved ? '#166534' : '#c2410c',
+                                      border: '1px solid ' + (isApproved ? '#bbf7d0' : '#fed7aa'),
+                                      borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800'
+                                    }}>
+                                      {isApproved ? 'Active' : agentStatus}
+                                    </span>
                                     {a.subscription_tier && a.subscription_tier !== 'free' && (
                                       <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eef2ff', color: '#1e40af', border: '1px solid #c7d2fe' }}>{a.subscription_tier.toUpperCase()}</span>
                                     )}
@@ -13349,177 +13363,49 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               </div>
             )}
 
-            {/* Incoming Inspection Requests */}
-            {notifications.length > 0 && (
-              <div style={{ marginBottom: '28px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                  <h3 style={{ margin: 0, color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Incoming Inspection Requests</h3>
-                  {notifications.filter(function(n){ return !n.read; }).length > 0 && (
-                    <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '2px 9px', fontSize: '0.70rem', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>
-                      {notifications.filter(function(n){ return !n.read; }).length} new
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {notifications.map(function(notif) {
-                    var isAssigning = assigningNotifId === notif.id;
-                    var notifTimeAgo = (function() {
-                      if (!notif.created_at) return '';
-                      var diff = Date.now() - new Date(notif.created_at).getTime();
-                      var mins = Math.floor(diff / 60000);
-                      if (mins < 1) return 'just now';
-                      if (mins < 60) return mins + ' minute' + (mins !== 1 ? 's' : '') + ' ago';
-                      var hrs = Math.floor(mins / 60);
-                      if (hrs < 24) return hrs + ' hour' + (hrs !== 1 ? 's' : '') + ' ago';
-                      var days = Math.floor(hrs / 24);
-                      return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
-                    })();
-                    // Same type → icon/label mapping as the bell dropdown, so
-                    // agent verification requests don't get mistaken for an
-                    // actual customer inspection request in this list.
-                    var notifIcon = notif.type === 'inspection_fee_paid' ? '💰'
-                      : notif.type === 'inspection_request' ? '🔍'
-                      : notif.type === 'agent_verification_request' ? '👤'
-                      : notif.type === 'inspection_confirmed' ? '✓'
-                      : '🔔';
-                    var notifTypeLabel = notif.type === 'inspection_fee_paid' ? 'FEE PAID'
-                      : notif.type === 'agent_verification_request' ? 'AGENT VERIFICATION'
-                      : notif.type === 'inspection_confirmed' ? 'CONFIRMED'
-                      : 'INSPECTION REQUEST';
-                    var notifBadgeColors = notif.type === 'agent_verification_request' ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe' }
-                      : notif.type === 'inspection_fee_paid' ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0' }
-                      : notif.type === 'inspection_confirmed' ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0' }
-                      : { bg: '#fef3c7', color: '#92400e', border: '#fde68a' };
+            {/* Inspection Fee Payments — only shows notifications where the
+                customer has actually paid the inspection fee; the old panel
+                surfaced raw inspection_request noise regardless of payment. */}
+            {(function() {
+              var feeNotifs = notifications.filter(function(n) {
+                return n.type === 'inspection_fee_paid';
+              });
+              return feeNotifs.length > 0 && (
+                <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px 16px', marginBottom: '14px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>
+                    💰 Inspection Fee Payments ({feeNotifs.length})
+                  </p>
+                  {feeNotifs.map(function(notif) {
+                    var meta = {};
+                    try { meta = JSON.parse(notif.meta || '{}'); } catch(e) {}
                     return (
-                      <div key={notif.id} style={{ borderRadius: '12px', border: '1.5px solid #fde68a', borderLeft: '5px solid #f59e0b', backgroundColor: '#fffef0', padding: '16px 18px', boxShadow: '0 2px 8px rgba(245,158,11,0.10)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '800', backgroundColor: notifBadgeColors.bg, color: notifBadgeColors.color, border: '1.5px solid ' + notifBadgeColors.border, letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>{notifIcon} {notifTypeLabel}</span>
-                            <span style={{ fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{notifTimeAgo}</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '7px', flexShrink: 0 }}>
-                            <button onClick={function(){ setAssigningNotifId(isAssigning ? null : notif.id); setAssignNotifGhaId(''); setAssignNotifDate(''); setAssignNotifNotes(''); setAssignNotifMsg(''); }}
-                              style={{ padding: '5px 14px', backgroundColor: isAssigning ? '#64748b' : '#22c55e', color: '#fff', border: 'none', borderRadius: '7px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                              {isAssigning ? 'Cancel' : 'Assign to GHA'}
-                            </button>
-                            <button onClick={async function() {
-                              try {
-                                var res = await fetch(API_URL + '/api/sa/dismiss-notification', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                  body: JSON.stringify({ notification_id: notif.id }),
-                                });
-                                if (res.ok) {
-                                  setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
-                                  if (assigningNotifId === notif.id) setAssigningNotifId(null);
-                                }
-                              } catch(e) { console.error('Dismiss failed:', e.message); }
-                            }}
-                              style={{ padding: '5px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1.5px solid #e2e8f0', borderRadius: '7px', fontWeight: '700', fontSize: '0.74rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                              Dismiss
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '4px 20px', marginBottom: '10px' }}>
-                          <div>
-                            <p style={{ margin: '0 0 1px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER</p>
-                            <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{notif.customer_name || notif.user_name || 'Unknown'}</p>
-                            <p style={{ margin: '1px 0 0 0', fontSize: '0.76rem', color: '#1e40af', fontFamily: "'Inter', sans-serif" }}>{notif.customer_email || notif.user_email || ''}</p>
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 1px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY</p>
-                            <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{notif.property_title || '—'}</p>
-                            <p style={{ margin: '1px 0 0 0', fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>{notif.property_location || notif.property_address || ''}</p>
-                          </div>
-                        </div>
-                        {notif.inspection_type && (
-                          <span style={{ display: 'inline-block', fontSize: '0.62rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '700', backgroundColor: notif.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: notif.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (notif.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif", marginBottom: '10px' }}>
-                            {notif.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}
-                          </span>
-                        )}
-                        {isAssigning && (
-                          <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1.5px solid #fde68a' }}>
-                            {assignNotifMsg && (
-                              <div style={{ backgroundColor: assignNotifMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (assignNotifMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
-                                <p style={{ margin: 0, fontWeight: '700', fontSize: '0.82rem', color: assignNotifMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontFamily: "'Inter', sans-serif" }}>{assignNotifMsg}</p>
-                              </div>
-                            )}
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>SELECT GHA</label>
-                                <select value={assignNotifGhaId} onChange={function(e){ setAssignNotifGhaId(e.target.value); }}
-                                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }}>
-                                  <option value="">-- Select GHA --</option>
-                                  {ghas.map(function(g) {
-                                    var pendingCount = inspections.filter(function(i){ return (String(i.gha_id) === String(g.id) || i.gha_code === g.staff_id) && (!i.status || i.status === 'pending'); }).length;
-                                    return <option key={g.id} value={g.id}>{g.staff_id || g.gha_code} — {g.full_name || g.name} ({pendingCount} pending)</option>;
-                                  })}
-                                </select>
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>INSPECTION DATE & TIME</label>
-                                <input type="datetime-local" value={assignNotifDate} onChange={function(e){ setAssignNotifDate(e.target.value); }}
-                                  style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }} />
-                              </div>
-                            </div>
-                            <div style={{ marginBottom: '12px' }}>
-                              <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.04em', fontFamily: "'Inter', sans-serif" }}>NOTES (optional)</label>
-                              <textarea value={assignNotifNotes} onChange={function(e){ setAssignNotifNotes(e.target.value); }} rows={2} placeholder="Any instructions for the GHA…"
-                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', resize: 'vertical', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }} />
-                            </div>
-                            <button onClick={async function() {
-                              if (!assignNotifGhaId) { setAssignNotifMsg('Error: Please select a GHA.'); return; }
-                              if (!assignNotifDate) { setAssignNotifMsg('Error: Please pick an inspection date and time.'); return; }
-                              setAssignNotifLoading(true);
-                              try {
-                                var selectedGha = ghas.find(function(g){ return String(g.id) === String(assignNotifGhaId); });
-                                var res = await fetch(API_URL + '/api/sa/assign-inspection', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                  body: JSON.stringify({
-                                    gha_id: assignNotifGhaId,
-                                    notification_id: notif.id,
-                                    customer_name: notif.customer_name || notif.user_name || '',
-                                    customer_email: notif.customer_email || notif.user_email || '',
-                                    customer_phone: notif.customer_phone || '',
-                                    property_id: notif.property_id,
-                                    property_title: notif.property_title || '',
-                                    property_location: notif.property_location || notif.property_address || '',
-                                    inspection_type: notif.inspection_type || 'physical',
-                                    inspection_date: assignNotifDate,
-                                    notes: assignNotifNotes,
-                                  })
-                                });
-                                var data = await res.json();
-                                if (!res.ok) throw new Error(data.error || 'Assignment failed');
-                                var ghaCode = selectedGha ? (selectedGha.staff_id || selectedGha.gha_code || 'GHA') : 'GHA';
-                                setInspMsg('Inspection assigned to ' + ghaCode + '. They have been notified immediately.');
-                                setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
-                                setAssigningNotifId(null);
-                                setAssignNotifGhaId(''); setAssignNotifDate(''); setAssignNotifNotes(''); setAssignNotifMsg('');
-                                fetchInspections();
-                              } catch(e) { setAssignNotifMsg('Error: ' + e.message); }
-                              finally { setAssignNotifLoading(false); }
-                            }} disabled={assignNotifLoading}
-                              style={{ padding: '9px 22px', backgroundColor: assignNotifLoading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.82rem', cursor: assignNotifLoading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                              {assignNotifLoading ? 'Assigning…' : 'Confirm Assignment'}
-                            </button>
-                          </div>
+                      <div key={notif.id} style={{ padding: '10px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', marginBottom: '8px', border: '1px solid #bbf7d0' }}>
+                        <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#166534', fontSize: '0.82rem' }}>{notif.title}</p>
+                        <p style={{ margin: '0 0 8px 0', color: '#374151', fontSize: '0.78rem' }}>{notif.message}</p>
+                        {meta.whatsapp_link && (
+                          <a href={meta.whatsapp_link} target='_blank' rel='noopener noreferrer'
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', padding: '6px 14px', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
+                            📱 Open WhatsApp
+                          </a>
                         )}
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {(function() {
               var pendingInspections = inspections.filter(function(i) {
-                return !i.status || i.status === 'pending' || i.status === 'assigned';
+                return (!i.status || i.status === 'pending' || i.status === 'assigned') && !i.gha_done_at;
               });
+              // Some inspections come back from the API still marked
+              // status: 'pending'/'assigned' even after the GHA has done
+              // the visit — gha_done_at is the reliable signal, so treat
+              // it as "done" regardless of what status string trails it.
               var doneInspections = inspections.filter(function(i) {
                 return i.status === 'gha_done' ||
-                  (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled' && i.status !== 'pending' && i.status !== 'assigned');
+                  (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled');
               });
               var confirmedInspections = inspections.filter(function(i) { return i.status === 'confirmed'; });
               var cancelledInspections = inspections.filter(function(i) { return i.status === 'cancelled'; });
@@ -13585,10 +13471,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '800',
-                              backgroundColor: insp.status === 'confirmed' ? '#f0fff4' : insp.status === 'gha_done' ? '#eff6ff' : insp.status === 'cancelled' ? '#fff7ed' : '#fef3c7',
-                              color: insp.status === 'confirmed' ? '#166534' : insp.status === 'gha_done' ? '#1e40af' : insp.status === 'cancelled' ? '#c2410c' : '#92400e',
+                              backgroundColor: insp.status === 'confirmed' ? '#f0fff4' : insp.status === 'cancelled' ? '#fff7ed' : (insp.status === 'gha_done' || insp.gha_done_at) ? '#eff6ff' : '#fef3c7',
+                              color: insp.status === 'confirmed' ? '#166534' : insp.status === 'cancelled' ? '#c2410c' : (insp.status === 'gha_done' || insp.gha_done_at) ? '#1e40af' : '#92400e',
                             }}>
-                              {(insp.status === 'gha_done' ? 'DONE' : insp.status || 'PENDING').toUpperCase()}
+                              {(insp.status === 'confirmed' ? 'confirmed' : insp.status === 'cancelled' ? 'cancelled' : (insp.status === 'gha_done' || insp.gha_done_at) ? 'DONE' : insp.status || 'PENDING').toUpperCase()}
                             </span>
                           </div>
                         </div>
@@ -15342,14 +15228,45 @@ function AppContent() {
     try {
       var urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('inspection_payment') === 'success') {
-        var inspPropertyId = urlParams.get('property_id');
-        var inspRef = urlParams.get('ref');
-        console.log('Inspection payment confirmed', { property_id: inspPropertyId, ref: inspRef });
+        var retPropertyId = urlParams.get('property_id');
+        var retSaW = urlParams.get('saw');
+        var retCname = urlParams.get('cname');
+        var retCemail = urlParams.get('cemail');
+        var retCphone = urlParams.get('cphone');
+
         window.history.replaceState(null, '', window.location.pathname);
-        alert('✓ Inspection fee payment confirmed! Our team will contact you shortly to schedule your inspection.');
+
+        // Open WhatsApp to SA automatically since payment confirmed
+        if (retSaW && retCname) {
+          setTimeout(function() {
+            var prop = properties.find(function(p) { return String(p.id) === String(retPropertyId); });
+            var propTitle = prop?.title || 'a property';
+            var propLocation = prop?.location || '';
+            var propPrice = parseFloat(prop?.rent || prop?.price || 0);
+
+            var waMsg = encodeURIComponent(
+              'Hello, I have paid the inspection fee for:\n\n' +
+              '🏠 ' + propTitle + '\n' +
+              '📍 ' + propLocation + '\n' +
+              '💰 ₦' + propPrice.toLocaleString() + '\n\n' +
+              'My Details:\n' +
+              'Name: ' + decodeURIComponent(retCname || '') + '\n' +
+              'Email: ' + decodeURIComponent(retCemail || '') + '\n' +
+              'Phone: ' + decodeURIComponent(retCphone || '') + '\n\n' +
+              'Kindly schedule my inspection. Thank you.'
+            );
+            var saNumber = decodeURIComponent(retSaW || '').replace(/\D/g, '');
+            if (saNumber) {
+              window.open('https://wa.me/' + saNumber + '?text=' + waMsg, '_blank');
+            }
+            alert('✓ Inspection fee payment confirmed! A WhatsApp message has been opened to schedule your inspection.');
+          }, 1000);
+        } else {
+          alert('✓ Inspection fee payment confirmed! Our team will contact you to schedule your inspection.');
+        }
       }
     } catch(e) {}
-  }, []);
+  }, [properties]);
   const searchFiltered = function(list) {
     var result = list;
     if (searchQuery.trim()) {
