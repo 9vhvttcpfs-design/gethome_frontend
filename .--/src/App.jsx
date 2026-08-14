@@ -2701,9 +2701,14 @@ function RenewalBanner({ user, agentTier, isMobile }) {
   var tier = AGENT_TIERS[agentTier];
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
-  var priceDisplay = agentTier === 'premium'
-    ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500')
-    : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
+  // Same PLAN_BASE_PRICES derivation as AgentUpgradePanel — RenewalBanner
+  // doesn't receive globalSettings as a prop, so it reads the window-level
+  // fallback that fetchGlobalSettings() populates on load instead of
+  // hardcoding a price that ignores an admin-set override.
+  var planPrice = parseFloat(window.__gethomeSettings?.[agentTier + '_plan_price'] || tier.price);
+  var priceDisplay = isGhana
+    ? (agentTier === 'premium' ? 'GH₵ 73.84' : 'GH₵ 304.05')
+    : '₦ ' + planPrice.toLocaleString();
   async function handleRenew() {
     setRenewing(true);
     try {
@@ -2711,7 +2716,7 @@ function RenewalBanner({ user, agentTier, isMobile }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: tier.price,
+          amount: planPrice,
           customer_email: user.email,
           customer_name: user.email,
           purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[agentTier],
@@ -3662,9 +3667,12 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           {(function() {
             var isGhana = activeCountry && activeCountry.code === 'GH';
             var tier = AGENT_TIERS[agentTier] || AGENT_TIERS.premium;
-            var priceDisplay = agentTier === 'agency'
-              ? (isGhana ? 'GH₵ 304.05' : '₦ 35,000')
-              : (isGhana ? 'GH₵ 73.84'  : '₦ 8,500');
+            // Same PLAN_BASE_PRICES derivation as AgentUpgradePanel — this
+            // component already receives globalSettings as a prop.
+            var planPrice = parseFloat(globalSettings[agentTier + '_plan_price'] || window.__gethomeSettings?.[agentTier + '_plan_price'] || tier.price);
+            var priceDisplay = isGhana
+              ? (agentTier === 'agency' ? 'GH₵ 304.05' : 'GH₵ 73.84')
+              : '₦ ' + planPrice.toLocaleString();
             return (
               <button
                 disabled={subRenewing}
@@ -3675,7 +3683,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        amount: tier.price,
+                        amount: planPrice,
                         customer_email: user.email,
                         customer_name: user.email,
                         purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[agentTier],
@@ -14627,6 +14635,14 @@ function AppContent() {
   // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
   const [globalSettings, setGlobalSettings]     = useState({});
   const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
+  // Same derivation as AgentUpgradePanel's PLAN_BASE_PRICES — the Agents tab
+  // header renders its own copy of the premium/agency plan cards, so it needs
+  // the same live-settings-backed prices instead of hardcoded 8500/35000.
+  var PLAN_BASE_PRICES = {
+    premium: parseFloat(globalSettings.premium_plan_price || window.__gethomeSettings?.premium_plan_price || 8500),
+    agency: parseFloat(globalSettings.agency_plan_price || window.__gethomeSettings?.agency_plan_price || 35000),
+    unlimited: parseFloat(globalSettings.unlimited_plan_price || window.__gethomeSettings?.unlimited_plan_price || 100000),
+  };
   // Active promo (if any) — single source of truth derived from globalSettings so
   // every agent-facing surface (Agents tab header, Upload Listings tab, Upgrade
   // panel) agrees on whether a promo is live, without each fetching separately.
@@ -16124,14 +16140,14 @@ function AppContent() {
                   <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : (agentTier === 'premium' || isAgencyAccount) ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '14px' : '20px' }}>
                     {Object.entries(AGENT_TIERS).filter(function([k]){ return k !== agentTier && k !== 'free' && (!isAgencyAccount || k === 'agency'); }).map(function([tierKey, tier]) {
                       var isGhana = activeCountry && activeCountry.code === 'GH';
-                      var priceText = tierKey === 'premium' ? (isGhana ? 'GH₵ 73.84' : '₦ 8,500') : (isGhana ? 'GH₵ 304.05' : '₦ 35,000');
+                      var priceText = tierKey === 'premium' ? (isGhana ? 'GH₵ 73.84' : '₦ ' + PLAN_BASE_PRICES.premium.toLocaleString()) : (isGhana ? 'GH₵ 304.05' : '₦ ' + PLAN_BASE_PRICES.agency.toLocaleString());
                       var isPrimary = tierKey === 'premium' || agentTier === 'premium';
                       // Same promo calc as AgentUpgradePanel.getPromoPrice — keeps this
                       // tab's pricing in sync with the Upload tab's upgrade panel instead
                       // of showing a hardcoded price that ignores an active promo.
                       var appliesToThisPlan = activePromo && (activePromo.applies_to === 'all' || activePromo.applies_to === tierKey);
-                      var promoPrice = (appliesToThisPlan && activePromo.discount_percent > 0 && isPromoValid(activePromo) && tier.price)
-                        ? Math.round(tier.price * (1 - activePromo.discount_percent / 100))
+                      var promoPrice = (appliesToThisPlan && activePromo.discount_percent > 0 && isPromoValid(activePromo) && PLAN_BASE_PRICES[tierKey])
+                        ? Math.round(PLAN_BASE_PRICES[tierKey] * (1 - activePromo.discount_percent / 100))
                         : null;
                       return (
                         <div key={tierKey} style={{ ...cardStyle, padding: isMobile ? '22px 18px' : '28px 24px', textAlign: 'center', position: 'relative', border: isPrimary ? '2px solid #22c55e' : '1px solid #e8edf5', boxShadow: isPrimary ? '0 8px 32px rgba(34,197,94,0.12)' : cardStyle.boxShadow }}>
@@ -16154,7 +16170,7 @@ function AppContent() {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                  amount: _promoPrice || tier.price,
+                                  amount: _promoPrice || PLAN_BASE_PRICES[_tierKey],
                                   customer_email: user.email,
                                   customer_name: user.email,
                                   purpose: 'GetHome Agent Subscription - ' + AGENT_TIER_NAMES[_tierKey],
@@ -16162,7 +16178,7 @@ function AppContent() {
                                     payment_type: 'subscription',
                                     agent_id: user.id,
                                     tier: _tierKey,
-                                    original_price: tier.price,
+                                    original_price: PLAN_BASE_PRICES[_tierKey],
                                     promo_price: _promoPrice,
                                     promo_code: activePromo?.promo_code || null,
                                   },
