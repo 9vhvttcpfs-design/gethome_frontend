@@ -11779,6 +11779,14 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [rescheduleMsg, setRescheduleMsg]                   = useState('');
   const [inspectionSubTab, setInspectionSubTab]              = useState('pending');
   const [notifications, setNotifications]           = useState([]);
+  // SA should never see raw inspection_request notifications (noise —
+  // they only matter once inspection_fee_paid confirms) or new_listing_alert
+  // (not actionable for SA). Every SA-facing notifications view should read
+  // from this instead of the raw notifications array.
+  var saDisplayNotifications = notifications.filter(function(n) {
+    return n.type !== 'inspection_request' &&
+      n.type !== 'new_listing_alert';
+  });
   const [showNotifDropdown, setShowNotifDropdown]   = useState(false);
   const notifBellRef                                = useRef(null);
   const [assigningNotifId, setAssigningNotifId]     = useState(null);
@@ -11973,7 +11981,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       if (res.ok) {
         var staffMessages = data.messages || [];
         // Merge bell notifications (inspection requests) into inbox as read-only system items
-        var notifAsMessages = (notifications || []).map(function(n) {
+        var notifAsMessages = (saDisplayNotifications || []).map(function(n) {
           return {
             id: 'notif-' + n.id,
             sender_type: 'SYSTEM',
@@ -12242,10 +12250,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     var q = agentSearch.toLowerCase();
     return (a.full_name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || (a.phone || '').includes(q);
   });
-  // Filter out inspection_request notifications for SA - they create noise
-  var saNotifications = notifications.filter(function(n) {
-    return n.type !== 'inspection_request';
-  });
   var saTabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'ghas', label: 'My GHAs' },
@@ -12287,9 +12291,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               onClick={function() { setShowNotifDropdown(function(v) { return !v; }); }}
               style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#fff', position: 'relative' }}>
               <Bell size={20} />
-              {saNotifications.length > 0 && (
+              {saDisplayNotifications.length > 0 && (
                 <span style={{ position: 'absolute', top: '2px', right: '2px', backgroundColor: '#ef4444', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.62rem', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {saNotifications.length > 9 ? '9+' : saNotifications.length}
+                  {saDisplayNotifications.length > 9 ? '9+' : saDisplayNotifications.length}
                 </span>
               )}
             </button>
@@ -12300,12 +12304,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
                 </div>
 
-                {saNotifications.length === 0 ? (
+                {saDisplayNotifications.length === 0 ? (
                   <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem' }}>
                     No notifications yet
                   </div>
                 ) : (
-                  saNotifications.map(function(notif) {
+                  saDisplayNotifications.map(function(notif) {
                     var notifTimeAgo = (function() {
                       if (!notif.created_at) return '';
                       var diff = Date.now() - new Date(notif.created_at).getTime();
@@ -12395,7 +12399,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             {mobileNavOpen && (
               <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
                 {saTabs.map(function(tab) {
-                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? notifications.filter(function(n){ return !n.read; }).length : tab.id === 'inbox' ? messageUnread : 0;
+                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? saDisplayNotifications.filter(function(n){ return !n.read; }).length : tab.id === 'inbox' ? messageUnread : 0;
                   return (
                     <button key={tab.id}
                       onClick={function() {
@@ -12424,7 +12428,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {label}
                   {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
-                  {t === 'inspections' && notifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{notifications.filter(function(n){ return !n.read; }).length}</span>}
+                  {t === 'inspections' && saDisplayNotifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{saDisplayNotifications.filter(function(n){ return !n.read; }).length}</span>}
                   {t === 'inbox' && messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{messageUnread}</span>}
                 </button>
               );
@@ -13380,7 +13384,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 customer has actually paid the inspection fee; the old panel
                 surfaced raw inspection_request noise regardless of payment. */}
             {(function() {
-              var feeNotifs = notifications.filter(function(n) {
+              var feeNotifs = saDisplayNotifications.filter(function(n) {
                 return n.type === 'inspection_fee_paid';
               });
               return feeNotifs.length > 0 && (
