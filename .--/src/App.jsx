@@ -2204,12 +2204,19 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         </div>
       )}
       {showInspectionModal && inspectionBooking && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+        // This backdrop is a sibling of PricingModal's own content box (not
+        // nested inside it), so without its own stopPropagation any click
+        // in here — including focusing an input — bubbles straight up to
+        // the outer PricingModal backdrop's onClick={onClose} and closes
+        // the whole property modal, not just this one.
+        <div onClick={closeInspectionModal}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '420px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '1rem' }}>Book Inspection</h3>
-              <button onClick={closeInspectionModal}
+              <button onClick={function(e) { e.stopPropagation(); closeInspectionModal(); }}
                 style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>✕</button>
             </div>
 
@@ -2239,6 +2246,8 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 <input type='text' placeholder='Full name'
                   value={inspCustomerName}
                   onChange={function(e) { setInspCustomerName(e.target.value); }}
+                  onClick={function(e) { e.stopPropagation(); }}
+                  onFocus={function(e) { e.stopPropagation(); }}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -2246,6 +2255,8 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 <input type='email' placeholder='your@email.com'
                   value={inspCustomerEmail}
                   onChange={function(e) { setInspCustomerEmail(e.target.value); }}
+                  onClick={function(e) { e.stopPropagation(); }}
+                  onFocus={function(e) { e.stopPropagation(); }}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -2253,6 +2264,8 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 <input type='tel' placeholder='08012345678'
                   value={inspCustomerPhone}
                   onChange={function(e) { setInspCustomerPhone(e.target.value); }}
+                  onClick={function(e) { e.stopPropagation(); }}
+                  onFocus={function(e) { e.stopPropagation(); }}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
               </div>
             </div>
