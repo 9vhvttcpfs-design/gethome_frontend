@@ -2290,7 +2290,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       customer_email: email,
                       customer_name: name,
                       customer_phone: phone,
-                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349077246534',
+                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
                     }),
                   });
                   var data = await res.json();
@@ -2298,6 +2298,25 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
 
                   if (data.requires_payment && data.checkout_url) {
                     var checkoutUrl = data.checkout_url;
+
+                    // Store inspection details in localStorage so we can open
+                    // WhatsApp reliably on return from checkout, without
+                    // depending on URL params or the properties list being loaded.
+                    try {
+                      localStorage.setItem('gh_pending_inspection', JSON.stringify({
+                        customer_name: name,
+                        customer_email: email,
+                        customer_phone: phone,
+                        property_id: inspectionBooking.property?.id,
+                        property_title: inspectionBooking.property?.title,
+                        property_location: inspectionBooking.property?.location,
+                        property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
+                        sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
+                        fee: inspectionBooking.fee,
+                        timestamp: Date.now(),
+                      }));
+                    } catch(e) {}
+
                     closeInspectionModal();
                     window.location.href = checkoutUrl;
                   } else {
@@ -8066,15 +8085,34 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
                             {/* Payment breakdown */}
                             {payment.staff_type === 'GHA' && (
-                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                                <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
-                                  {payment.inspection_count} inspections → ₦{parseFloat(payment.inspection_payment || 0).toLocaleString()}
-                                </span>
-                                {payment.commission_amount > 0 && (
-                                  <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
-                                    Commission → ₦{parseFloat(payment.commission_amount).toLocaleString()}
-                                  </span>
+                              <div style={{ marginBottom: '12px' }}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: payment.commission_amount > 0 || payment.inspection_count > 0 ? '6px' : 0 }}>
+                                  {payment.commission_amount > 0 && (
+                                    <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
+                                      Commission → ₦{parseFloat(payment.commission_amount).toLocaleString()}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Inspection payment breakdown */}
+                                {(payment.inspection_count > 0 || payment.inspection_payment > 0) && (
+                                  <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '8px 12px', marginTop: '6px' }}>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '0.72rem', color: '#1e40af', fontWeight: '700' }}>
+                                      Inspection Payments
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '0.78rem', color: '#374151' }}>
+                                      {payment.inspection_count || 0} confirmed inspection{payment.inspection_count === 1 ? '' : 's'} = ₦{parseFloat(payment.inspection_payment || 0).toLocaleString()}
+                                    </p>
+                                  </div>
                                 )}
+
+                                {/* Total payment due */}
+                                <div style={{ backgroundColor: '#0a2240', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <p style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '0.78rem', fontWeight: '600' }}>Total Due</p>
+                                  <p style={{ margin: 0, color: '#fff', fontWeight: '900', fontSize: '1rem' }}>
+                                    ₦{((payment.commission_amount || 0) + (payment.inspection_payment || 0)).toLocaleString()}
+                                  </p>
+                                </div>
                               </div>
                             )}
 
@@ -10313,6 +10351,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var agentsInterval = setInterval(function(){ fetchAgents(true); }, 20000);
       return function() { clearInterval(agentsInterval); };
     }
+    // Re-pull /api/gha/overview on entering Overview/Earnings so the earnings
+    // total reflects the latest numbers instead of whatever the 60s interval last cached.
+    if (ghaTab === 'earnings' || ghaTab === 'overview') fetchGHAOverview();
   }, [ghaTab]);
   useEffect(function() {
     if (ghaTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
@@ -11780,6 +11821,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     customer_phone: '', inspection_date: '', gha_id: '',
     property_address: '', notes: '', inspection_type: 'physical'
   });
+  const [propertySearch, setPropertySearch]                 = useState('');
+  const [propertySearchResults, setPropertySearchResults]   = useState([]);
+  const [selectedInspProperty, setSelectedInspProperty]     = useState(null);
+  const [propertySearchLoading, setPropertySearchLoading]   = useState(false);
   const [reschedulingInspection, setReschedulingInspection] = useState(null);
   const [rescheduleDate, setRescheduleDate]                 = useState('');
   const [reassignGhaId, setReassignGhaId]                   = useState('');
@@ -12131,10 +12176,13 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var data = await res.json();
       if (res.ok) {
         var listings = Array.isArray(data) ? data : [];
-        setSaListings(listings.filter(function(l) { return !l.is_deleted; }));
+        var filtered = listings.filter(function(l) { return !l.is_deleted; });
+        setSaListings(filtered);
+        return filtered;
       }
     } catch(e) { console.error('SA listings error:', e.message); }
     finally { setListingsLoading(false); }
+    return [];
   };
 
   const fetchAllSAs = async function() {
@@ -12215,6 +12263,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     if (saTab === 'ghas') { fetchSaGhas(); fetchAllMyAgents(); fetchInspectionStats(); }
     if (saTab === 'agents') { fetchPendingAgents(); fetchSaGhas(); }
     if (saTab === 'listings') { fetchSAListings(); fetchInspections(); }
+    // Re-pull /api/sa/overview on entering Overview/Earnings so the earnings
+    // total (which now folds in every subscription type, not just some)
+    // reflects the latest numbers instead of whatever the 60s interval last cached.
+    if (saTab === 'earnings' || saTab === 'overview') fetchSAOverview();
   }, [saTab, subMonth]);
 
   useEffect(function() {
@@ -12271,6 +12323,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'inbox', label: 'Inbox' },
     { id: 'profile', label: 'Profile' },
   ];
+
+  // image_urls can be a real array or a JSON-encoded string depending on
+  // where the row came from — normalize both for the property picker.
+  var getListingThumb = function(l) {
+    if (Array.isArray(l.image_urls) && l.image_urls.length > 0) return l.image_urls[0];
+    if (typeof l.image_urls === 'string') {
+      try { var parsed = JSON.parse(l.image_urls); if (Array.isArray(parsed) && parsed.length > 0) return parsed[0]; } catch(e) {}
+    }
+    return null;
+  };
 
   return (
     <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
@@ -13270,7 +13332,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
               <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inspection Management</h2>
               <button onClick={function(){
-                  if (showCreateInsp) { setInspForm({ property_id: '', customer_name: '', customer_email: '', customer_phone: '', inspection_date: '', gha_id: '', property_address: '', notes: '', inspection_type: 'physical' }); }
+                  if (showCreateInsp) {
+                    setInspForm({ property_id: '', customer_name: '', customer_email: '', customer_phone: '', inspection_date: '', gha_id: '', property_address: '', notes: '', inspection_type: 'physical' });
+                    setSelectedInspProperty(null); setPropertySearch(''); setPropertySearchResults([]);
+                  } else if (saListings.length === 0) {
+                    fetchSAListings();
+                  }
                   setShowCreateInsp(!showCreateInsp); setInspMsg('');
                 }}
                 style={{ padding: '9px 18px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
@@ -13291,10 +13358,99 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <h3 style={{ margin: '0 0 18px 0', color: '#0a2240', fontWeight: '800', fontSize: '0.96rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New Inspection</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ID</label>
-                    <input type="text" value={inspForm.property_id} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_id: e.target.value }); }); }}
-                      placeholder="Enter property ID or search"
-                      style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>
+                      PROPERTY
+                      {selectedInspProperty && <span style={{ color: '#27ae60', marginLeft: '6px', fontSize: '0.68rem', letterSpacing: 0 }}>✓ Selected</span>}
+                    </label>
+
+                    {selectedInspProperty ? (
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '10px 12px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+                        {getListingThumb(selectedInspProperty) && (
+                          <img src={getListingThumb(selectedInspProperty)} alt="property"
+                            style={{ width: '44px', height: '44px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.82rem', fontFamily: "'Inter', sans-serif" }}>{selectedInspProperty.title}</p>
+                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>📍 {selectedInspProperty.location}</p>
+                        </div>
+                        <button onClick={function() {
+                            setSelectedInspProperty(null);
+                            setPropertySearch('');
+                            setInspForm(function(f) { return Object.assign({}, f, { property_id: '', property_address: '' }); });
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '1.1rem', cursor: 'pointer', flexShrink: 0 }}>✕</button>
+                      </div>
+                    ) : (
+                      <div style={{ position: 'relative' }}>
+                        <input type="text" placeholder="Search property by name or location…"
+                          value={propertySearch}
+                          onChange={async function(e) {
+                            var q = e.target.value;
+                            setPropertySearch(q);
+                            if (q.trim().length < 2) { setPropertySearchResults([]); return; }
+                            setPropertySearchLoading(true);
+                            try {
+                              var pool = saListings.length > 0 ? saListings : await fetchSAListings();
+                              var ql = q.trim().toLowerCase();
+                              var matches = pool.filter(function(l) {
+                                return (l.title || '').toLowerCase().includes(ql) || (l.location || '').toLowerCase().includes(ql);
+                              });
+                              setPropertySearchResults(matches.slice(0, 6));
+                            } catch(err) { console.error('Property search error:', err.message); }
+                            finally { setPropertySearchLoading(false); }
+                          }}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
+
+                        {propertySearchLoading && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Searching…</p>
+                        )}
+
+                        {!propertySearchLoading && propertySearch.trim().length >= 2 && propertySearchResults.length === 0 && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>No matching properties found.</p>
+                        )}
+
+                        {propertySearchResults.length > 0 && (
+                          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: '260px', overflowY: 'auto', marginTop: '2px' }}>
+                            {propertySearchResults.map(function(prop) {
+                              var thumb = getListingThumb(prop);
+                              return (
+                                <div key={prop.id}
+                                  onClick={function() {
+                                    setSelectedInspProperty(prop);
+                                    setPropertySearch('');
+                                    setPropertySearchResults([]);
+                                    setInspForm(function(f) {
+                                      return Object.assign({}, f, {
+                                        property_id: prop.id,
+                                        property_address: (prop.title || '') + ' — ' + (prop.location || ''),
+                                      });
+                                    });
+                                  }}
+                                  style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                                  onMouseEnter={function(e) { e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                                  onMouseLeave={function(e) { e.currentTarget.style.backgroundColor = '#fff'; }}>
+                                  {thumb ? (
+                                    <img src={thumb} alt={prop.title}
+                                      style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }} />
+                                  ) : (
+                                    <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>🏠</div>
+                                  )}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.80rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Inter', sans-serif" }}>
+                                      {prop.title}
+                                    </p>
+                                    <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.70rem', fontFamily: "'Inter', sans-serif" }}>📍 {prop.location}</p>
+                                    <p style={{ margin: 0, color: '#27ae60', fontSize: '0.70rem', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>
+                                      ₦{parseFloat(prop.price || prop.rent || 0).toLocaleString()}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER NAME</label>
@@ -13314,23 +13470,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       placeholder="+234 800 000 0000"
                       style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', boxSizing: 'border-box' }} />
                   </div>
-                  <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
-                    {inspForm.property_id ? (
-                      <div style={{ padding: '10px 14px', backgroundColor: '#f0fff4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-                        <p style={{ margin: 0, fontSize: '0.78rem', color: '#166534', fontWeight: '600', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <FileText size={12} /> Property: {inspForm.property_address}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ADDRESS</label>
-                        <textarea value={inspForm.property_address} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_address: e.target.value }); }); }}
-                          placeholder="Full property address"
-                          rows={2}
-                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
-                      </>
-                    )}
-                  </div>
+                  {/* Manual fallback for a property that isn't in the search results yet —
+                      hidden once a listing is picked above, since the chip already shows it. */}
+                  {!selectedInspProperty && (
+                    <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+                      <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>PROPERTY ADDRESS (if not listed above)</label>
+                      <textarea value={inspForm.property_address} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { property_address: e.target.value }); }); }}
+                        placeholder="Full property address"
+                        rows={2}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', fontFamily: "'Inter', sans-serif", color: '#0a2240', resize: 'vertical', boxSizing: 'border-box' }} />
+                    </div>
+                  )}
                   <div>
                     <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px', letterSpacing: '0.05em', fontFamily: "'Inter', sans-serif" }}>GHA TO HANDLE THIS INSPECTION</label>
                     <select value={inspForm.gha_id} onChange={function(e){ setInspForm(function(f){ return Object.assign({}, f, { gha_id: e.target.value }); }); }}
@@ -13377,6 +13527,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     var ghaName = assignedGha ? (assignedGha.full_name || assignedGha.name) : 'the GHA';
                     setInspMsg('Inspection assigned to ' + ghaName + '. They have been notified.');
                     setInspForm({ property_id: '', customer_name: '', customer_email: '', customer_phone: '', inspection_date: '', gha_id: '', property_address: '', notes: '', inspection_type: 'physical' });
+                    setSelectedInspProperty(null); setPropertySearch(''); setPropertySearchResults([]);
                     setShowCreateInsp(false);
                     fetchInspections();
                   } catch(e) { setInspMsg('Error: ' + e.message); }
@@ -13512,19 +13663,32 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         </div>
 
                         {inspectionSubTab === 'done' && (
-                          /* GHA Notes - shown prominently for SA to review */
-                          <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '12px 14px', margin: '10px 0', border: '1px solid #bfdbfe' }}>
-                            <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', fontWeight: '800', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                              📋 GHA Inspection Notes
+                          /* GHA Notes - required reading before confirming */
+                          <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '12px 14px', marginBottom: '10px', border: '2px solid #bfdbfe' }}>
+                            <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', fontWeight: '800', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              📋 GHA Inspection Report
                             </p>
-                            <p style={{ margin: '0 0 6px 0', color: '#1e3a8a', fontSize: '0.84rem', lineHeight: 1.6, fontStyle: insp.gha_notes ? 'normal' : 'italic' }}>
-                              {insp.gha_notes || 'No notes provided by GHA'}
-                            </p>
-                            {insp.gha_done_at && (
-                              <p style={{ margin: 0, fontSize: '0.70rem', color: '#64748b' }}>
-                                Marked done: {new Date(insp.gha_done_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                            {insp.gha_notes ? (
+                              <p style={{ margin: '0 0 6px 0', color: '#1e3a8a', fontSize: '0.84rem', lineHeight: 1.7 }}>
+                                {insp.gha_notes}
+                              </p>
+                            ) : (
+                              <p style={{ margin: '0 0 6px 0', color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>
+                                No notes provided by GHA
                               </p>
                             )}
+                            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                              {insp.gha_done_at && (
+                                <p style={{ margin: 0, fontSize: '0.70rem', color: '#64748b' }}>
+                                  ✓ Done: {new Date(insp.gha_done_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}
+                                </p>
+                              )}
+                              {insp.gha_agents?.gha_code && (
+                                <p style={{ margin: 0, fontSize: '0.70rem', color: '#64748b' }}>
+                                  GHA: {insp.gha_agents.gha_code}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -14757,6 +14921,23 @@ function AppContent() {
       console.error('fetchAgentSubscription error:', err.message);
     }
   }, []);
+  const [showAccountModal, setShowAccountModal]         = useState(false);
+  const [customerAccountTab, setCustomerAccountTab]     = useState('profile');
+  const [customerInspections, setCustomerInspections]   = useState([]);
+  const [customerInspLoading, setCustomerInspLoading]   = useState(false);
+  const fetchCustomerInspections = async function() {
+    if (!user?.id) return;
+    setCustomerInspLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/customer/inspections', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      if (res.ok) setCustomerInspections(Array.isArray(data) ? data : []);
+    } catch(e) { console.error('Customer inspections error:', e.message); }
+    finally { setCustomerInspLoading(false); }
+  };
   // Sync tab with URL - read tab from URL on mount, default to 'rent'
   var validTabs = ['rent', 'sale', 'shortlet', 'services', 'upload', 'agent', 'admin'];
   var initialTab = (function() {
@@ -14809,6 +14990,7 @@ function AppContent() {
   const [showRatingModal, setShowRatingModal]               = useState(false);
   const [ratingGhaId, setRatingGhaId]                       = useState(null);
   const [ratingInspectionId, setRatingInspectionId]         = useState(null);
+  const [inspectionPaidResult, setInspectionPaidResult]     = useState(null);
   useEffect(function() {
     var handler = function(e) {
       e.preventDefault();
@@ -15256,50 +15438,62 @@ function AppContent() {
     } catch(e) {}
     return function() { if (pollUnlimited) clearInterval(pollUnlimited); };
   }, [user?.id]);
-  // Handle return from a paid inspection-fee checkout
+  // Handle return from a paid inspection-fee checkout.
+  // Reads the pending inspection details we stashed in localStorage before
+  // redirecting to checkout, so this doesn't depend on URL params surviving
+  // the round trip or the properties list being loaded yet.
   useEffect(function() {
     try {
       var urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('inspection_payment') === 'success') {
-        var retPropertyId = urlParams.get('property_id');
-        var retSaW = urlParams.get('saw');
-        var retCname = urlParams.get('cname');
-        var retCemail = urlParams.get('cemail');
-        var retCphone = urlParams.get('cphone');
-
         window.history.replaceState(null, '', window.location.pathname);
 
-        // Open WhatsApp to SA automatically since payment confirmed
-        if (retSaW && retCname) {
-          setTimeout(function() {
-            var prop = properties.find(function(p) { return String(p.id) === String(retPropertyId); });
-            var propTitle = prop?.title || 'a property';
-            var propLocation = prop?.location || '';
-            var propPrice = parseFloat(prop?.rent || prop?.price || 0);
+        var pendingInsp = null;
+        try { pendingInsp = JSON.parse(localStorage.getItem('gh_pending_inspection') || 'null'); } catch(e) {}
 
-            var waMsg = encodeURIComponent(
-              'Hello, I have paid the inspection fee for:\n\n' +
-              '🏠 ' + propTitle + '\n' +
-              '📍 ' + propLocation + '\n' +
-              '💰 ₦' + propPrice.toLocaleString() + '\n\n' +
-              'My Details:\n' +
-              'Name: ' + decodeURIComponent(retCname || '') + '\n' +
-              'Email: ' + decodeURIComponent(retCemail || '') + '\n' +
-              'Phone: ' + decodeURIComponent(retCphone || '') + '\n\n' +
-              'Kindly schedule my inspection. Thank you.'
-            );
-            var saNumber = decodeURIComponent(retSaW || '').replace(/\D/g, '');
-            if (saNumber) {
-              window.open('https://wa.me/' + saNumber + '?text=' + waMsg, '_blank');
-            }
-            alert('✓ Inspection fee payment confirmed! A WhatsApp message has been opened to schedule your inspection.');
-          }, 1000);
+        if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
+          var waMsg = encodeURIComponent(
+            'Hello, I have successfully paid the inspection fee for a property on GetHome.\n\n' +
+            '🏠 Property: ' + (pendingInsp.property_title || 'Property') + '\n' +
+            '📍 Location: ' + (pendingInsp.property_location || 'N/A') + '\n' +
+            '💰 Price: ₦' + parseFloat(pendingInsp.property_price || 0).toLocaleString() + '\n\n' +
+            'My Details:\n' +
+            '👤 Name: ' + (pendingInsp.customer_name || 'N/A') + '\n' +
+            '📧 Email: ' + (pendingInsp.customer_email || 'N/A') + '\n' +
+            '📞 Phone: ' + (pendingInsp.customer_phone || 'N/A') + '\n\n' +
+            'Inspection Fee Paid: ₦' + parseFloat(pendingInsp.fee || 0).toLocaleString() + '\n\n' +
+            'Please schedule my inspection at your earliest convenience. Thank you! 🙏'
+          );
+
+          var saNumber = (pendingInsp.sa_whatsapp || '2349139649368').replace(/\D/g, '');
+          var waLink = 'https://wa.me/' + saNumber + '?text=' + waMsg;
+
+          setInspectionPaidResult({ waLink: waLink, pendingInsp: pendingInsp });
+          localStorage.removeItem('gh_pending_inspection');
+
+          // Auto-open WhatsApp via a synthetic link click rather than
+          // window.open()/location.href — still not a "real" user gesture as
+          // far as popup blockers are concerned, so this can silently no-op
+          // on some browsers (notably mobile Safari). The modal's own
+          // "Open WhatsApp" button stays as the fallback for that case.
+          setTimeout(function() {
+            var link = document.createElement('a');
+            link.href = waLink;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }, 500);
         } else {
           alert('✓ Inspection fee payment confirmed! Our team will contact you to schedule your inspection.');
         }
       }
-    } catch(e) {}
-  }, [properties]);
+    } catch(e) {
+      console.error('Inspection payment return error:', e.message);
+      alert('✓ Payment confirmed! Our team will contact you shortly.');
+    }
+  }, []);
   const searchFiltered = function(list) {
     var result = list;
     if (searchQuery.trim()) {
@@ -15388,6 +15582,171 @@ function AppContent() {
           onSubmitted={function() { console.log('Rating submitted successfully'); }}
         />
       )}
+      {inspectionPaidResult && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.85)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '380px', width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✅</div>
+            <h3 style={{ color: '#0a2240', fontWeight: '900', margin: '0 0 8px 0', fontSize: '1.1rem' }}>
+              Payment Confirmed!
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 6px 0' }}>
+              Your inspection fee has been received.
+            </p>
+            <p style={{ color: '#374151', fontSize: '0.82rem', margin: '0 0 16px 0', lineHeight: 1.6 }}>
+              WhatsApp has opened to send your inspection request. If it didn't open automatically, tap the button below.
+            </p>
+            <a href={inspectionPaidResult.waLink}
+              target='_blank'
+              rel='noopener noreferrer'
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                backgroundColor: '#25D366', color: '#fff', borderRadius: '12px',
+                padding: '13px 20px', fontSize: '0.90rem', fontWeight: '800',
+                textDecoration: 'none', marginBottom: '12px',
+              }}>
+              📱 Open WhatsApp
+            </a>
+            <button onClick={function() { setInspectionPaidResult(null); }}
+              style={{ backgroundColor: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', padding: '8px' }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+      {showAccountModal && user && (
+        <div onClick={function(){ setShowAccountModal(false); }}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div onClick={function(e){ e.stopPropagation(); }}
+            style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '24px', maxWidth: '460px', width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>My Account</h3>
+              <button onClick={function(){ setShowAccountModal(false); }} className="gh-close-btn"
+                style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '30px', height: '30px', color: '#64748b', fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+
+            {/* Account tab bar */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', borderBottom: '2px solid #f1f5f9', paddingBottom: '0' }}>
+              <button onClick={function() { setCustomerAccountTab('profile'); }}
+                style={{ padding: '8px 16px', border: 'none', borderBottom: customerAccountTab === 'profile' ? '2px solid #0a2240' : '2px solid transparent', backgroundColor: 'transparent', fontWeight: customerAccountTab === 'profile' ? '800' : '500', color: customerAccountTab === 'profile' ? '#0a2240' : '#94a3b8', cursor: 'pointer', fontSize: '0.84rem', marginBottom: '-2px' }}>
+                Profile
+              </button>
+              <button onClick={function() { setCustomerAccountTab('inspections'); fetchCustomerInspections(); }}
+                style={{ padding: '8px 16px', border: 'none', borderBottom: customerAccountTab === 'inspections' ? '2px solid #0a2240' : '2px solid transparent', backgroundColor: 'transparent', fontWeight: customerAccountTab === 'inspections' ? '800' : '500', color: customerAccountTab === 'inspections' ? '#0a2240' : '#94a3b8', cursor: 'pointer', fontSize: '0.84rem', marginBottom: '-2px' }}>
+                My Inspections
+                {customerInspections.length > 0 && (
+                  <span style={{ marginLeft: '4px', backgroundColor: '#0a2240', color: '#fff', borderRadius: '10px', padding: '1px 6px', fontSize: '0.66rem', fontWeight: '800' }}>
+                    {customerInspections.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Profile tab content */}
+            {customerAccountTab === 'profile' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</p>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#0a2240', fontWeight: '700' }}>{user.full_name || '—'}</p>
+                </div>
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</p>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#0a2240', fontWeight: '700' }}>{user.email}</p>
+                </div>
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</p>
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#0a2240', fontWeight: '700' }}>{user.phone || '—'}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Inspections tab content */}
+            {customerAccountTab === 'inspections' && (
+              <div>
+                {customerInspLoading ? (
+                  <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.84rem', padding: '20px' }}>Loading inspections...</p>
+                ) : customerInspections.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px 20px' }}>
+                    <p style={{ fontSize: '2rem', margin: '0 0 8px 0' }}>🔍</p>
+                    <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No inspections booked yet</p>
+                  </div>
+                ) : customerInspections.map(function(insp) {
+                  var isCompleted = insp.status === 'confirmed';
+                  var isDone = insp.status === 'done';
+
+                  // Build WhatsApp message for follow-up
+                  var waMsg = encodeURIComponent(
+                    'Hello, I am following up on my inspection booking for:\n\n' +
+                    '🏠 ' + (insp.property_address || 'Property') + '\n' +
+                    '📅 Booked on: ' + new Date(insp.created_at).toLocaleDateString('en-NG') + '\n\n' +
+                    'My name is ' + (insp.customer_name || '') + '. Could you please provide an update on my inspection schedule? Thank you.'
+                  );
+                  var saNumber = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
+                  var waLink = 'https://wa.me/' + saNumber + '?text=' + waMsg;
+
+                  return (
+                    <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1px solid ' + (isCompleted ? '#bbf7d0' : '#e2e8f0'), boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                      {/* Property info */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                            {insp.property_address || 'Property Inspection'}
+                          </p>
+                          {insp.inspection_date && (
+                            <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                              📅 Scheduled: {new Date(insp.inspection_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                            </p>
+                          )}
+                          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>
+                            Booked: {new Date(insp.created_at).toLocaleDateString('en-NG')}
+                          </p>
+                        </div>
+                        <span style={{
+                          backgroundColor: isCompleted ? '#f0fff4' : isDone ? '#eff6ff' : '#fef3c7',
+                          color: isCompleted ? '#166534' : isDone ? '#1e40af' : '#92400e',
+                          borderRadius: '20px', padding: '3px 10px', fontSize: '0.68rem', fontWeight: '800', flexShrink: 0, marginLeft: '8px'
+                        }}>
+                          {isCompleted ? '✓ COMPLETED' : isDone ? 'DONE' : 'PENDING'}
+                        </span>
+                      </div>
+
+                      {/* Fee paid badge */}
+                      {insp.fee_payment_amount > 0 && (
+                        <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px', border: '1px solid #bbf7d0' }}>
+                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>
+                            ✓ Inspection fee paid: ₦{parseFloat(insp.fee_payment_amount).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* GHA notes when done/confirmed */}
+                      {(isDone || isCompleted) && (insp.gha_notes || insp.notes) && (
+                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Inspection Report</p>
+                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151', lineHeight: 1.6 }}>{insp.gha_notes || insp.notes}</p>
+                        </div>
+                      )}
+
+                      {/* Action button */}
+                      {isCompleted ? (
+                        <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                          <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>
+                            ✓ Inspection Completed
+                          </p>
+                        </div>
+                      ) : (
+                        <a href={waLink} target='_blank' rel='noopener noreferrer'
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
+                          📱 Message SA to Schedule
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {showResetPasswordModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
@@ -15474,7 +15833,10 @@ function AppContent() {
               )}
               {user ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.74rem' }}>{user.email?.split('@')[0]}</span>
+                  <button onClick={function(){ setShowAccountModal(true); setCustomerAccountTab('profile'); fetchCustomerInspections(); }}
+                    style={{ background: 'none', border: 'none', padding: 0, color: 'rgba(255,255,255,0.6)', fontSize: '0.74rem', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.25)', fontFamily: "'Inter', sans-serif" }}>
+                    {user.email?.split('@')[0]}
+                  </button>
                   <button onClick={handleLogout} className="gh-logout-btn" style={{ padding: '7px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.18)', backgroundColor: 'transparent', color: 'rgba(255,255,255,0.8)', fontSize: '0.81rem', cursor: 'pointer', fontWeight: '600', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif" }}>Logout</button>
                 </div>
               ) : (
@@ -15529,6 +15891,10 @@ function AppContent() {
               {user ? (
                 <>
                   <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.74rem', paddingLeft: '4px', fontFamily: "'Inter', sans-serif" }}>{user.email}</span>
+                  <button onClick={function(){ setShowAccountModal(true); setCustomerAccountTab('profile'); fetchCustomerInspections(); setMenuOpen(false); }}
+                    style={{ width: '100%', padding: '13px 16px', backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.85)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '10px', fontSize: '0.88rem', fontWeight: '600', textAlign: 'left', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
+                    👤 My Account
+                  </button>
                   <button onClick={function(){ handleLogout(); setMenuOpen(false); }}
                     style={{ width: '100%', padding: '13px 16px', backgroundColor: 'rgba(239,68,68,0.08)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px', fontSize: '0.88rem', fontWeight: '600', textAlign: 'left', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
                     Logout
