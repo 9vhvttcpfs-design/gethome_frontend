@@ -11074,7 +11074,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
             {inspLoading ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
-            ) : inspections.length === 0 ? (
+            ) : inspections.filter(function(i){ return i.status !== 'confirmed'; }).length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
                 <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No inspections assigned to you yet</p>
@@ -11126,7 +11126,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 )}
 
                 {/* ── ALL INSPECTIONS ── */}
-                {inspections.slice().sort(function(a, b){
+                {/* GHA sees: pending, assigned, done - NOT confirmed (cleared once SA confirms) */}
+                {inspections.filter(function(i){ return i.status !== 'confirmed'; }).slice().sort(function(a, b){
                   return new Date(a.inspection_date || a.requested_date || 0) - new Date(b.inspection_date || b.requested_date || 0);
                 }).map(function(insp) {
                   var status = insp.status || 'pending';
@@ -12002,6 +12003,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var inspList = Array.isArray(data) ? data :
         Array.isArray(data?.inspections) ? data.inspections : [];
       setInspections(inspList);
+      console.log('SA inspection notes check:', inspList.filter(function(i) { return i.status === 'gha_done'; }).slice(0, 3).map(function(i) { return { id: i.id.slice(0, 8), status: i.status, notes: i.notes, gha_notes: i.gha_notes, gha_done_at: i.gha_done_at }; }));
 
       // Also update counts if available
       if (data?.counts) setInspectionCounts(data.counts);
@@ -13572,6 +13574,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             })()}
 
             {(function() {
+              // SA sees: pending, assigned, done - confirmed moves to admin only
               var pendingInspections = inspections.filter(function(i) {
                 return (!i.status || i.status === 'pending' || i.status === 'assigned') && !i.gha_done_at;
               });
@@ -13583,18 +13586,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 return i.status === 'gha_done' ||
                   (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled');
               });
-              var confirmedInspections = inspections.filter(function(i) { return i.status === 'confirmed'; });
+              // SA confirmed-inspections tab shows only TODAY's confirmations for
+              // reference — once confirmed, an inspection is admin's to track and
+              // shouldn't keep cluttering the SA dashboard indefinitely.
+              var recentlyConfirmed = inspections.filter(function(i) {
+                if (i.status !== 'confirmed') return false;
+                var confirmedAt = i.sa_confirmed_at ? new Date(i.sa_confirmed_at) : null;
+                if (!confirmedAt) return false;
+                var hoursSince = (Date.now() - confirmedAt.getTime()) / (1000 * 60 * 60);
+                return hoursSince < 24; // only show confirmed within last 24 hours
+              });
               var cancelledInspections = inspections.filter(function(i) { return i.status === 'cancelled'; });
 
               var activeInspections = inspectionSubTab === 'pending' ? pendingInspections
                 : inspectionSubTab === 'done' ? doneInspections
-                : inspectionSubTab === 'confirmed' ? confirmedInspections
+                : inspectionSubTab === 'recent' ? recentlyConfirmed
                 : cancelledInspections;
 
               // Use API counts when available, fall back to local filter counts
               var pendingCount = inspectionCounts.pending || pendingInspections.length;
               var doneCount = inspectionCounts.done || doneInspections.length;
-              var confirmedCount = inspectionCounts.confirmed || confirmedInspections.length;
+              var recentCount = recentlyConfirmed.length;
               var cancelledCount = inspectionCounts.cancelled || cancelledInspections.length;
 
               return (
@@ -13603,8 +13615,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
                     {[
                       { key: 'pending', label: 'Pending / Assigned', count: pendingCount, color: '#f59e0b' },
-                      { key: 'done', label: 'Done', count: doneCount, color: '#3b82f6' },
-                      { key: 'confirmed', label: 'Confirmed', count: confirmedCount, color: '#27ae60' },
+                      { key: 'done', label: 'Done — Awaiting Confirm', count: doneCount, color: '#3b82f6' },
+                      { key: 'recent', label: 'Just Confirmed', count: recentCount, color: '#27ae60' },
                       { key: 'cancelled', label: 'Cancelled', count: cancelledCount, color: '#ef4444' },
                     ].map(function(tab) {
                       return (
@@ -15452,46 +15464,19 @@ function AppContent() {
         try { pendingInsp = JSON.parse(localStorage.getItem('gh_pending_inspection') || 'null'); } catch(e) {}
 
         if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
-          var waMsg = encodeURIComponent(
-            'Hello, I have successfully paid the inspection fee for a property on GetHome.\n\n' +
-            '🏠 Property: ' + (pendingInsp.property_title || 'Property') + '\n' +
-            '📍 Location: ' + (pendingInsp.property_location || 'N/A') + '\n' +
-            '💰 Price: ₦' + parseFloat(pendingInsp.property_price || 0).toLocaleString() + '\n\n' +
-            'My Details:\n' +
-            '👤 Name: ' + (pendingInsp.customer_name || 'N/A') + '\n' +
-            '📧 Email: ' + (pendingInsp.customer_email || 'N/A') + '\n' +
-            '📞 Phone: ' + (pendingInsp.customer_phone || 'N/A') + '\n\n' +
-            'Inspection Fee Paid: ₦' + parseFloat(pendingInsp.fee || 0).toLocaleString() + '\n\n' +
-            'Please schedule my inspection at your earliest convenience. Thank you! 🙏'
-          );
-
-          var saNumber = (pendingInsp.sa_whatsapp || '2349139649368').replace(/\D/g, '');
-          var waLink = 'https://wa.me/' + saNumber + '?text=' + waMsg;
-
-          setInspectionPaidResult({ waLink: waLink, pendingInsp: pendingInsp });
+          setInspectionPaidResult({ pendingInsp: pendingInsp });
           localStorage.removeItem('gh_pending_inspection');
-
-          // Auto-open WhatsApp via a synthetic link click rather than
-          // window.open()/location.href — still not a "real" user gesture as
-          // far as popup blockers are concerned, so this can silently no-op
-          // on some browsers (notably mobile Safari). The modal's own
-          // "Open WhatsApp" button stays as the fallback for that case.
-          setTimeout(function() {
-            var link = document.createElement('a');
-            link.href = waLink;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }, 500);
+          // Navigate to customer account inspections tab
+          setShowAccountModal(true);
+          setCustomerAccountTab('inspections');
+          // Fetch fresh inspections
+          fetchCustomerInspections();
         } else {
-          alert('✓ Inspection fee payment confirmed! Our team will contact you to schedule your inspection.');
+          alert('✓ Inspection fee payment confirmed! Check your account under My Inspections to track your booking.');
         }
       }
     } catch(e) {
       console.error('Inspection payment return error:', e.message);
-      alert('✓ Payment confirmed! Our team will contact you shortly.');
     }
   }, []);
   const searchFiltered = function(list) {
@@ -15586,28 +15571,23 @@ function AppContent() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.85)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '380px', width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
             <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✅</div>
-            <h3 style={{ color: '#0a2240', fontWeight: '900', margin: '0 0 8px 0', fontSize: '1.1rem' }}>
-              Payment Confirmed!
-            </h3>
+            <h3 style={{ color: '#0a2240', fontWeight: '900', margin: '0 0 8px 0', fontSize: '1.1rem' }}>Payment Confirmed!</h3>
             <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 6px 0' }}>
-              Your inspection fee has been received.
+              Your inspection fee has been received successfully.
             </p>
-            <p style={{ color: '#374151', fontSize: '0.82rem', margin: '0 0 16px 0', lineHeight: 1.6 }}>
-              WhatsApp has opened to send your inspection request. If it didn't open automatically, tap the button below.
+            <p style={{ color: '#374151', fontSize: '0.82rem', margin: '0 0 20px 0', lineHeight: 1.6 }}>
+              Go to My Inspections to message our team and schedule your inspection appointment.
             </p>
-            <a href={inspectionPaidResult.waLink}
-              target='_blank'
-              rel='noopener noreferrer'
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                backgroundColor: '#25D366', color: '#fff', borderRadius: '12px',
-                padding: '13px 20px', fontSize: '0.90rem', fontWeight: '800',
-                textDecoration: 'none', marginBottom: '12px',
-              }}>
-              📱 Open WhatsApp
-            </a>
+            <button onClick={function() {
+              setInspectionPaidResult(null);
+              setShowAccountModal(true);
+              setCustomerAccountTab('inspections');
+              fetchCustomerInspections();
+            }} style={{ width: '100%', padding: '13px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer', marginBottom: '10px' }}>
+              View My Inspections
+            </button>
             <button onClick={function() { setInspectionPaidResult(null); }}
-              style={{ backgroundColor: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', padding: '8px' }}>
+              style={{ backgroundColor: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>
               Close
             </button>
           </div>
