@@ -6646,6 +6646,52 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       <p style={{ margin: '10px 0 0 0', fontSize: '0.80rem', color: '#374151', fontFamily: 'monospace' }}>
                                         {breakdownParts.join(' + ')} = {fmtNaira(gha.total_payment)}
                                       </p>
+
+                                      {/* Bank details for paying this GHA their inspection fees */}
+                                      {gha.account_number ? (
+                                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
+                                          <p style={{ margin: '0 0 6px 0', fontSize: '0.66rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bank Details for Transfer</p>
+                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                            <div>
+                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Bank Name</p>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{gha.bank_name}</p>
+                                                <button onClick={function() { copyToClipboard(gha.bank_name, 'Bank name'); }}
+                                                  style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.64rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
+                                              </div>
+                                            </div>
+                                            <div>
+                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Account Number</p>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.90rem', letterSpacing: '0.08em' }}>{gha.account_number}</p>
+                                                <button onClick={function() { copyToClipboard(gha.account_number, 'Account number'); }}
+                                                  style={{ background: '#0a2240', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.64rem', cursor: 'pointer', color: '#fff', fontWeight: '600' }}>COPY</button>
+                                              </div>
+                                            </div>
+                                            <div style={{ gridColumn: '1 / -1' }}>
+                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Account Name</p>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{gha.account_name}</p>
+                                                <button onClick={function() { copyToClipboard(gha.account_name, 'Account name'); }}
+                                                  style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.64rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <button onClick={function() {
+                                            var allDetails = 'Bank: ' + gha.bank_name + '\nAccount Number: ' + gha.account_number + '\nAccount Name: ' + gha.account_name + '\nAmount: NGN ' + parseFloat(gha.total_payment).toLocaleString() + '\nRef: ' + gha.gha_code + ' ' + ghaPaymentsMonth;
+                                            copyToClipboard(allDetails, 'All payment details');
+                                          }} style={{ marginTop: '8px', width: '100%', padding: '7px', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', color: '#374151' }}>
+                                            <FileText size={12} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Copy All Payment Details
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '8px 12px', marginTop: '10px', border: '1px solid #fed7aa' }}>
+                                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
+                                            <AlertCircle size={13} style={{ flexShrink: 0, marginTop: '1px' }} /> No bank account on file — {gha.gha_name} must add bank details in their profile before payment
+                                          </p>
+                                        </div>
+                                      )}
+
                                       <button onClick={function(){ setExpandedGhaPayment(isExpanded ? null : gha.gha_id); }}
                                         style={{ marginTop: '10px', padding: '5px 12px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer' }}>
                                         {isExpanded ? 'Hide Inspections' : 'View Inspections'}
@@ -11272,6 +11318,21 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           Submitted — Awaiting SA Confirmation
                         </button>
                       )}
+                      {status === 'gha_done' && (
+                        <button onClick={async function() {
+                          try {
+                            var token = localStorage.getItem('gh_staff_token');
+                            var res = await fetch(API_URL + '/api/gha/clear-inspection', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                              body: JSON.stringify({ inspection_id: insp.id }),
+                            });
+                            if (res.ok) fetchInspections();
+                          } catch(e) { console.error('Clear error:', e.message); }
+                        }} style={{ backgroundColor: 'transparent', border: '1.5px solid #94a3b8', color: '#94a3b8', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', marginTop: '6px' }}>
+                          Clear from list
+                        </button>
+                      )}
 
                     </div>
                   );
@@ -11286,7 +11347,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
           var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
           var snapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
           var totalAgentsActive = (snapshots || []).length;
-          var totalRevenue = monthlyHistory ? (monthlyHistory.total_revenue || 0) : 0;
           var yourCommission = monthlyHistory ? (monthlyHistory.total_commission || 0) : 0;
 
           return (
@@ -11314,7 +11374,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '24px' }}>
                     {[
                       { label: 'TOTAL AGENTS ACTIVE', value: totalAgentsActive, borderColor: '#0a2240' },
-                      { label: 'TOTAL REVENUE GENERATED', value: fmtMoney(totalRevenue), borderColor: '#27ae60' },
                       { label: 'YOUR COMMISSION (' + currentGhaRate + '%)', value: fmtMoney(yourCommission), borderColor: '#27ae60' },
                     ].map(function(s) {
                       return (
@@ -15466,9 +15525,10 @@ function AppContent() {
         if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
           setInspectionPaidResult({ pendingInsp: pendingInsp });
           localStorage.removeItem('gh_pending_inspection');
-          // Navigate to customer account inspections tab
-          setShowAccountModal(true);
+          // Open customer account at inspections tab
+          setShowNavAuth(false); // close any auth modal
           setCustomerAccountTab('inspections');
+          setShowAccountModal(true);
           // Fetch fresh inspections
           fetchCustomerInspections();
         } else {
@@ -15706,17 +15766,24 @@ function AppContent() {
                         </div>
                       )}
 
-                      {/* Action button */}
-                      {isCompleted ? (
-                        <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
-                          <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>
-                            ✓ Inspection Completed
-                          </p>
-                        </div>
+                      {/* Action button — always show message button if inspection has fee paid */}
+                      {insp.fee_payment_amount > 0 ? (
+                        isCompleted ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                              <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ Inspection Completed</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <a href={waLink} target='_blank' rel='noopener noreferrer'
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
+                            📱 Message SA to Schedule Inspection
+                          </a>
+                        )
                       ) : (
                         <a href={waLink} target='_blank' rel='noopener noreferrer'
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
-                          📱 Message SA to Schedule
+                          📱 Message SA to Book Inspection
                         </a>
                       )}
                     </div>
