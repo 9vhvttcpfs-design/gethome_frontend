@@ -6395,10 +6395,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             </div>
 
                             {/* GHA done notes */}
-                            {status === 'gha_done' && insp.gha_notes && (
+                            {status === 'gha_done' && insp.notes && (
                               <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ margin: '0 0 4px 0', fontSize: '0.62rem', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.05em' }}>GHA INSPECTION NOTES</p>
-                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: '1.6' }}>{insp.gha_notes}</p>
+                                <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: '1.6' }}>{insp.notes}</p>
                                 {insp.gha_done_at && <p style={{ margin: '5px 0 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>Completed {new Date(insp.gha_done_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>}
                               </div>
                             )}
@@ -11246,10 +11246,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       )}
 
                       {/* GHA notes (once submitted) */}
-                      {insp.gha_notes && status !== 'pending' && (
+                      {insp.notes && status !== 'pending' && (
                         <div style={{ backgroundColor: '#fffbeb', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1.5px solid #fde68a' }}>
                           <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#92400e', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>MY INSPECTION NOTES</p>
-                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#78350f', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
+                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#78350f', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.notes}</p>
                         </div>
                       )}
 
@@ -11298,7 +11298,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                                   });
                                   var data = await res.json();
                                   if (!res.ok) throw new Error(data.error || 'Failed');
-                                  setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'gha_done', gha_notes: currentNote, gha_done_at: new Date().toISOString() }) : x; }); });
+                                  setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'done', notes: currentNote, gha_done_at: new Date().toISOString() }) : x; }); });
                                   setMarkingDone(null);
                                   setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; });
                                   showMsg('Inspection marked as done. Awaiting SA confirmation.');
@@ -12062,7 +12062,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var inspList = Array.isArray(data) ? data :
         Array.isArray(data?.inspections) ? data.inspections : [];
       setInspections(inspList);
-      console.log('SA inspection notes check:', inspList.filter(function(i) { return i.status === 'gha_done'; }).slice(0, 3).map(function(i) { return { id: i.id.slice(0, 8), status: i.status, notes: i.notes, gha_notes: i.gha_notes, gha_done_at: i.gha_done_at }; }));
+      console.log('SA inspection notes check:', inspList.filter(function(i) { return i.status === 'gha_done'; }).slice(0, 3).map(function(i) { return { id: i.id.slice(0, 8), status: i.status, notes: i.notes, gha_done_at: i.gha_done_at }; }));
 
       // Also update counts if available
       if (data?.counts) setInspectionCounts(data.counts);
@@ -13739,9 +13739,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', fontWeight: '800', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                               📋 GHA Inspection Report
                             </p>
-                            {insp.gha_notes ? (
+                            {insp.notes ? (
                               <p style={{ margin: '0 0 6px 0', color: '#1e3a8a', fontSize: '0.84rem', lineHeight: 1.7 }}>
-                                {insp.gha_notes}
+                                {insp.notes}
                               </p>
                             ) : (
                               <p style={{ margin: '0 0 6px 0', color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>
@@ -15759,10 +15759,10 @@ function AppContent() {
                       )}
 
                       {/* GHA notes when done/confirmed */}
-                      {(isDone || isCompleted) && (insp.gha_notes || insp.notes) && (
+                      {(isDone || isCompleted) && insp.notes && (
                         <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
                           <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Inspection Report</p>
-                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151', lineHeight: 1.6 }}>{insp.gha_notes || insp.notes}</p>
+                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151', lineHeight: 1.6 }}>{insp.notes}</p>
                         </div>
                       )}
 
