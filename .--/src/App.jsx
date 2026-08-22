@@ -15999,109 +15999,134 @@ function AppContent() {
                     <p style={{ fontSize: '2rem', margin: '0 0 8px 0' }}>🔍</p>
                     <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No inspections booked yet</p>
                   </div>
-                ) : customerInspections.map(function(insp) {
-                  var isCompleted = insp.status === 'confirmed';
-                  var isDone = insp.status === 'done';
-
-                  return (
-                    <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1px solid ' + (isCompleted ? '#bbf7d0' : '#e2e8f0'), boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
-                      {/* Property info */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
-                            {insp.property_address || 'Property Inspection'}
-                          </p>
-                          {insp.inspection_date && (
-                            <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>
-                              📅 Scheduled: {new Date(insp.inspection_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
-                            </p>
-                          )}
-                          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>
-                            Booked: {new Date(insp.created_at).toLocaleDateString('en-NG')}
-                          </p>
-                        </div>
-                        <span style={{
-                          backgroundColor: isCompleted ? '#f0fff4' : isDone ? '#eff6ff' : '#fef3c7',
-                          color: isCompleted ? '#166534' : isDone ? '#1e40af' : '#92400e',
-                          borderRadius: '20px', padding: '3px 10px', fontSize: '0.68rem', fontWeight: '800', flexShrink: 0, marginLeft: '8px'
-                        }}>
-                          {isCompleted ? '✓ COMPLETED' : isDone ? 'DONE' : 'PENDING'}
-                        </span>
+                ) : (
+                  <div>
+                    {/* How it works timeline */}
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>How it works</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'Fee Paid', done: true },
+                          { label: '→' },
+                          { label: 'Message SA', done: false },
+                          { label: '→' },
+                          { label: 'GHA Inspects', done: false },
+                          { label: '→' },
+                          { label: 'Completed', done: false },
+                        ].map(function(step, i) {
+                          if (step.label === '→') return <span key={i} style={{ color: '#94a3b8', fontSize: '0.74rem' }}>→</span>;
+                          return (
+                            <span key={i} style={{ backgroundColor: step.done ? '#27ae60' : '#e2e8f0', color: step.done ? '#fff' : '#94a3b8', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '700' }}>
+                              {step.label}
+                            </span>
+                          );
+                        })}
                       </div>
-
-                      {/* Fee paid badge */}
-                      {insp.fee_payment_amount > 0 && (
-                        <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px', border: '1px solid #bbf7d0' }}>
-                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>
-                            ✓ Inspection fee paid: ₦{parseFloat(insp.fee_payment_amount).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Action button — enquiry message for completed inspections, full booking message otherwise */}
-                      {isCompleted && (function() {
-                        var saNum = formatWhatsAppNumber(insp.sa_whatsapp || globalSettings.payment_whatsapp);
-                        var enquiryMsg = encodeURIComponent(
-                          'Hello, I have an enquiry regarding my completed property inspection on GetHome.\n\n' +
-                          '🏠 Property: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
-                          '📍 Location: ' + (insp.property_location || 'N/A') + '\n' +
-                          '📅 Inspection completed: ' + (insp.sa_confirmed_at ? new Date(insp.sa_confirmed_at).toLocaleDateString('en-NG', { dateStyle: 'long' }) : 'Recently') + '\n\n' +
-                          'My name is ' + (insp.customer_name || '') + '.\n\n' +
-                          'This is an ENQUIRY (not a new inspection request). I would like to ask about this property.\n\n' +
-                          'Thank you.'
-                        );
-                        return (
-                          <div>
-                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', marginBottom: '8px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
-                              <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ Inspection Completed</p>
-                            </div>
-                            <a href={'https://wa.me/' + saNum + '?text=' + enquiryMsg}
-                              target='_blank' rel='noopener noreferrer'
-                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#64748b', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.80rem', fontWeight: '700', textDecoration: 'none' }}>
-                              💬 Enquire about this property
-                            </a>
-                          </div>
-                        );
-                      })()}
-                      {!isCompleted && (function() {
-                        var saNum = formatWhatsAppNumber(insp.sa_whatsapp || globalSettings.payment_whatsapp);
-                        var propPrice = parseFloat(insp.property_price || 0);
-
-                        var bookingMsg = encodeURIComponent(
-                          'Hello' + (insp.sa_name ? ' ' + insp.sa_name : '') + ',\n\n' +
-                          'I would like to book an inspection for a property I found on GetHome. I have completed my payment.\n\n' +
-                          '🏠 *PROPERTY DETAILS:*\n' +
-                          '• Title: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
-                          '• Location: ' + (insp.property_location || 'N/A') + '\n' +
-                          '• Price: ₦' + propPrice.toLocaleString() + '\n' +
-                          (insp.property_image ? '• Photos: Available on GetHome\n' : '') +
-                          '\n💰 *INSPECTION FEE PAID:* ₦' + parseFloat(insp.fee_payment_amount || 0).toLocaleString() + ' ✅\n\n' +
-                          '👤 *MY DETAILS:*\n' +
-                          '• Name: ' + (insp.customer_name || 'N/A') + '\n' +
-                          '• Email: ' + (insp.customer_email || 'N/A') + '\n' +
-                          '• Phone: ' + (insp.customer_phone || 'N/A') + '\n\n' +
-                          '⚠️ *IMPORTANT NOTICE — FOR YOUR PROTECTION:*\n' +
-                          '• GetHome verifies property listings but does not own them\n' +
-                          '• Do NOT pay any money to landlords or agents outside the GetHome platform\n' +
-                          '• GetHome is NOT liable for transactions made outside our platform\n' +
-                          '• Our verified GHA agent will conduct a physical inspection\n' +
-                          '• Report any suspicious requests to GetHome immediately\n' +
-                          '• Always get a receipt for any payment made through GetHome\n\n' +
-                          'Kindly schedule my inspection at your earliest convenience. Thank you! 🙏\n\n' +
-                          '_Sent via GetHome — trygethome.online_'
-                        );
-
-                        return (
-                          <a href={'https://wa.me/' + saNum + '?text=' + bookingMsg}
-                            target='_blank' rel='noopener noreferrer'
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
-                            📱 Message SA to Schedule Inspection
-                          </a>
-                        );
-                      })()}
                     </div>
-                  );
-                })}
+
+                    {customerInspections.map(function(insp) {
+                      // Status determination
+                      var isCompleted = insp.status === 'confirmed';
+                      var isDone = insp.status === 'done';
+                      var isAssigned = insp.status === 'assigned';
+                      var isCancelled = insp.status === 'cancelled';
+
+                      // Status label and color
+                      var statusConfig = isCompleted ? { label: 'Completed', bg: '#f0fff4', color: '#166534', border: '#bbf7d0', icon: '✓' }
+                        : isDone ? { label: 'Inspection Done — Awaiting Confirmation', bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', icon: '🔍' }
+                        : isAssigned ? { label: 'GHA Assigned — Inspection Scheduled', bg: '#fef3c7', color: '#92400e', border: '#fde68a', icon: '📅' }
+                        : isCancelled ? { label: 'Cancelled', bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', icon: '✕' }
+                        : { label: 'Pending — Awaiting Assignment', bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', icon: '⏳' };
+
+                      var saNum = formatWhatsAppNumber(insp.sa_whatsapp || globalSettings.payment_whatsapp);
+
+                      return (
+                        <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1.5px solid ' + statusConfig.border, boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                          {/* Header */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: '0 0 3px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                                {insp.property_title || insp.property_address || 'Property Inspection'}
+                              </p>
+                              {insp.property_location && (
+                                <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                                  📍 {insp.property_location}
+                                </p>
+                              )}
+                              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>
+                                Booked: {new Date(insp.created_at).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                              </p>
+                            </div>
+                            <span style={{ backgroundColor: statusConfig.bg, color: statusConfig.color, border: '1px solid ' + statusConfig.border, borderRadius: '20px', padding: '3px 10px', fontSize: '0.68rem', fontWeight: '800', flexShrink: 0, marginLeft: '8px' }}>
+                              {statusConfig.icon} {statusConfig.label}
+                            </span>
+                          </div>
+
+                          {/* Fee paid badge */}
+                          {insp.fee_payment_amount > 0 && (
+                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px', border: '1px solid #bbf7d0' }}>
+                              <p style={{ margin: 0, fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>
+                                ✓ Inspection fee paid: ₦{parseFloat(insp.fee_payment_amount).toLocaleString()}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Inspection date if assigned */}
+                          {insp.inspection_date && (
+                            <div style={{ backgroundColor: '#fef3c7', borderRadius: '8px', padding: '6px 10px', marginBottom: '10px', border: '1px solid #fde68a' }}>
+                              <p style={{ margin: 0, fontSize: '0.74rem', color: '#92400e', fontWeight: '600' }}>
+                                📅 Scheduled: {new Date(insp.inspection_date).toLocaleDateString('en-NG', { dateStyle: 'long' })}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Action button */}
+                          {isCancelled ? (
+                            <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                              <p style={{ margin: 0, color: '#c2410c', fontSize: '0.80rem', fontWeight: '600' }}>Inspection Cancelled</p>
+                            </div>
+                          ) : isCompleted ? (
+                            <div>
+                              <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px', textAlign: 'center', marginBottom: '8px' }}>
+                                <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ Inspection Completed</p>
+                              </div>
+                              <a href={'https://wa.me/' + saNum + '?text=' + encodeURIComponent('Hello, I have an enquiry about my completed inspection for: ' + (insp.property_title || insp.property_address || 'Property') + '. My name is ' + (insp.customer_name || '') + '.')}
+                                target='_blank' rel='noopener noreferrer'
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#64748b', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.80rem', fontWeight: '700', textDecoration: 'none' }}>
+                                💬 Enquire about this property
+                              </a>
+                            </div>
+                          ) : isDone ? (
+                            <div style={{ backgroundColor: '#eff6ff', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                              <p style={{ margin: 0, color: '#1e40af', fontSize: '0.80rem', fontWeight: '600' }}>🔍 GHA has completed the inspection. Awaiting SA confirmation.</p>
+                            </div>
+                          ) : isAssigned ? (
+                            <div style={{ backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px', textAlign: 'center' }}>
+                              <p style={{ margin: 0, color: '#92400e', fontSize: '0.80rem', fontWeight: '600' }}>📅 A GHA has been assigned and your inspection is scheduled.</p>
+                            </div>
+                          ) : (
+                            <a href={'https://wa.me/' + saNum + '?text=' + encodeURIComponent(
+                              'Hello' + (insp.sa_name ? ' ' + insp.sa_name : '') + ',\n\nI have paid my inspection fee and would like to schedule an inspection.\n\n' +
+                              '🏠 Property: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+                              '📍 Location: ' + (insp.property_location || 'N/A') + '\n' +
+                              '💰 Fee Paid: ₦' + parseFloat(insp.fee_payment_amount || 0).toLocaleString() + ' ✅\n\n' +
+                              '👤 Name: ' + (insp.customer_name || 'N/A') + '\n' +
+                              '📞 Phone: ' + (insp.customer_phone || 'N/A') + '\n\n' +
+                              '⚠️ FOR YOUR PROTECTION:\n' +
+                              '• Do NOT pay outside GetHome platform\n' +
+                              '• GetHome is not liable for outside transactions\n\n' +
+                              'Please schedule my inspection. Thank you! 🙏'
+                            )}
+                              target='_blank' rel='noopener noreferrer'
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '12px', fontSize: '0.84rem', fontWeight: '800', textDecoration: 'none' }}>
+                              📱 Message SA to Schedule Inspection
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
