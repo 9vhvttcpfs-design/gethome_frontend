@@ -10300,6 +10300,34 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     } catch(e) { console.error('markAllRead error:', e.message); }
   }
 
+  async function clearAllNotifications() {
+    try {
+      var tkn = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/gha/clear-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn },
+        body: JSON.stringify({ clear_all: true }),
+      });
+      setGhaNotifs([]);
+      setGhaNotifications([]);
+      setUnreadCount(0);
+    } catch(e) { console.error('Clear notifications error:', e.message); }
+  }
+
+  async function clearNotification(notif) {
+    try {
+      var tkn = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/gha/clear-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tkn },
+        body: JSON.stringify({ notification_id: notif.id }),
+      });
+      setGhaNotifs(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+      setGhaNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+      if (!(notif.is_read || notif.read)) setUnreadCount(function(prev){ return Math.max(0, prev - 1); });
+    } catch(e) { console.error('Clear notification error:', e.message); }
+  }
+
   const fetchGHAProfile = async function() {
     try {
       var tkn = localStorage.getItem('gh_staff_token');
@@ -10482,8 +10510,14 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {/* Dropdown header */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                   <span style={{ fontWeight: 700, color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Notifications</span>
-                  <button onClick={function(){ markAllRead(); setShowNotifDropdown(false); }}
-                    style={{ color: '#27ae60', fontSize: '0.74rem', cursor: 'pointer', background: 'none', border: 'none', fontWeight: 600, fontFamily: "'Inter', sans-serif" }}>Mark all read</button>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <button onClick={function(){ markAllRead(); setShowNotifDropdown(false); }}
+                      style={{ color: '#27ae60', fontSize: '0.74rem', cursor: 'pointer', background: 'none', border: 'none', fontWeight: 600, fontFamily: "'Inter', sans-serif" }}>Mark all read</button>
+                    {ghaNotifs.length > 0 && (
+                      <button onClick={function(){ clearAllNotifications(); }}
+                        style={{ color: '#ef4444', fontSize: '0.74rem', cursor: 'pointer', background: 'none', border: 'none', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>Clear all</button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Notification items */}
@@ -10530,6 +10564,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                             </button>
                           )}
                         </div>
+                        <button onClick={function(e){ e.stopPropagation(); clearNotification(notif); }}
+                          style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0, padding: '2px 4px', lineHeight: 1 }}>
+                          ✕
+                        </button>
                       </div>
                     </div>
                   );
@@ -12141,6 +12179,30 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     } catch(e) { console.error('Mark message read error:', e.message); }
   };
 
+  async function clearAllSaNotifications() {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/sa/clear-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ clear_all: true }),
+      });
+      setNotifications([]);
+    } catch(e) { console.error('Clear notifications error:', e.message); }
+  }
+
+  async function clearSaNotification(notif) {
+    try {
+      var token = localStorage.getItem('gh_staff_token');
+      await fetch(API_URL + '/api/sa/clear-notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ notification_id: notif.id }),
+      });
+      setNotifications(function(prev){ return prev.filter(function(n){ return n.id !== notif.id; }); });
+    } catch(e) { console.error('Clear notification error:', e.message); }
+  }
+
   async function fetchPendingAgents() {
     try {
       var token = localStorage.getItem('gh_staff_token');
@@ -12431,8 +12493,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
             {showNotifDropdown && (
               <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
+                  {saDisplayNotifications.length > 0 && (
+                    <button onClick={function(){ clearAllSaNotifications(); }}
+                      style={{ color: '#ef4444', fontSize: '0.74rem', cursor: 'pointer', background: 'none', border: 'none', fontWeight: 700, fontFamily: "'Inter', sans-serif" }}>Clear all</button>
+                  )}
                 </div>
 
                 {saDisplayNotifications.length === 0 ? (
@@ -12475,6 +12541,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.76rem', lineHeight: '1.4' }}>{notif.property_title || notif.property_location || notif.property_address || ''}</p>
                             <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{notifTimeAgo}</p>
                           </div>
+                          <button onClick={function(e){ e.stopPropagation(); clearSaNotification(notif); }}
+                            style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '0.9rem', cursor: 'pointer', flexShrink: 0, padding: '2px 4px', lineHeight: 1 }}>
+                            ✕
+                          </button>
                         </div>
                       </div>
                     );
