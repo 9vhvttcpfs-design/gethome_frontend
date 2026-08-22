@@ -1752,7 +1752,13 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         { label: 'GetHome Escrow Fee (0.75%)', amount: fmtListingPrice(escrowFee),  color: '#27ae60' },
       ];
   // Determine inspection fee display — falls back to FREE when no SA has set a fee yet
-  const inspectionFeeAmount = parseFloat(property.inspection_fee || 0);
+  const inspectionFeeAmount = parseFloat(
+    property.inspection_fee ||
+    property.inspectionFee ||
+    property.fee ||
+    0
+  );
+  console.log('Inspection fee for property', property.id, ':', inspectionFeeAmount, '| raw inspection_fee:', property.inspection_fee);
   const inspectionFeeLabel  = inspectionFeeAmount > 0 ? '₦' + inspectionFeeAmount.toLocaleString() : 'FREE';
   const inspectionFeeColor  = inspectionFeeAmount > 0 ? '#0a2240' : '#27ae60';
   const loanBaseUrl = globalSettings.loan_link || LOAN_PARTNER_URL || 'https://creditdirect.ng/?ref=09077246534';
@@ -1827,11 +1833,21 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   // are collected in a modal instead of jumping straight to WhatsApp.
   const handleBookInspection = async function(prop) {
     var targetProperty = prop || property;
-    if (inspectionFeeAmount > 0) {
+
+    // Calculate fee from THIS specific property - not component-level variable
+    var thisFee = parseFloat(
+      targetProperty?.inspection_fee ||
+      targetProperty?.fee ||
+      0
+    );
+
+    console.log('Book inspection - property:', targetProperty?.id, '| title:', targetProperty?.title, '| inspection_fee:', targetProperty?.inspection_fee, '| thisFee:', thisFee);
+
+    if (thisFee > 0) {
       var resolved = await resolveSaWhatsapp(targetProperty);
       setInspectionBooking({
         property: targetProperty,
-        fee: inspectionFeeAmount,
+        fee: thisFee, // use per-property fee not component-level variable
         sa_whatsapp: resolved.targetNumber,
         sa_name: resolved.saName,
         step: 'details',
@@ -2303,6 +2319,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                     // WhatsApp reliably on return from checkout, without
                     // depending on URL params or the properties list being loaded.
                     try {
+                      console.log('Storing inspection booking - fee:', inspectionBooking?.fee, '| booking object:', JSON.stringify(inspectionBooking));
                       localStorage.setItem('gh_pending_inspection', JSON.stringify({
                         customer_name: name,
                         customer_email: email,
@@ -15605,6 +15622,7 @@ function AppContent() {
 
         var pendingInsp = null;
         try { pendingInsp = JSON.parse(localStorage.getItem('gh_pending_inspection') || 'null'); } catch(e) {}
+        console.log('Read from localStorage - pendingInsp:', JSON.stringify(pendingInsp));
 
         if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
           localStorage.removeItem('gh_pending_inspection');
