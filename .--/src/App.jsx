@@ -5921,24 +5921,33 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       );
                     })}
                   </div>
-                  {listingsSubTab === 'commission' ? (
+                  {listingsSubTab === 'commission' ? (function() {
+                    // Commission summary stats
+                    var totalListings = commissionListings.totals?.total_listings || 0;
+                    var totalCommissionDue = commissionListings.totals?.commission_due || 0;
+                    var totalCommissionPaid = commissionListings.totals?.commission_paid || 0;
+                    var unpaidCount = commissionListings.totals?.unpaid_count || 0;
+                    var paidCount = totalListings - unpaidCount;
+                    return (
                     <div>
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '10px', marginBottom: '16px' }}>
-                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
-                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Total Commission Listings</p>
-                          <p style={{ margin: 0, fontWeight: '900', color: '#0a2240', fontSize: '1.1rem' }}>{commissionListings.totals?.total_listings || 0}</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                        <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Total Listings</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#0a2240', fontSize: '1.2rem' }}>{totalListings}</p>
                         </div>
-                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
-                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Commission Due</p>
-                          <p style={{ margin: 0, fontWeight: '900', color: '#c2410c', fontSize: '1.1rem' }}>₦{(commissionListings.totals?.commission_due || 0).toLocaleString()}</p>
+                        <div style={{ backgroundColor: '#fff7ed', borderRadius: '12px', padding: '14px', border: '1px solid #fed7aa', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#c2410c', fontWeight: '600', textTransform: 'uppercase' }}>Commission Due</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#c2410c', fontSize: '1.1rem' }}>₦{totalCommissionDue.toLocaleString()}</p>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#c2410c' }}>{unpaidCount} unpaid</p>
                         </div>
-                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
-                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Commission Paid</p>
-                          <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1.1rem' }}>₦{(commissionListings.totals?.commission_paid || 0).toLocaleString()}</p>
+                        <div style={{ backgroundColor: '#f0fff4', borderRadius: '12px', padding: '14px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#166534', fontWeight: '600', textTransform: 'uppercase' }}>Commission Paid</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#166534', fontSize: '1.1rem' }}>₦{totalCommissionPaid.toLocaleString()}</p>
+                          <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#166534' }}>{paidCount} paid</p>
                         </div>
-                        <div style={{ ...cardStyle, padding: '12px 14px' }}>
-                          <p style={{ margin: '0 0 4px 0', color: '#94a3b8', fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase' }}>Unpaid Count</p>
-                          <p style={{ margin: 0, fontWeight: '900', color: '#ef4444', fontSize: '1.1rem' }}>{commissionListings.totals?.unpaid_count || 0}</p>
+                        <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '14px', border: '1px solid #bfdbfe', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#1e40af', fontWeight: '600', textTransform: 'uppercase' }}>Total Commission</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: '#1e40af', fontSize: '1.1rem' }}>₦{(totalCommissionDue + totalCommissionPaid).toLocaleString()}</p>
                         </div>
                       </div>
                       {commissionLoading ? (
@@ -6008,7 +6017,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         })
                       )}
                     </div>
-                  ) : (<>
+                    );
+                  })() : (<>
                   {listingMsg && (
                     <div style={{ backgroundColor: listingMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (listingMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '8px', padding: '10px 14px', marginBottom: '12px' }}>
                       <p style={{ margin: 0, color: listingMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.84rem' }}>{listingMsg}</p>
@@ -15713,12 +15723,27 @@ function AppContent() {
                   var isCompleted = insp.status === 'confirmed';
                   var isDone = insp.status === 'done';
 
-                  // Build WhatsApp message for follow-up
+                  // Build WhatsApp message for follow-up — full property details + caution notice
+                  var propPrice = parseFloat(insp.property_price || 0);
                   var waMsg = encodeURIComponent(
-                    'Hello, I am following up on my inspection booking for:\n\n' +
-                    '🏠 ' + (insp.property_address || 'Property') + '\n' +
-                    '📅 Booked on: ' + new Date(insp.created_at).toLocaleDateString('en-NG') + '\n\n' +
-                    'My name is ' + (insp.customer_name || '') + '. Could you please provide an update on my inspection schedule? Thank you.'
+                    '🏠 *INSPECTION REQUEST — GETHOME*\n\n' +
+                    '*Property Details:*\n' +
+                    '📍 ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+                    '🗺 Location: ' + (insp.property_location || insp.property_address || 'N/A') + '\n' +
+                    '💰 Price: ₦' + propPrice.toLocaleString() + '\n\n' +
+                    '*Inspection Fee Paid:* ₦' + parseFloat(insp.fee_payment_amount || 0).toLocaleString() + ' ✅\n\n' +
+                    '*My Details:*\n' +
+                    '👤 Name: ' + (insp.customer_name || '') + '\n' +
+                    '📧 Email: ' + (insp.customer_email || '') + '\n' +
+                    '📞 Phone: ' + (insp.customer_phone || '') + '\n\n' +
+                    '*⚠ IMPORTANT — GetHome Responsibilities:*\n' +
+                    '• GetHome verifies property listings but does not own them\n' +
+                    '• Our agent will conduct a physical inspection of the property\n' +
+                    '• Do NOT make any payments directly to landlords without GetHome verification\n' +
+                    '• Report any suspicious activity to GetHome immediately\n' +
+                    '• GetHome is not liable for transactions made outside our platform\n\n' +
+                    'Kindly schedule my inspection at your earliest convenience. Thank you! 🙏\n\n' +
+                    '_Sent via GetHome — trygethome.online_'
                   );
                   var saNumber = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
                   var waLink = 'https://wa.me/' + saNumber + '?text=' + waMsg;
@@ -15770,9 +15795,27 @@ function AppContent() {
                       {insp.fee_payment_amount > 0 ? (
                         isCompleted ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', marginBottom: '8px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
                               <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ Inspection Completed</p>
                             </div>
+                            {/* Enquiry only - not inspection request */}
+                            {(function() {
+                              var saNum = (insp.sa_whatsapp || '2349139649368').replace(/\D/g, '');
+                              var enquiryMsg = encodeURIComponent(
+                                'Hello, I have a general enquiry regarding my completed property inspection.\n\n' +
+                                '🏠 Property: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+                                '📅 Inspection completed on: ' + (insp.sa_confirmed_at ? new Date(insp.sa_confirmed_at).toLocaleDateString('en-NG') : 'Recently') + '\n\n' +
+                                'My name is ' + (insp.customer_name || '') + '.\n\n' +
+                                'I would like to make an enquiry about this property. Thank you.'
+                              );
+                              return (
+                                <a href={'https://wa.me/' + saNum + '?text=' + enquiryMsg}
+                                  target='_blank' rel='noopener noreferrer'
+                                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#64748b', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.80rem', fontWeight: '700', textDecoration: 'none' }}>
+                                  💬 Enquiry about this property
+                                </a>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <a href={waLink} target='_blank' rel='noopener noreferrer'
