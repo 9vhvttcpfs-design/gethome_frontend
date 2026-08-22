@@ -8306,6 +8306,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                                 body: JSON.stringify({
                                   staff_id: confirmPayModal.staff_id,
+                                  staff_type: confirmPayModal.staff_type, // 'GHA' or 'SA' — disambiguates staff_id, which can collide across the two tables
                                   month_year: staffPaymentsMonth,
                                   payment_notes: paymentNote.trim() || null,
                                 }),
