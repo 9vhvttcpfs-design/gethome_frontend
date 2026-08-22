@@ -15078,6 +15078,17 @@ function AppContent() {
       if (res.ok) setCustomerInspections(Array.isArray(data) ? data : []);
     } catch(e) { console.error('Customer inspections error:', e.message); }
     finally { setCustomerInspLoading(false); }
+
+    // Poll for new inspections for 30 seconds after payment
+    // in case webhook hasn't created the record yet
+    if (inspectionSuccessBanner) {
+      var pollCount = 0;
+      var pollInsp = setInterval(async function() {
+        pollCount++;
+        await fetchCustomerInspections();
+        if (pollCount >= 6) clearInterval(pollInsp); // stop after 1 minute
+      }, 10000); // every 10 seconds
+    }
   };
   // Sync tab with URL - read tab from URL on mount, default to 'rent'
   var validTabs = ['rent', 'sale', 'shortlet', 'services', 'upload', 'agent', 'admin'];
@@ -15131,7 +15142,7 @@ function AppContent() {
   const [showRatingModal, setShowRatingModal]               = useState(false);
   const [ratingGhaId, setRatingGhaId]                       = useState(null);
   const [ratingInspectionId, setRatingInspectionId]         = useState(null);
-  const [inspectionPaidResult, setInspectionPaidResult]     = useState(null);
+  const [inspectionSuccessBanner, setInspectionSuccessBanner] = useState(null);
   useEffect(function() {
     var handler = function(e) {
       e.preventDefault();
@@ -15593,14 +15604,8 @@ function AppContent() {
         try { pendingInsp = JSON.parse(localStorage.getItem('gh_pending_inspection') || 'null'); } catch(e) {}
 
         if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
-          setInspectionPaidResult({ pendingInsp: pendingInsp });
           localStorage.removeItem('gh_pending_inspection');
-          // Open customer account at inspections tab
-          setShowNavAuth(false); // close any auth modal
-          setCustomerAccountTab('inspections');
-          setShowAccountModal(true);
-          // Fetch fresh inspections
-          fetchCustomerInspections();
+          setInspectionSuccessBanner(pendingInsp);
         } else {
           alert('✓ Inspection fee payment confirmed! Check your account under My Inspections to track your booking.');
         }
@@ -15647,7 +15652,48 @@ function AppContent() {
   if (isLoading) return <LoadingScreen />;
   if (isError) return <ErrorScreen onRetry={fetchData} />;
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column', paddingTop: inspectionSuccessBanner ? '60px' : '0' }}>
+      {inspectionSuccessBanner && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 9999999,
+          backgroundColor: '#27ae60',
+          color: '#fff',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+        }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 2px 0', fontWeight: '800', fontSize: '0.88rem' }}>
+              ✅ Inspection fee payment confirmed!
+            </p>
+            <p style={{ margin: 0, fontSize: '0.76rem', opacity: 0.9 }}>
+              Go to My Account → Inspections to message the SA and schedule your inspection.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+            <button onClick={function() {
+              setInspectionSuccessBanner(null);
+              setShowNavAuth(false);
+              setCustomerAccountTab('inspections');
+              setShowAccountModal(true);
+              setTimeout(function() { fetchCustomerInspections(); }, 300);
+            }} style={{ backgroundColor: 'rgba(255,255,255,0.25)', border: '1.5px solid rgba(255,255,255,0.5)', color: '#fff', borderRadius: '8px', padding: '6px 14px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
+              View Inspections
+            </button>
+            <button onClick={function() { setInspectionSuccessBanner(null); }}
+              style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', opacity: 0.8, lineHeight: 1 }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -15696,32 +15742,6 @@ function AppContent() {
           onClose={function() { setShowRatingModal(false); }}
           onSubmitted={function() { console.log('Rating submitted successfully'); }}
         />
-      )}
-      {inspectionPaidResult && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.85)', zIndex: 999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '380px', width: '100%', textAlign: 'center', boxShadow: '0 24px 64px rgba(10,34,64,0.3)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✅</div>
-            <h3 style={{ color: '#0a2240', fontWeight: '900', margin: '0 0 8px 0', fontSize: '1.1rem' }}>Payment Confirmed!</h3>
-            <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 6px 0' }}>
-              Your inspection fee has been received successfully.
-            </p>
-            <p style={{ color: '#374151', fontSize: '0.82rem', margin: '0 0 20px 0', lineHeight: 1.6 }}>
-              Go to My Inspections to message our team and schedule your inspection appointment.
-            </p>
-            <button onClick={function() {
-              setInspectionPaidResult(null);
-              setShowAccountModal(true);
-              setCustomerAccountTab('inspections');
-              fetchCustomerInspections();
-            }} style={{ width: '100%', padding: '13px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer', marginBottom: '10px' }}>
-              View My Inspections
-            </button>
-            <button onClick={function() { setInspectionPaidResult(null); }}
-              style={{ backgroundColor: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>
-              Close
-            </button>
-          </div>
-        </div>
       )}
       {showAccountModal && user && (
         <div onClick={function(){ setShowAccountModal(false); }}
