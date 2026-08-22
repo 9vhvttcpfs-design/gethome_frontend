@@ -32,6 +32,26 @@ const AGENT_TIERS = {
   premium: { listingLimit: 15,  label: 'Premium Agent', price: 8500  },
   agency:  { listingLimit: 100, label: 'Agency',        price: 35000 },
 };
+// Single source of truth for turning any stored phone number into a
+// wa.me-ready WhatsApp number. Nigerian numbers are frequently stored in
+// local format (e.g. 0901234567) which is missing the 234 country code —
+// this normalizes that before it's used to build a wa.me link.
+var formatWhatsAppNumber = function(number) {
+  if (!number) return '2349139649368'; // GetHome default
+  // Strip all non-digits
+  var digits = String(number).replace(/\D/g, '');
+  // If starts with 0 replace with 234 (Nigerian local format)
+  if (digits.startsWith('0')) {
+    digits = '234' + digits.slice(1);
+  }
+  // If starts with +234 or 234 already correct
+  if (digits.startsWith('234')) return digits;
+  // If 10 digits assume Nigerian number missing country code
+  if (digits.length === 10) return '234' + digits;
+  // If 11 digits starting with 0 already handled above
+  // Return as is for international numbers
+  return digits;
+};
 // Single source of truth for "what plan is this agent on".
 // Priority: agentProfile (fresh DB read) → localStorage cache → user object
 // (often the Supabase Auth user, whose metadata can be stale or null).
@@ -1784,9 +1804,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     } catch(e) {
       console.log('Could not fetch SA details, using default number');
     }
-    targetNumber = String(targetNumber).replace(/[^0-9]/g, '');
-    if (targetNumber.startsWith('0')) targetNumber = '234' + targetNumber.substring(1);
-    return { targetNumber: targetNumber, saName: saName };
+    return { targetNumber: formatWhatsAppNumber(targetNumber), saName: saName };
   };
 
   const openInspectionWhatsApp = async function(prop, customerName, resolvedSa) {
@@ -2315,27 +2333,30 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                   if (data.requires_payment && data.checkout_url) {
                     var checkoutUrl = data.checkout_url;
 
-                    // Store inspection details in localStorage so we can open
-                    // WhatsApp reliably on return from checkout, without
-                    // depending on URL params or the properties list being loaded.
-                    try {
-                      console.log('Storing inspection booking - fee:', inspectionBooking?.fee, '| booking object:', JSON.stringify(inspectionBooking));
-                      localStorage.setItem('gh_pending_inspection', JSON.stringify({
-                        customer_name: name,
-                        customer_email: email,
-                        customer_phone: phone,
-                        property_id: inspectionBooking.property?.id,
-                        property_title: inspectionBooking.property?.title,
-                        property_location: inspectionBooking.property?.location,
-                        property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
-                        sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
-                        sa_name: inspectionBooking.sa_name || '',
-                        fee: inspectionBooking.fee,
-                        fee_payment_amount: inspectionBooking.fee,
-                        inspection_fee: inspectionBooking.fee,
-                        timestamp: Date.now(),
-                      }));
-                    } catch(e) {}
+                    // Store inspection details so we can open WhatsApp reliably
+                    // on return from checkout, without depending on URL params
+                    // or the properties list being loaded. Written to both
+                    // localStorage and sessionStorage as a backup since some
+                    // browsers clear localStorage across a cross-origin
+                    // (Flutterwave) redirect.
+                    var inspData = JSON.stringify({
+                      customer_name: name,
+                      customer_email: email,
+                      customer_phone: phone,
+                      property_id: inspectionBooking.property?.id,
+                      property_title: inspectionBooking.property?.title,
+                      property_location: inspectionBooking.property?.location,
+                      property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
+                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
+                      sa_name: inspectionBooking.sa_name || '',
+                      fee: inspectionBooking.fee,
+                      fee_payment_amount: inspectionBooking.fee,
+                      inspection_fee: inspectionBooking.fee,
+                      timestamp: Date.now(),
+                    });
+                    try { localStorage.setItem('gh_pending_inspection', inspData); } catch(e) {}
+                    try { sessionStorage.setItem('gh_pending_inspection', inspData); } catch(e) {}
+                    console.log('Stored inspection data - fee:', inspectionBooking.fee);
 
                     closeInspectionModal();
                     window.location.href = checkoutUrl;
@@ -5377,8 +5398,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     var maskedNin = d.nin
       ? (d.nin.length > 4 ? 'XXXXXXX' + d.nin.slice(-4) : d.nin)
       : null;
-    var waPhone = (d.phone || '').replace(/[^0-9]/g, '');
-    if (waPhone.startsWith('0')) waPhone = '234' + waPhone.substring(1);
+    var waPhone = formatWhatsAppNumber(d.phone);
     var hasPhone = waPhone.length > 0;
     var hasEmail = !!(d.email || '').trim();
     var regDate = d.created_at
@@ -6356,7 +6376,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#94a3b8';
                         var inspDateStr = insp.inspection_date || insp.requested_date;
                         var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                        var rawPhone = (insp.customer_phone || '').replace(/\D/g, '');
+                        var rawPhone = formatWhatsAppNumber(insp.customer_phone);
                         var waMsg = encodeURIComponent('Hello ' + (insp.customer_name || 'there') + ', this is GetHome admin following up on your property inspection for ' + (insp.property_title || insp.property_address || 'your property') + '. Kindly let us know if you need any assistance.');
                         var isReassigning = reassigningInspId === insp.id;
                         var isConfirming  = confirmingInspId === insp.id;
@@ -10682,7 +10702,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{ghaProfile.sa_name || staffUser.sa_name || 'Not assigned'}</p>
                     {ghaProfile.sa_whatsapp && (
                       <a
-                        href={'https://wa.me/' + ghaProfile.sa_whatsapp.replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent('Hello, I am GHA ' + (ghaProfile.gha_code || '') + ', I need to discuss something with you.')}
+                        href={'https://wa.me/' + formatWhatsAppNumber(ghaProfile.sa_whatsapp) + '?text=' + encodeURIComponent('Hello, I am GHA ' + (ghaProfile.gha_code || '') + ', I need to discuss something with you.')}
                         target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-block', marginTop: '10px', padding: '7px 14px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontWeight: '700', fontSize: '0.76rem', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>
                         Contact SA on WhatsApp
@@ -10970,7 +10990,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: isMobile ? '100%' : undefined }}>
-                          <button onClick={function(){ window.open('https://wa.me/' + (a.phone || '').replace(/\D/g,'') + '?text=' + encodeURIComponent('Hello ' + (a.full_name || 'Agent') + ', this is your GetHome GHA. Please check your registration details.'), '_blank'); }}
+                          <button onClick={function(){ window.open('https://wa.me/' + formatWhatsAppNumber(a.phone) + '?text=' + encodeURIComponent('Hello ' + (a.full_name || 'Agent') + ', this is your GetHome GHA. Please check your registration details.'), '_blank'); }}
                             style={{ padding: '6px 12px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
                             WhatsApp
                           </button>
@@ -11197,7 +11217,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       var inspDateStr = insp.inspection_date || insp.requested_date;
                       var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
                       var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
-                      var rawPhone = (insp.customer_phone || insp.phone || '').replace(/\D/g, '');
+                      var rawPhone = formatWhatsAppNumber(insp.customer_phone || insp.phone);
                       var ghaName = staffUser.full_name || staffUser.name || 'your GetHome agent';
                       var propAddr = insp.property_address || insp.property_title || 'the property';
                       var waMsg = encodeURIComponent('Hello, I am ' + ghaName + ' from GetHome. I am your assigned inspection agent for the property at ' + propAddr + '. Your inspection is scheduled for ' + waDateStr + '. Please confirm this is still convenient for you.');
@@ -11239,7 +11259,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#cbd5e1';
                   var isMarkingThisOne = markingDone === insp.id;
                   var currentNote = doneNotes[insp.id] || '';
-                  var rawPhone = (insp.customer_phone || insp.phone || '').replace(/\D/g, '');
+                  var rawPhone = formatWhatsAppNumber(insp.customer_phone || insp.phone);
                   var inspDateStr = insp.inspection_date || insp.requested_date;
                   var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
                   var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
@@ -13047,7 +13067,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </p>
                           {a.phone && (
                             <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
-                              <a href={'https://wa.me/' + a.phone.replace(/\D/g, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
+                              <a href={'https://wa.me/' + formatWhatsAppNumber(a.phone)} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
                             </p>
                           )}
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' }}>
@@ -13257,7 +13277,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </p>
                           {a.phone && (
                             <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
-                              <a href={'https://wa.me/' + a.phone.replace(/\D/g, '')} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
+                              <a href={'https://wa.me/' + formatWhatsAppNumber(a.phone)} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', fontWeight: '600' }}>{a.phone}</a>
                             </p>
                           )}
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' }}>
@@ -13346,7 +13366,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
                             {(a.gha_phone || a.gha_whatsapp) && (
                               <a
-                                href={'https://wa.me/' + (a.gha_whatsapp || a.gha_phone || '').replace(/\D/g, '') + '?text=' + encodeURIComponent('Hi, I wanted to follow up on agent ' + (a.full_name || '') + ' who was sent for inspection.')}
+                                href={'https://wa.me/' + formatWhatsAppNumber(a.gha_whatsapp || a.gha_phone) + '?text=' + encodeURIComponent('Hi, I wanted to follow up on agent ' + (a.full_name || '') + ' who was sent for inspection.')}
                                 target="_blank" rel="noopener noreferrer"
                                 style={{ display: 'block', textAlign: 'center', padding: '9px', backgroundColor: '#dcfce7', color: '#16a34a', borderRadius: '8px', fontWeight: '700', fontSize: '0.78rem', textDecoration: 'none', fontFamily: "'Inter', sans-serif", marginTop: '8px' }}>
                                 WhatsApp GHA about this agent
@@ -15617,18 +15637,62 @@ function AppContent() {
   useEffect(function() {
     try {
       var urlParams = new URLSearchParams(window.location.search);
+      console.log('Inspection payment check - URL params:', window.location.search);
+
       if (urlParams.get('inspection_payment') === 'success') {
-        window.history.replaceState(null, '', window.location.pathname);
+        // Read storage BEFORE clearing URL or doing anything else
+        var raw = localStorage.getItem('gh_pending_inspection') ||
+                  sessionStorage.getItem('gh_pending_inspection');
+        console.log('Raw storage value:', raw, '| from localStorage:', !!localStorage.getItem('gh_pending_inspection'), '| from sessionStorage:', !!sessionStorage.getItem('gh_pending_inspection'));
 
         var pendingInsp = null;
-        try { pendingInsp = JSON.parse(localStorage.getItem('gh_pending_inspection') || 'null'); } catch(e) {}
-        console.log('Read from localStorage - pendingInsp:', JSON.stringify(pendingInsp));
+        try { pendingInsp = JSON.parse(raw || 'null'); } catch(e) {
+          console.error('Parse error:', e.message);
+        }
 
-        if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
-          localStorage.removeItem('gh_pending_inspection');
-          setInspectionSuccessPage(pendingInsp);
+        // NOW clear the URL
+        window.history.replaceState(null, '', window.location.pathname);
+
+        console.log('pendingInsp:', JSON.stringify(pendingInsp));
+
+        var basicSuccessPage = {
+          customer_name: '',
+          customer_email: '',
+          customer_phone: '',
+          property_title: 'Your selected property',
+          property_location: '',
+          property_price: 0,
+          sa_whatsapp: '2349139649368',
+          sa_name: 'GetHome Team',
+          fee: 0,
+          fee_payment_amount: 0,
+          inspection_fee: 0,
+          timestamp: Date.now(),
+        };
+
+        if (pendingInsp) {
+          // Soft expiry: long enough to survive slow payments (bank
+          // processing, customer stepping away mid-payment, mobile network
+          // interruptions) but short enough to reject truly stale data.
+          var age = Date.now() - (pendingInsp.timestamp || 0);
+          var fourHours = 4 * 60 * 60 * 1000;
+
+          if (age < fourHours) {
+            setInspectionSuccessPage(pendingInsp);
+            localStorage.removeItem('gh_pending_inspection');
+            sessionStorage.removeItem('gh_pending_inspection');
+            console.log('SUCCESS PAGE SET - fee:', pendingInsp.fee, '| age:', Math.round(age / 60000) + 'mins');
+          } else {
+            // Entry is too old - clear it and show basic success
+            console.log('Stale inspection data ignored - age:', Math.round(age / 60000) + 'mins');
+            localStorage.removeItem('gh_pending_inspection');
+            sessionStorage.removeItem('gh_pending_inspection');
+            setInspectionSuccessPage(basicSuccessPage);
+          }
         } else {
-          alert('✓ Inspection fee payment confirmed! Check your account under My Inspections to track your booking.');
+          // Storage was cleared - show basic success with default SA number
+          console.log('No pending inspection in storage - showing basic success');
+          setInspectionSuccessPage(basicSuccessPage);
         }
       }
     } catch(e) {
@@ -15672,7 +15736,7 @@ function AppContent() {
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (inspectionSuccessPage) {
     var insp = inspectionSuccessPage;
-    var saNum = (insp.sa_whatsapp || '2349139649368').replace(/\D/g, '');
+    var saNum = formatWhatsAppNumber(insp.sa_whatsapp);
     var propPrice = parseFloat(insp.property_price || 0);
     var bookingMsg = encodeURIComponent(
       'Hello' + (insp.sa_name ? ' ' + insp.sa_name : '') + ',\n\n' +
@@ -15928,7 +15992,7 @@ function AppContent() {
 
                       {/* Action button — enquiry message for completed inspections, full booking message otherwise */}
                       {isCompleted && (function() {
-                        var saNum = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
+                        var saNum = formatWhatsAppNumber(insp.sa_whatsapp || globalSettings.payment_whatsapp);
                         var enquiryMsg = encodeURIComponent(
                           'Hello, I have an enquiry regarding my completed property inspection on GetHome.\n\n' +
                           '🏠 Property: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
@@ -15952,7 +16016,7 @@ function AppContent() {
                         );
                       })()}
                       {!isCompleted && (function() {
-                        var saNum = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
+                        var saNum = formatWhatsAppNumber(insp.sa_whatsapp || globalSettings.payment_whatsapp);
                         var propPrice = parseFloat(insp.property_price || 0);
 
                         var bookingMsg = encodeURIComponent(
