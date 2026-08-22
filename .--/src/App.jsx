@@ -2312,7 +2312,10 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                         property_location: inspectionBooking.property?.location,
                         property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
                         sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
+                        sa_name: inspectionBooking.sa_name || '',
                         fee: inspectionBooking.fee,
+                        fee_payment_amount: inspectionBooking.fee,
+                        inspection_fee: inspectionBooking.fee,
                         timestamp: Date.now(),
                       }));
                     } catch(e) {}
@@ -15081,7 +15084,7 @@ function AppContent() {
 
     // Poll for new inspections for 30 seconds after payment
     // in case webhook hasn't created the record yet
-    if (inspectionSuccessBanner) {
+    if (inspectionSuccessPage) {
       var pollCount = 0;
       var pollInsp = setInterval(async function() {
         pollCount++;
@@ -15142,7 +15145,7 @@ function AppContent() {
   const [showRatingModal, setShowRatingModal]               = useState(false);
   const [ratingGhaId, setRatingGhaId]                       = useState(null);
   const [ratingInspectionId, setRatingInspectionId]         = useState(null);
-  const [inspectionSuccessBanner, setInspectionSuccessBanner] = useState(null);
+  const [inspectionSuccessPage, setInspectionSuccessPage] = useState(null);
   useEffect(function() {
     var handler = function(e) {
       e.preventDefault();
@@ -15605,7 +15608,7 @@ function AppContent() {
 
         if (pendingInsp && Date.now() - pendingInsp.timestamp < 30 * 60 * 1000) {
           localStorage.removeItem('gh_pending_inspection');
-          setInspectionSuccessBanner(pendingInsp);
+          setInspectionSuccessPage(pendingInsp);
         } else {
           alert('✓ Inspection fee payment confirmed! Check your account under My Inspections to track your booking.');
         }
@@ -15649,51 +15652,110 @@ function AppContent() {
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
-  if (isLoading) return <LoadingScreen />;
-  if (isError) return <ErrorScreen onRetry={fetchData} />;
-  return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column', paddingTop: inspectionSuccessBanner ? '60px' : '0' }}>
-      {inspectionSuccessBanner && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 9999999,
-          backgroundColor: '#27ae60',
-          color: '#fff',
-          padding: '12px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
-        }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: '0 0 2px 0', fontWeight: '800', fontSize: '0.88rem' }}>
-              ✅ Inspection fee payment confirmed!
+  if (inspectionSuccessPage) {
+    var insp = inspectionSuccessPage;
+    var saNum = (insp.sa_whatsapp || '2349139649368').replace(/\D/g, '');
+    var propPrice = parseFloat(insp.property_price || 0);
+    var bookingMsg = encodeURIComponent(
+      'Hello' + (insp.sa_name ? ' ' + insp.sa_name : '') + ',\n\n' +
+      'I would like to book an inspection for a property I found on GetHome. I have completed my payment.\n\n' +
+      '🏠 *PROPERTY DETAILS:*\n' +
+      '• Title: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+      '• Location: ' + (insp.property_location || 'N/A') + '\n' +
+      '• Price: ₦' + propPrice.toLocaleString() + '\n\n' +
+      '💰 *INSPECTION FEE PAID:* ₦' + parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0).toLocaleString() + ' ✅\n\n' +
+      '👤 *MY DETAILS:*\n' +
+      '• Name: ' + (insp.customer_name || 'N/A') + '\n' +
+      '• Email: ' + (insp.customer_email || 'N/A') + '\n' +
+      '• Phone: ' + (insp.customer_phone || 'N/A') + '\n\n' +
+      '⚠️ *IMPORTANT NOTICE — FOR YOUR PROTECTION:*\n' +
+      '• GetHome verifies property listings but does not own them\n' +
+      '• Do NOT pay any money to landlords or agents outside the GetHome platform\n' +
+      '• GetHome is NOT liable for transactions made outside our platform\n' +
+      '• Our verified GHA agent will conduct a physical inspection\n' +
+      '• Report any suspicious requests to GetHome immediately\n' +
+      '• Always get a receipt for any payment made through GetHome\n\n' +
+      'Kindly schedule my inspection at your earliest convenience. Thank you! 🙏\n\n' +
+      '_Sent via GetHome — trygethome.online_'
+    );
+    var waLink = 'https://wa.me/' + saNum + '?text=' + bookingMsg;
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
+        <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+          <p style={{ margin: '0', fontWeight: '900', color: '#0a2240', fontSize: '1.4rem' }}>GetHome</p>
+          <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>Transparent. Verified. Trusted.</p>
+        </div>
+        <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px 24px', maxWidth: '420px', width: '100%', boxShadow: '0 4px 24px rgba(10,34,64,0.10)', textAlign: 'center' }}>
+          <div style={{ width: '72px', height: '72px', borderRadius: '50%', backgroundColor: '#f0fff4', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', border: '3px solid #27ae60' }}>
+            <span style={{ fontSize: '2rem' }}>✅</span>
+          </div>
+          <h2 style={{ color: '#0a2240', fontWeight: '900', margin: '0 0 8px 0', fontSize: '1.2rem' }}>
+            Payment Confirmed!
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 20px 0', lineHeight: 1.6 }}>
+            Your inspection fee of <strong>₦{parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0).toLocaleString()}</strong> has been received.
+          </p>
+          <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '12px 14px', marginBottom: '20px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
+            <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>
+              {insp.property_title || insp.property_address || 'Property'}
             </p>
-            <p style={{ margin: 0, fontSize: '0.76rem', opacity: 0.9 }}>
-              Go to My Account → Inspections to message the SA and schedule your inspection.
+            <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem' }}>
+              📍 {insp.property_location || 'N/A'}
+            </p>
+            <p style={{ margin: 0, color: '#27ae60', fontSize: '0.78rem', fontWeight: '700' }}>
+              Fee paid: ₦{parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0).toLocaleString()} ✓
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          <a href={waLink}
+            target='_blank'
+            rel='noopener noreferrer'
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+              backgroundColor: '#25D366', color: '#fff',
+              borderRadius: '14px', padding: '16px 20px',
+              fontSize: '1rem', fontWeight: '900',
+              textDecoration: 'none', marginBottom: '12px',
+              boxShadow: '0 4px 12px rgba(37,211,102,0.3)',
+            }}>
+            📱 Book Inspection via WhatsApp
+          </a>
+          <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: '0 0 16px 0' }}>
+            Tap above to send your inspection request to our team
+          </p>
+          <div style={{ display: 'flex', gap: '8px' }}>
             <button onClick={function() {
-              setInspectionSuccessBanner(null);
+              setInspectionSuccessPage(null);
               setShowNavAuth(false);
               setCustomerAccountTab('inspections');
               setShowAccountModal(true);
               setTimeout(function() { fetchCustomerInspections(); }, 300);
-            }} style={{ backgroundColor: 'rgba(255,255,255,0.25)', border: '1.5px solid rgba(255,255,255,0.5)', color: '#fff', borderRadius: '8px', padding: '6px 14px', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
-              View Inspections
+            }} style={{ flex: 1, padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+              My Inspections
             </button>
-            <button onClick={function() { setInspectionSuccessBanner(null); }}
-              style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', opacity: 0.8, lineHeight: 1 }}>
-              ✕
+            <button onClick={function() { setInspectionSuccessPage(null); }}
+              style={{ flex: 1, padding: '11px', backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '10px', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer' }}>
+              Back to App
             </button>
           </div>
         </div>
-      )}
+        <div style={{ maxWidth: '420px', width: '100%', marginTop: '16px', padding: '12px 16px', backgroundColor: '#fff7ed', borderRadius: '12px', border: '1px solid #fed7aa' }}>
+          <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.78rem' }}>
+            ⚠ FOR YOUR PROTECTION
+          </p>
+          <ul style={{ margin: 0, paddingLeft: '16px', color: '#78350f', fontSize: '0.74rem', lineHeight: 1.8 }}>
+            <li>Do NOT pay money to landlords outside GetHome</li>
+            <li>GetHome is NOT liable for outside transactions</li>
+            <li>Our GHA will conduct the physical inspection</li>
+            <li>Report suspicious activity to GetHome immediately</li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+  if (isLoading) return <LoadingScreen />;
+  if (isError) return <ErrorScreen onRetry={fetchData} />;
+  return (
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
