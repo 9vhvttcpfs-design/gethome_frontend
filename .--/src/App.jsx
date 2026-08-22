@@ -15783,16 +15783,6 @@ function AppContent() {
                   var isCompleted = insp.status === 'confirmed';
                   var isDone = insp.status === 'done';
 
-                  // Build WhatsApp message for follow-up
-                  var waMsg = encodeURIComponent(
-                    'Hello, I am following up on my inspection booking for:\n\n' +
-                    '🏠 ' + (insp.property_address || 'Property') + '\n' +
-                    '📅 Booked on: ' + new Date(insp.created_at).toLocaleDateString('en-NG') + '\n\n' +
-                    'My name is ' + (insp.customer_name || '') + '. Could you please provide an update on my inspection schedule? Thank you.'
-                  );
-                  var saNumber = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
-                  var waLink = 'https://wa.me/' + saNumber + '?text=' + waMsg;
-
                   return (
                     <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1px solid ' + (isCompleted ? '#bbf7d0' : '#e2e8f0'), boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
                       {/* Property info */}
@@ -15836,26 +15826,67 @@ function AppContent() {
                         </div>
                       )}
 
-                      {/* Action button — always show message button if inspection has fee paid */}
-                      {insp.fee_payment_amount > 0 ? (
-                        isCompleted ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', textAlign: 'center', border: '1px solid #bbf7d0' }}>
+                      {/* Action button — enquiry message for completed inspections, full booking message otherwise */}
+                      {isCompleted && (function() {
+                        var saNum = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
+                        var enquiryMsg = encodeURIComponent(
+                          'Hello, I have an enquiry regarding my completed property inspection on GetHome.\n\n' +
+                          '🏠 Property: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+                          '📍 Location: ' + (insp.property_location || 'N/A') + '\n' +
+                          '📅 Inspection completed: ' + (insp.sa_confirmed_at ? new Date(insp.sa_confirmed_at).toLocaleDateString('en-NG', { dateStyle: 'long' }) : 'Recently') + '\n\n' +
+                          'My name is ' + (insp.customer_name || '') + '.\n\n' +
+                          'This is an ENQUIRY (not a new inspection request). I would like to ask about this property.\n\n' +
+                          'Thank you.'
+                        );
+                        return (
+                          <div>
+                            <div style={{ backgroundColor: '#f0fff4', borderRadius: '10px', padding: '10px 14px', marginBottom: '8px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
                               <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ Inspection Completed</p>
                             </div>
+                            <a href={'https://wa.me/' + saNum + '?text=' + enquiryMsg}
+                              target='_blank' rel='noopener noreferrer'
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#64748b', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.80rem', fontWeight: '700', textDecoration: 'none' }}>
+                              💬 Enquire about this property
+                            </a>
                           </div>
-                        ) : (
-                          <a href={waLink} target='_blank' rel='noopener noreferrer'
+                        );
+                      })()}
+                      {!isCompleted && (function() {
+                        var saNum = (insp.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368').replace(/\D/g, '');
+                        var propPrice = parseFloat(insp.property_price || 0);
+
+                        var bookingMsg = encodeURIComponent(
+                          'Hello' + (insp.sa_name ? ' ' + insp.sa_name : '') + ',\n\n' +
+                          'I would like to book an inspection for a property I found on GetHome. I have completed my payment.\n\n' +
+                          '🏠 *PROPERTY DETAILS:*\n' +
+                          '• Title: ' + (insp.property_title || insp.property_address || 'Property') + '\n' +
+                          '• Location: ' + (insp.property_location || 'N/A') + '\n' +
+                          '• Price: ₦' + propPrice.toLocaleString() + '\n' +
+                          (insp.property_image ? '• Photos: Available on GetHome\n' : '') +
+                          '\n💰 *INSPECTION FEE PAID:* ₦' + parseFloat(insp.fee_payment_amount || 0).toLocaleString() + ' ✅\n\n' +
+                          '👤 *MY DETAILS:*\n' +
+                          '• Name: ' + (insp.customer_name || 'N/A') + '\n' +
+                          '• Email: ' + (insp.customer_email || 'N/A') + '\n' +
+                          '• Phone: ' + (insp.customer_phone || 'N/A') + '\n\n' +
+                          '⚠️ *IMPORTANT NOTICE — FOR YOUR PROTECTION:*\n' +
+                          '• GetHome verifies property listings but does not own them\n' +
+                          '• Do NOT pay any money to landlords or agents outside the GetHome platform\n' +
+                          '• GetHome is NOT liable for transactions made outside our platform\n' +
+                          '• Our verified GHA agent will conduct a physical inspection\n' +
+                          '• Report any suspicious requests to GetHome immediately\n' +
+                          '• Always get a receipt for any payment made through GetHome\n\n' +
+                          'Kindly schedule my inspection at your earliest convenience. Thank you! 🙏\n\n' +
+                          '_Sent via GetHome — trygethome.online_'
+                        );
+
+                        return (
+                          <a href={'https://wa.me/' + saNum + '?text=' + bookingMsg}
+                            target='_blank' rel='noopener noreferrer'
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
                             📱 Message SA to Schedule Inspection
                           </a>
-                        )
-                      ) : (
-                        <a href={waLink} target='_blank' rel='noopener noreferrer'
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '10px', fontSize: '0.82rem', fontWeight: '700', textDecoration: 'none' }}>
-                          📱 Message SA to Book Inspection
-                        </a>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })}
