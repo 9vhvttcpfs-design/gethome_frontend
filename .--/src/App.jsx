@@ -13944,6 +13944,57 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                         )}
 
+                        {insp.status === 'confirmed' && (
+                          <div style={{ marginTop: '10px', backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px 14px', border: '1px solid #fde68a' }}>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '800', color: '#92400e' }}>
+                              ⭐ Share Rating Link with Customer
+                            </p>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '0.74rem', color: '#78350f' }}>
+                              Ask {insp.customer_name || 'the customer'} to rate this inspection
+                            </p>
+                            {(function() {
+                              var ratingLink = 'https://trygethome.online/?rate=true&gha=' + insp.gha_id + '&insp=' + insp.id;
+                              var customerPhone = formatWhatsAppNumber(insp.customer_phone || '');
+                              var waRatingMsg = encodeURIComponent(
+                                'Hello ' + (insp.customer_name || '') + ',\n\n' +
+                                'Thank you for using GetHome! Your property inspection has been completed ✅\n\n' +
+                                'Please take a moment to rate the service you received:\n\n' +
+                                '⭐ ' + ratingLink + '\n\n' +
+                                'Your feedback helps us serve you better.\n\nGetHome Team'
+                              );
+                              var waLink = customerPhone ? 'https://wa.me/' + customerPhone + '?text=' + waRatingMsg : null;
+
+                              return (
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button onClick={function() {
+                                    try {
+                                      navigator.clipboard.writeText(ratingLink);
+                                      alert('Rating link copied!');
+                                    } catch(e) {
+                                      // Fallback for mobile
+                                      var el = document.createElement('textarea');
+                                      el.value = ratingLink;
+                                      document.body.appendChild(el);
+                                      el.select();
+                                      document.execCommand('copy');
+                                      document.body.removeChild(el);
+                                      alert('Rating link copied!');
+                                    }
+                                  }} style={{ flex: 1, padding: '7px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    📋 Copy Link
+                                  </button>
+                                  {waLink && (
+                                    <a href={waLink} target='_blank' rel='noopener noreferrer'
+                                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', padding: '7px', fontSize: '0.74rem', fontWeight: '700', textDecoration: 'none' }}>
+                                      📱 Send to Customer
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '6px' }}>
                           {inspectionSubTab === 'done' && insp.status !== 'confirmed' && (
                             <button disabled={isConfirming} onClick={async function() {
