@@ -11196,9 +11196,25 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               </span>
             </div>
 
-            {inspLoading ? (
+            {/* GHA sees: pending, assigned, gha_done - NOT confirmed (cleared once SA
+                confirms), newest first within each status group. */}
+            {(function() {
+              var activeInspections = inspections.filter(function(i) {
+                if (i.status === 'confirmed') return false;
+                if (i.status === 'gha_done' && i.cleared_by_gha === true) return false;
+                return true;
+              }).sort(function(a, b) {
+                // Pending/assigned first, then done
+                var order = { pending: 0, assigned: 1, gha_done: 2, cancelled: 3 };
+                var statusA = order[a.status || 'pending'] ?? 0;
+                var statusB = order[b.status || 'pending'] ?? 0;
+                if (statusA !== statusB) return statusA - statusB;
+                // Within same status newest first
+                return new Date(b.created_at) - new Date(a.created_at);
+              });
+              return inspLoading ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
-            ) : inspections.filter(function(i){ return i.status !== 'confirmed'; }).length === 0 ? (
+            ) : activeInspections.length === 0 ? (
               <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
                 <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
                 <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No inspections assigned to you yet</p>
@@ -11250,10 +11266,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 )}
 
                 {/* ── ALL INSPECTIONS ── */}
-                {/* GHA sees: pending, assigned, done - NOT confirmed (cleared once SA confirms) */}
-                {inspections.filter(function(i){ return i.status !== 'confirmed'; }).slice().sort(function(a, b){
-                  return new Date(a.inspection_date || a.requested_date || 0) - new Date(b.inspection_date || b.requested_date || 0);
-                }).map(function(insp) {
+                {activeInspections.map(function(insp) {
                   var status = insp.status || 'pending';
                   var isNew = newInspIds.has(insp.id);
                   var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#cbd5e1';
@@ -11416,7 +11429,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   );
                 })}
               </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -12140,7 +12154,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var inspList = Array.isArray(data) ? data :
         Array.isArray(data?.inspections) ? data.inspections : [];
       setInspections(inspList);
-      console.log('SA inspection notes check:', inspList.filter(function(i) { return i.status === 'gha_done'; }).slice(0, 3).map(function(i) { return { id: i.id.slice(0, 8), status: i.status, notes: i.notes, gha_notes: i.gha_notes, gha_done_at: i.gha_done_at }; }));
+      console.log('SA inspection notes check:', inspList.filter(function(i) { return i.status === 'gha_done'; }).slice(0, 3).map(function(i) { return { id: i.id.slice(0, 8), status: i.status, notes: i.notes, gha_done_at: i.gha_done_at }; }));
 
       // Also update counts if available
       if (data?.counts) setInspectionCounts(data.counts);
@@ -12586,6 +12600,45 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             ✕
                           </button>
                         </div>
+
+                        {notif.type === 'rating_link_ready' && (function() {
+                          try {
+                            var meta = JSON.parse(notif.meta || '{}');
+                            if (!meta.rating_link) return null;
+
+                            var waMsg = encodeURIComponent(
+                              'Hello ' + (meta.customer_name || 'Customer') + ',\n\n' +
+                              'Thank you for using GetHome! Your property inspection has been completed.\n\n' +
+                              'Please take a moment to rate our Ground Handler Agent (GHA) who conducted your inspection:\n\n' +
+                              '⭐ Rate your inspection: ' + meta.rating_link + '\n\n' +
+                              'Your feedback helps us maintain quality service.\n\n' +
+                              'Thank you!\nGetHome Team'
+                            );
+                            var custPhone = formatWhatsAppNumber(meta.customer_phone || '');
+                            var waLink = custPhone ? 'https://wa.me/' + custPhone + '?text=' + waMsg : null;
+
+                            return (
+                              <div onClick={function(e){ e.stopPropagation(); }} style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <div style={{ backgroundColor: '#f8fafc', borderRadius: '6px', padding: '6px 8px', fontSize: '0.70rem', color: '#374151', wordBreak: 'break-all' }}>
+                                  {meta.rating_link}
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <button onClick={function() {
+                                    try { navigator.clipboard.writeText(meta.rating_link); alert('Rating link copied!'); } catch(e) {}
+                                  }} style={{ flex: 1, padding: '5px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.70rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    Copy Link
+                                  </button>
+                                  {waLink && (
+                                    <a href={waLink} target='_blank' rel='noopener noreferrer'
+                                      style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', backgroundColor: '#25D366', color: '#fff', borderRadius: '6px', padding: '5px', fontSize: '0.70rem', fontWeight: '700', textDecoration: 'none' }}>
+                                      📱 Send to Customer
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          } catch(e) { return null; }
+                        })()}
                       </div>
                     );
                   })
@@ -13755,6 +13808,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 return i.status === 'gha_done' ||
                   (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled');
               });
+              console.log('Done inspections notes check:', doneInspections.map(function(i) {
+                return { id: i.id?.slice(0,8), status: i.status, notes: i.notes, gha_done_at: i.gha_done_at };
+              }));
               // SA confirmed-inspections tab shows only TODAY's confirmations for
               // reference — once confirmed, an inspection is admin's to track and
               // shouldn't keep cluttering the SA dashboard indefinitely.
@@ -13849,9 +13905,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', fontWeight: '800', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                               📋 GHA Inspection Report
                             </p>
-                            {insp.gha_notes ? (
+                            {insp.notes ? (
                               <p style={{ margin: '0 0 6px 0', color: '#1e3a8a', fontSize: '0.84rem', lineHeight: 1.7 }}>
-                                {insp.gha_notes}
+                                {insp.notes}
                               </p>
                             ) : (
                               <p style={{ margin: '0 0 6px 0', color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>
@@ -15979,14 +16035,6 @@ function AppContent() {
                           <p style={{ margin: 0, fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>
                             ✓ Inspection fee paid: ₦{parseFloat(insp.fee_payment_amount).toLocaleString()}
                           </p>
-                        </div>
-                      )}
-
-                      {/* GHA notes when done/confirmed */}
-                      {(isDone || isCompleted) && (insp.gha_notes || insp.notes) && (
-                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #e2e8f0' }}>
-                          <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Inspection Report</p>
-                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151', lineHeight: 1.6 }}>{insp.gha_notes || insp.notes}</p>
                         </div>
                       )}
 
