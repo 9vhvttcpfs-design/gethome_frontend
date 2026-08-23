@@ -57,9 +57,7 @@ var formatWhatsAppNumber = function(number) {
 // (often the Supabase Auth user, whose metadata can be stale or null).
 var getAgentPlan = function(userObj, agentProfileObj) {
   var tier = agentProfileObj?.subscription_tier ||
-    (function() { try { return JSON.parse(localStorage.getItem('gh_user') || '{}').subscription_tier; } catch(e) { return null; } })() ||
     userObj?.subscription_tier ||
-    userObj?.user_metadata?.subscription_tier ||
     'free';
 
   var isUnlimited = agentProfileObj?.is_unlimited === true ||
@@ -2881,7 +2879,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     // has none of the subscription_* columns. Fetched in parallel and merged.
     return Promise.all([
       supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
-      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, is_unlimited, unlimited_expires_at, bank_name, bank_code, account_number, account_name').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, subscription_amount, is_unlimited, unlimited_listings, unlimited_expires_at, bank_name, bank_code, account_number, account_name').eq('id', user.id).single(),
     ])
       .then(function(results) {
         var agentData = results[0] && results[0].data;
@@ -2892,9 +2890,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             subscription_tier: (subData && subData.subscription_tier) || prev?.subscription_tier || 'free',
             subscription_status: (subData && subData.subscription_status) || prev?.subscription_status || 'inactive',
             subscription_end: (subData && subData.subscription_end) || prev?.subscription_end || null,
+            subscription_amount: (subData && subData.subscription_amount) || prev?.subscription_amount || 0,
             // Fresh DB read — takes priority over user.is_unlimited (set at login,
             // can go stale if admin grants/revokes it mid-session).
             is_unlimited: (subData && subData.is_unlimited) === true,
+            unlimited_listings: (subData && subData.unlimited_listings) === true,
             unlimited_expires_at: (subData && subData.unlimited_expires_at) || null,
             bank_name: (subData && subData.bank_name) || prev?.bank_name || null,
             bank_code: (subData && subData.bank_code) || prev?.bank_code || null,
@@ -2902,6 +2902,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             account_name: (subData && subData.account_name) || prev?.account_name || null,
           });
         });
+        console.log('Agent profile loaded - tier:', subData && subData.subscription_tier, '| unlimited:', subData && subData.is_unlimited);
       })
       .catch(function() {});
   };
@@ -3271,6 +3272,17 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   var unlimitedExpired = agentProfile?.unlimited_expires_at &&
     new Date(agentProfile.unlimited_expires_at) < new Date();
   var effectivelyUnlimited = hasUnlimitedListings && !unlimitedExpired;
+  // Listing limits per tier — used to gate the upload form below once an
+  // agent hits their plan's cap. `plan`/`effectivelyUnlimited` above are
+  // already sourced from the fresh agentProfile read, so reused as-is here.
+  var tierLimits = { free: 3, premium: 15, agency: 100, unlimited: 999999 };
+  var currentLimit = effectivelyUnlimited ? 999999 : (tierLimits[plan.tier] || 3);
+  // Count active listings (exclude deleted)
+  var activeListings = (myListings || []).filter(function(l) {
+    return !l.is_deleted;
+  });
+  var isAtLimit = !effectivelyUnlimited && activeListings.length >= currentLimit;
+  console.log('Limit check - tier:', plan.tier, '| isUnlimited:', effectivelyUnlimited, '| activeListings:', activeListings.length, '| limit:', currentLimit, '| isAtLimit:', isAtLimit);
   var goToUpgrade = function() {
     setPortalTab('listings');
     setTimeout(function() {
@@ -3783,6 +3795,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             "I Accept" button. This handler is just a safety net so a native
             submit (e.g. Enter key in a text field) can never double-fire
             the real submit path. */}
+        {(effectivelyUnlimited || !isAtLimit || isEditMode) ? (
         <form id="agent-upload-form" onSubmit={function(e) { if (e && e.preventDefault) e.preventDefault(); }} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {field('title', 'Property Listing Title', 'text', 'e.g., Luxury 4 Bedroom Duplex, Ikoyi')}
           <div>
@@ -4217,6 +4230,24 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
           )}
         </div>
         </form>
+        ) : (
+          <div style={{ backgroundColor: '#fff7ed', borderRadius: '14px', padding: '20px', textAlign: 'center', border: '1px solid #fed7aa' }}>
+            <p style={{ margin: '0 0 8px 0', fontSize: '1.2rem' }}>📋</p>
+            <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#c2410c', fontSize: '0.94rem' }}>
+              Listing Limit Reached
+            </p>
+            <p style={{ margin: '0 0 12px 0', color: '#78350f', fontSize: '0.82rem', lineHeight: 1.6 }}>
+              You have used {activeListings.length} of your {currentLimit} listing slots on the {plan.name}.
+              {plan.tier !== 'unlimited' && ' Upgrade to upload more listings.'}
+            </p>
+            {plan.tier !== 'agency' && plan.tier !== 'unlimited' && (
+              <button onClick={goToUpgrade}
+                style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', padding: '10px 20px', fontWeight: '700', cursor: 'pointer' }}>
+                Upgrade Plan
+              </button>
+            )}
+          </div>
+        )}
         {plan.tier !== 'agency' && (
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '14px', marginTop: '16px', border: '1px solid #e2e8f0' }}>
             <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
@@ -4486,6 +4517,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [historyLoading, setHistoryLoading]             = useState(false);
   const [availableMonths, setAvailableMonths]           = useState([]);
   const [historyAgentSearch, setHistoryAgentSearch]     = useState('');
+  const [inspectionHistory, setInspectionHistory]       = useState([]);
   const [takingSnapshot, setTakingSnapshot]             = useState(false);
   const [snapshotMsg, setSnapshotMsg]                   = useState('');
   // Unified Payments panel state
@@ -4786,6 +4818,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       });
       setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
+
+      var histRes = await fetch(API_URL + '/api/admin/inspection-payments?month=' + historyMonth, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var histData = await histRes.json();
+      if (histRes.ok) setInspectionHistory(histData.ghas || []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
       setMonthlyHistory(null);
@@ -6669,6 +6707,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 return '[' + count + ' × ₦' + rate.toLocaleString('en-NG') + ' = ₦' + (count * rate).toLocaleString('en-NG') + ']';
                               });
                               var inspectionsForGha = gha.inspections || [];
+                              var hasBankDetails = !!(gha.account_number && gha.bank_name && gha.account_name);
                               return (
                                 <div key={gha.gha_id} style={{ backgroundColor: isEmpty ? '#f8fafc' : '#fff', border: '1.5px solid ' + (isEmpty ? '#e2e8f0' : '#e2e8f0'), borderRadius: '12px', padding: '14px 16px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -6687,50 +6726,66 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                         {breakdownParts.join(' + ')} = {fmtNaira(gha.total_payment)}
                                       </p>
 
-                                      {/* Bank details for paying this GHA their inspection fees */}
-                                      {gha.account_number ? (
-                                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginTop: '10px', border: '1px solid #e2e8f0' }}>
-                                          <p style={{ margin: '0 0 6px 0', fontSize: '0.66rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bank Details for Transfer</p>
-                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                                            <div>
-                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Bank Name</p>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{gha.bank_name}</p>
-                                                <button onClick={function() { copyToClipboard(gha.bank_name, 'Bank name'); }}
-                                                  style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.64rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
-                                              </div>
-                                            </div>
-                                            <div>
-                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Account Number</p>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.90rem', letterSpacing: '0.08em' }}>{gha.account_number}</p>
-                                                <button onClick={function() { copyToClipboard(gha.account_number, 'Account number'); }}
-                                                  style={{ background: '#0a2240', border: 'none', borderRadius: '4px', padding: '2px 8px', fontSize: '0.64rem', cursor: 'pointer', color: '#fff', fontWeight: '600' }}>COPY</button>
-                                              </div>
-                                            </div>
-                                            <div style={{ gridColumn: '1 / -1' }}>
-                                              <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', color: '#94a3b8' }}>Account Name</p>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{gha.account_name}</p>
-                                                <button onClick={function() { copyToClipboard(gha.account_name, 'Account name'); }}
-                                                  style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '1px 6px', fontSize: '0.64rem', cursor: 'pointer', color: '#64748b' }}>copy</button>
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <button onClick={function() {
-                                            var allDetails = 'Bank: ' + gha.bank_name + '\nAccount Number: ' + gha.account_number + '\nAccount Name: ' + gha.account_name + '\nAmount: NGN ' + parseFloat(gha.total_payment).toLocaleString() + '\nRef: ' + gha.gha_code + ' ' + ghaPaymentsMonth;
-                                            copyToClipboard(allDetails, 'All payment details');
-                                          }} style={{ marginTop: '8px', width: '100%', padding: '7px', backgroundColor: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '600', cursor: 'pointer', color: '#374151' }}>
-                                            <FileText size={12} style={{ verticalAlign: '-2px', marginRight: '3px' }} />Copy All Payment Details
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '8px 12px', marginTop: '10px', border: '1px solid #fed7aa' }}>
-                                          <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600', display: 'flex', alignItems: 'flex-start', gap: '5px' }}>
-                                            <AlertCircle size={13} style={{ flexShrink: 0, marginTop: '1px' }} /> No bank account on file — {gha.gha_name} must add bank details in their profile before payment
+                                      {/* Pay button for this GHA's inspection payment */}
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                                        <div>
+                                          <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#27ae60', fontSize: '1.1rem' }}>
+                                            ₦{(gha.total_inspection_payment || 0).toLocaleString()}
+                                          </p>
+                                          <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>
+                                            {gha.confirmed_inspections} inspection{gha.confirmed_inspections !== 1 ? 's' : ''} × ₦{(gha.fee_per_inspection || 0).toLocaleString()}
                                           </p>
                                         </div>
-                                      )}
+                                        {gha.total_inspection_payment > 0 && !gha.is_paid ? (
+                                          <div>
+                                            {!hasBankDetails && (
+                                              <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', color: '#ef4444', fontWeight: '600' }}>
+                                                ⚠ No bank account on file
+                                              </p>
+                                            )}
+                                            <button
+                                              disabled={!hasBankDetails}
+                                              onClick={async function() {
+                                                if (!hasBankDetails) return;
+                                                if (!window.confirm('Mark ₦' + gha.total_inspection_payment.toLocaleString() + ' inspection payment as paid to ' + gha.full_name + '?')) return;
+                                                try {
+                                                  var token = localStorage.getItem('gh_token');
+                                                  var res = await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                                    body: JSON.stringify({
+                                                      gha_id: gha.gha_id,
+                                                      month: ghaPaymentsMonth,
+                                                      amount: gha.total_inspection_payment,
+                                                      inspection_count: gha.confirmed_inspections,
+                                                    }),
+                                                  });
+                                                  var data = await res.json();
+                                                  if (!res.ok) throw new Error(data.error || 'Failed');
+                                                  alert('Payment marked as paid for ' + gha.full_name);
+                                                  fetchGHAPayments();
+                                                } catch(err) { alert('Error: ' + err.message); }
+                                              }}
+                                              style={{
+                                                backgroundColor: hasBankDetails ? '#27ae60' : '#94a3b8',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: '10px',
+                                                padding: '10px 18px',
+                                                fontWeight: '800',
+                                                fontSize: '0.84rem',
+                                                cursor: hasBankDetails ? 'pointer' : 'not-allowed',
+                                                opacity: hasBankDetails ? 1 : 0.7,
+                                              }}>
+                                              {hasBankDetails ? 'Mark Paid' : 'No Bank Account'}
+                                            </button>
+                                          </div>
+                                        ) : gha.is_paid ? (
+                                          <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '6px 14px', fontSize: '0.76rem', fontWeight: '800' }}>
+                                            ✓ Paid
+                                          </span>
+                                        ) : null}
+                                      </div>
 
                                       <button onClick={function(){ setExpandedGhaPayment(isExpanded ? null : gha.gha_id); }}
                                         style={{ marginTop: '10px', padding: '5px 12px', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '7px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer' }}>
@@ -8426,6 +8481,37 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               </div>
                             </div>
                           </div>
+                        </div>
+                      )}
+
+                      {/* GHA Inspection Payments */}
+                      {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0; }).length > 0 && (
+                        <div style={{ marginTop: '20px' }}>
+                          <h3 style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', margin: '0 0 12px 0' }}>
+                            GHA Inspection Payments — {historyMonth}
+                          </h3>
+                          {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0; }).map(function(gha) {
+                            return (
+                              <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid ' + (gha.is_paid ? '#bbf7d0' : '#e2e8f0'), display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                                    {gha.gha_code} — {gha.full_name}
+                                  </p>
+                                  <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                                    {gha.confirmed_inspections} inspections × ₦{(gha.fee_per_inspection || 0).toLocaleString()}
+                                  </p>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#0a2240', fontSize: '0.94rem' }}>
+                                    ₦{(gha.total_inspection_payment || 0).toLocaleString()}
+                                  </p>
+                                  <span style={{ backgroundColor: gha.is_paid ? '#f0fff4' : '#fff7ed', color: gha.is_paid ? '#166534' : '#c2410c', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
+                                    {gha.is_paid ? '✓ PAID' : 'UNPAID'}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
