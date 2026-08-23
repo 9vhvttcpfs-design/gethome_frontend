@@ -1724,6 +1724,9 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [inspCustomerEmail, setInspCustomerEmail]     = useState('');
   const [inspCustomerPhone, setInspCustomerPhone]     = useState('');
   const [inspBookingLoading, setInspBookingLoading]   = useState(false);
+  // An agent should never be able to book/pay for an inspection on their own
+  // listing — only on other agents' listings, same as any customer.
+  var isOwnListing = !!(user && property && property.created_by === user.id);
   // Keeps the inspection-booking modal fully self-contained: every piece of
   // state it reads/writes (open flag, booking payload, contact fields, and
   // the in-flight loading flag) lives on PricingModal and is cleared here
@@ -2081,6 +2084,11 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               );
             })}
           </div>
+          {isOwnListing ? (
+            <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: isMobile ? '14px' : '18px', marginBottom: '16px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.82rem', color: '#64748b' }}>This is your own listing — you can't book an inspection on it.</p>
+            </div>
+          ) : (
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: isMobile ? '14px' : '18px', marginBottom: '16px' }}>
             <p style={{ margin: '0 0 12px 0', fontWeight: '700', fontSize: '0.86rem', color: '#0a2240' }}>Inspection Option</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
@@ -2098,6 +2106,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               </button>
               : <button onClick={handleProxyInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay and Book Proxy Inspection</button>}
           </div>
+          )}
           <div style={{ backgroundColor: '#f0fff4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px', pointerEvents: 'none' }}>
             <div style={{ width: '28px', height: '28px', backgroundColor: '#dcfce7', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#27ae60', fontWeight: '900', fontSize: '0.8rem', flexShrink: 0 }}>S</div>
             <div><p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#166534', fontSize: '0.80rem' }}>Your money is 100% protected</p><p style={{ margin: 0, color: '#15803d', fontSize: '0.74rem', lineHeight: '1.5' }}>Funds held in escrow -- never paid to agent until you verify and approve.</p></div>
@@ -3252,17 +3261,27 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   // against "now" (see getAgentPlan above), so isExpired covers agents whose
   // subscription_status is stuck on 'active' but whose end date has passed —
   // no need to duplicate that date math here.
-  var isExpired = plan.isExpired || subscriptionStatus === 'expired';
+  // An admin-granted unlimited plan overrides a stale/expired subscription_end
+  // (e.g. an old paid plan that lapsed before unlimited was granted) so those
+  // agents are never blocked from uploading. Computed inline here (rather than
+  // reusing the `effectivelyUnlimited` var declared below) since this needs to
+  // resolve before that point in the component.
+  var isUnlimitedForExpiryCheck = (agentProfile?.is_unlimited === true || agentProfile?.unlimited_listings === true) &&
+    !(agentProfile?.unlimited_expires_at && new Date(agentProfile.unlimited_expires_at) < new Date());
+  // Note: NOT gating on subscriptionStatus === 'inactive' here — 'inactive' is
+  // the default status for agents who never subscribed (free tier), so
+  // treating it as "expired" would block free-tier uploads entirely.
+  var isExpired = (plan.isExpired || subscriptionStatus === 'expired') && !isUnlimitedForExpiryCheck;
   var daysLeft = subEnd && !isExpired ? Math.ceil((subEnd - new Date()) / (1000 * 60 * 60 * 24)) : 0;
   // If the DB status wasn't flipped to 'expired' yet but the end date has
   // already passed, sync local state so every other place reading
   // subscriptionStatus (upgrade panel, badges, etc.) agrees it's expired too.
   useEffect(function() {
-    if (plan.isExpired && subscriptionStatus === 'active') {
+    if (plan.isExpired && subscriptionStatus === 'active' && !isUnlimitedForExpiryCheck) {
       console.log('Subscription date expired but status still active - treating as expired');
       setSubscriptionStatus('expired');
     }
-  }, [plan.isExpired, subscriptionStatus]);
+  }, [plan.isExpired, subscriptionStatus, isUnlimitedForExpiryCheck]);
   var planColor = plan.colors;
   // Fresh agentProfile read wins over the session-cached user.is_unlimited —
   // an admin grant/revoke mid-session should take effect without re-login.
@@ -5247,7 +5266,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     fetchAllSAs();
     fetchAllGHAsAdmin();
     fetchAdminMessages();
-    const interval = setInterval(fetchVerifiedPendingAgents, 15000);
+    const interval = setInterval(fetchVerifiedPendingAgents, 60000);
     const messagesInterval = setInterval(fetchAdminMessages, 30000);
     return () => { clearInterval(interval); clearInterval(messagesInterval); };
   }, [checkingAuth, sessionUser]);
@@ -10536,7 +10555,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   useEffect(function() {
     fetchGHAOverview(); fetchAgents(); fetchGhaRatings(); fetchGHAEarningsOverview();
     fetchGHANotifications().then(function(){ fetchMessages(); });
-    var notifInterval = setInterval(fetchGHANotifications, 20000);
+    var notifInterval = setInterval(fetchGHANotifications, 60000);
     var messagesInterval = setInterval(fetchMessages, 30000);
     var overviewInterval = setInterval(fetchGHAOverview, 60000);
     return function() { clearInterval(notifInterval); clearInterval(messagesInterval); clearInterval(overviewInterval); };
@@ -10544,12 +10563,12 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   useEffect(function() {
     if (ghaTab === 'inspections') {
       fetchInspections();
-      var inspInterval = setInterval(function(){ fetchInspections(true); }, 15000);
+      var inspInterval = setInterval(function(){ fetchInspections(true); }, 60000);
       return function() { clearInterval(inspInterval); };
     }
     if (ghaTab === 'agents') {
       fetchAgents();
-      var agentsInterval = setInterval(function(){ fetchAgents(true); }, 20000);
+      var agentsInterval = setInterval(function(){ fetchAgents(true); }, 60000);
       return function() { clearInterval(agentsInterval); };
     }
     // Re-pull /api/gha/overview on entering Overview/Earnings so the earnings
@@ -12521,7 +12540,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     if (saTab === 'subscriptions') fetchSubscriptions();
     if (saTab === 'inspections') {
       fetchInspections();
-      var inspInterval = setInterval(function(){ fetchInspections(true); }, 20000);
+      var inspInterval = setInterval(function(){ fetchInspections(true); }, 60000);
       return function() { clearInterval(inspInterval); };
     }
     if (saTab === 'ghas') { fetchSaGhas(); fetchAllMyAgents(); fetchInspectionStats(); }
@@ -15300,8 +15319,11 @@ function AppContent() {
   const [customerAccountTab, setCustomerAccountTab]     = useState('profile');
   const [customerInspections, setCustomerInspections]   = useState([]);
   const [customerInspLoading, setCustomerInspLoading]   = useState(false);
+  const fetchingCustomerInspRef = useRef(false);
   const fetchCustomerInspections = async function() {
     if (!user?.id) return;
+    if (fetchingCustomerInspRef.current) return; // prevent concurrent fetches
+    fetchingCustomerInspRef.current = true;
     setCustomerInspLoading(true);
     try {
       var token = localStorage.getItem('gh_token');
@@ -15309,19 +15331,21 @@ function AppContent() {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
-      if (res.ok) setCustomerInspections(Array.isArray(data) ? data : []);
+      if (res.ok) {
+        // Deduplicate by property_id + customer_email
+        var seen = {};
+        var unique = (Array.isArray(data) ? data : []).filter(function(insp) {
+          var key = (insp.property_id || '') + '_' + (insp.customer_email || '');
+          if (seen[key]) return false;
+          seen[key] = true;
+          return true;
+        });
+        setCustomerInspections(unique);
+      }
     } catch(e) { console.error('Customer inspections error:', e.message); }
-    finally { setCustomerInspLoading(false); }
-
-    // Poll for new inspections for 30 seconds after payment
-    // in case webhook hasn't created the record yet
-    if (inspectionSuccessPage) {
-      var pollCount = 0;
-      var pollInsp = setInterval(async function() {
-        pollCount++;
-        await fetchCustomerInspections();
-        if (pollCount >= 6) clearInterval(pollInsp); // stop after 1 minute
-      }, 10000); // every 10 seconds
+    finally {
+      setCustomerInspLoading(false);
+      fetchingCustomerInspRef.current = false;
     }
   };
   // Sync tab with URL - read tab from URL on mount, default to 'rent'
