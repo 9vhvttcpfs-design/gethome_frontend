@@ -8577,40 +8577,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             {adminTab === 'performance' && (function() {
               var staffList = kpiTab === 'SA' ? (kpiData.sa_kpis || []) : (kpiData.gha_kpis || []);
 
-              function overallColor(score) {
-                if (score >= 80) return { bg: '#f0fff4', color: '#166534', border: '#86efac' };
-                if (score >= 60) return { bg: '#fffbeb', color: '#92400e', border: '#fde68a' };
-                return { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca' };
-              }
-
-              function cellColor(kind, value) {
-                if (value === null || value === undefined || value === '') return '#94a3b8';
-                var v = Number(value);
-                if (kind === 'attendance') return v >= 98.5 ? '#166534' : v >= 95 ? '#92400e' : '#b91c1c';
-                if (kind === 'csat') return v >= 4.7 ? '#166534' : v >= 4.0 ? '#92400e' : '#b91c1c';
-                if (kind === 'inspection') return v >= 100 ? '#166534' : v >= 90 ? '#92400e' : '#b91c1c';
-                if (kind === 'onboarding') return v >= 100 ? '#166534' : v >= 75 ? '#92400e' : '#b91c1c';
-                if (kind === 'response') return v <= 15 ? '#166534' : v <= 30 ? '#92400e' : '#b91c1c';
-                return '#0a2240';
-              }
-
-              function displayScore(value, suffix) {
-                if (value === null || value === undefined) return '—';
-                return Number(value).toFixed(1) + (suffix || '');
-              }
-
-              function kpiRows(s) {
-                return [
-                  { label: 'Attendance & Availability', target: '≥ 98.5%', weight: '15%', kind: 'attendance', raw: s.attendance_score, display: displayScore(s.attendance_score, '%') },
-                  { label: 'Customer Satisfaction (CSAT)', target: '≥ 4.7/5.0', weight: '25%', kind: 'csat', raw: s.csat_score, display: displayScore(s.csat_score, '/5.0') },
-                  { label: 'Inspection Log Fidelity', target: '100%', weight: '20%', kind: 'inspection', raw: s.inspection_fidelity_score, display: displayScore(s.inspection_fidelity_score, '%') },
-                  { label: 'Agent Onboarding Milestones', target: 'Target Achieved', weight: '25%', kind: 'onboarding', raw: s.onboarding_milestones_score, display: displayScore(s.onboarding_milestones_score, '%') },
-                  { label: 'Response Time', target: '≤ 15 mins', weight: '15%', kind: 'response', raw: s.response_time_score, display: displayScore(s.response_time_score, ' mins') },
-                ];
-              }
-
-              var thStyle = { padding: '10px 14px', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', backgroundColor: '#f8fafc', textAlign: 'left' };
-              var tdStyle = { padding: '10px 14px', fontSize: '0.80rem', borderBottom: '1px solid #f1f5f9' };
+              // Weights used to combine each staff member's KPI scores into an overall score
+              var WEIGHTS = {
+                attendance: 15,
+                csat: 25,
+                onboarding: 25,
+                fidelity: 20,
+                response: 15,
+              };
 
               return (
                 <div>
@@ -8787,71 +8761,149 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {staffList.map(function(s) {
                         var isEditing = editingKpi === s.id;
-                        var rows = kpiRows(s);
-                        var hasOverall = s.overall_score !== null && s.overall_score !== undefined;
-                        var oc = hasOverall ? overallColor(Number(s.overall_score)) : null;
                         var typeLabel = (s.staff_type || kpiTab || '').toString().toUpperCase();
                         var isSAType = typeLabel === 'SA';
+
+                        // Per-staff KPI metrics with weighted contributions
+                        var metrics = [
+                          {
+                            key: 'attendance',
+                            label: 'Attendance & Availability',
+                            score: s.attendance_score,
+                            weight: WEIGHTS.attendance,
+                            target: '98.5%',
+                            display: s.attendance_score != null ? Number(s.attendance_score).toFixed(1) + '%' : '—',
+                          },
+                          {
+                            key: 'csat',
+                            label: 'Customer Satisfaction',
+                            // Convert back from percentage to rating display e.g. 80% → 4.0/5
+                            score: s.csat_score,
+                            weight: WEIGHTS.csat,
+                            target: '4.7/5',
+                            display: s.csat_score != null
+                              ? (Number(s.csat_score) / 20).toFixed(1) + '/5'
+                              : '—',
+                          },
+                          {
+                            key: 'onboarding',
+                            label: isSAType ? 'Agent Approvals' : 'Agent Verifications',
+                            score: s.onboarding_milestones_score,
+                            weight: WEIGHTS.onboarding,
+                            target: isSAType ? '20 agents' : '5 verifications',
+                            display: s.onboarding_milestones_score != null ? Number(s.onboarding_milestones_score).toFixed(1) + '%' : '—',
+                          },
+                          {
+                            key: 'fidelity',
+                            label: 'Inspection Fidelity',
+                            score: s.inspection_fidelity_score,
+                            weight: WEIGHTS.fidelity,
+                            target: '100%',
+                            display: s.inspection_fidelity_score != null ? Number(s.inspection_fidelity_score).toFixed(1) + '%' : '—',
+                          },
+                          {
+                            key: 'response',
+                            label: 'Response Time',
+                            score: s.response_time_score,
+                            weight: WEIGHTS.response,
+                            target: isSAType ? '≤24h' : '≤48h',
+                            display: s.response_time_score != null ? Number(s.response_time_score).toFixed(1) + '%' : '—',
+                          },
+                        ];
+
+                        // Calculate total score (sum of weighted contributions)
+                        var scoredMetrics = metrics.filter(function(m) { return m.score != null; });
+                        var totalWeight = scoredMetrics.reduce(function(sum, m) { return sum + m.weight; }, 0);
+                        var weightedSum = scoredMetrics.reduce(function(sum, m) { return sum + (m.score * m.weight / 100); }, 0);
+                        var totalScore = totalWeight > 0 ? (weightedSum / totalWeight * 100).toFixed(1) : null;
+
+                        // Use DB overall_score if available, otherwise fall back to the computed weighted score
+                        var displayScore = s.overall_score != null ? s.overall_score : totalScore;
+
                         return (
-                          <div key={s.id} style={{ ...cardStyle, padding: '14px 16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ backgroundColor: '#0a2240', color: '#fff', fontWeight: '800', fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px' }}>{s.staff_code || '—'}</span>
-                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>{s.staff_name || s.full_name || 'Unnamed'}</span>
-                                <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: isSAType ? '#f0fdf4' : '#eff6ff', color: isSAType ? '#166534' : '#1e40af', border: '1px solid ' + (isSAType ? '#bbf7d0' : '#bfdbfe') }}>
-                                  {typeLabel}
-                                </span>
-                                {hasOverall ? (
-                                  <span style={{ fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: oc.bg, color: oc.color, border: '1px solid ' + oc.border }}>
-                                    {s.overall_score}%
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: '0.68rem', padding: '3px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0' }}>
-                                    Not Evaluated
-                                  </span>
-                                )}
+                          <div key={s.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>
+                                  {s.staff_code} — {s.staff_name || s.full_name || 'Unnamed'}
+                                </p>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>{typeLabel}</p>
                               </div>
-                              <button onClick={function() {
-                                  setEditingKpi(s.id);
-                                  setKpiForm({
-                                    attendance_score: s.attendance_score,
-                                    csat_score: s.csat_score,
-                                    inspection_fidelity_score: s.inspection_fidelity_score,
-                                    onboarding_milestones_score: s.onboarding_milestones_score,
-                                    response_time_score: s.response_time_score,
-                                    management_notes: s.management_notes,
-                                  });
-                                }}
-                                style={{ padding: '5px 12px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                Edit Scores
-                              </button>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '900', fontSize: '1.4rem',
+                                  color: displayScore >= 80 ? '#27ae60' : displayScore >= 60 ? '#f59e0b' : displayScore != null ? '#ef4444' : '#94a3b8' }}>
+                                  {displayScore != null ? displayScore + '/100' : 'No Data'}
+                                </p>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', color: '#94a3b8' }}>Overall Score</p>
+                                <button onClick={function() {
+                                    setEditingKpi(s.id);
+                                    setKpiForm({
+                                      attendance_score: s.attendance_score,
+                                      csat_score: s.csat_score,
+                                      inspection_fidelity_score: s.inspection_fidelity_score,
+                                      onboarding_milestones_score: s.onboarding_milestones_score,
+                                      response_time_score: s.response_time_score,
+                                      management_notes: s.management_notes,
+                                    });
+                                  }}
+                                  style={{ padding: '4px 10px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '7px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                  Edit Scores
+                                </button>
+                              </div>
                             </div>
 
-                            {/* Read-only performance matrix table */}
-                            <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: isMobile ? '480px' : undefined }}>
-                                <thead>
-                                  <tr>
-                                    <th style={thStyle}>Parameter</th>
-                                    <th style={thStyle}>Target</th>
-                                    <th style={thStyle}>Weight</th>
-                                    <th style={thStyle}>Score</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {rows.map(function(row) {
-                                    return (
-                                      <tr key={row.label}>
-                                        <td style={{ ...tdStyle, color: '#0a2240', fontWeight: '600' }}>{row.label}</td>
-                                        <td style={{ ...tdStyle, color: '#64748b' }}>{row.target}</td>
-                                        <td style={{ ...tdStyle, color: '#64748b' }}>{row.weight}</td>
-                                        <td style={{ ...tdStyle, color: cellColor(row.kind, row.raw), fontWeight: '800' }}>{row.display}</td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
+                            {metrics.map(function(metric) {
+                              var weightedContrib = metric.score != null ? (metric.score * metric.weight / 100).toFixed(1) : null;
+                              return (
+                                <div key={metric.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #f8fafc' }}>
+                                  <div style={{ flex: 1 }}>
+                                    <p style={{ margin: '0 0 1px 0', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>
+                                      {metric.label}
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
+                                      Weight: {metric.weight}% | Target: {metric.target}
+                                    </p>
+                                  </div>
+                                  <div style={{ textAlign: 'right', marginLeft: '12px' }}>
+                                    <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: metric.score != null ? '#0a2240' : '#94a3b8', fontSize: '0.84rem' }}>
+                                      {metric.display}
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
+                                      {weightedContrib != null ? weightedContrib + '/' + metric.weight + ' pts' : 'Not scored'}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Attendance manual input */}
+                            {s.attendance_score == null && (
+                              <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #fde68a' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#92400e', fontWeight: '600' }}>
+                                  ⚠ Attendance not scored — enter manually
+                                </p>
+                                <div style={{ display: 'flex', gap: '6px' }}>
+                                  <input type='number' min='0' max='100' placeholder='e.g. 98.5'
+                                    id={'att-' + s.id}
+                                    style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '0.80rem' }} />
+                                  <button onClick={async function() {
+                                    var val = parseFloat(document.getElementById('att-' + s.id)?.value);
+                                    if (isNaN(val) || val < 0 || val > 100) { alert('Enter a value between 0 and 100'); return; }
+                                    try {
+                                      var token = localStorage.getItem('gh_token');
+                                      await fetch(API_URL + '/api/admin/set-attendance', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                        body: JSON.stringify({ staff_id: s.id, month: kpiMonth, score: val }),
+                                      });
+                                      fetchKPIs();
+                                    } catch(e) { alert('Error: ' + e.message); }
+                                  }} style={{ padding: '6px 12px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                             {(s.management_notes || s.updated_at) && (
                               <div style={{ marginTop: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
