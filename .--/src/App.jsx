@@ -4500,6 +4500,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
   const [staffPayMsg, setStaffPayMsg]                   = useState('');
   const [payoutTab, setPayoutTab]                       = useState('pending');
+  const [paymentLocationTab, setPaymentLocationTab]     = useState('all');
+  const [paymentLocations, setPaymentLocations]         = useState([]);
   const [copyMsg, setCopyMsg]                           = useState('');
   const [confirmPayModal, setConfirmPayModal]           = useState(null);
   const [paymentNote, setPaymentNote]                   = useState('');
@@ -4837,6 +4839,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       });
       setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
+      console.log('Monthly history loaded:', m, '| revenue:', data.total_subscription_revenue, '| gha:', data.gha_commission, '| sa:', data.sa_commission);
 
       var histRes = await fetch(API_URL + '/api/admin/inspection-payments?month=' + historyMonth, {
         headers: { Authorization: 'Bearer ' + token }
@@ -5297,6 +5300,22 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   useEffect(function() {
     if (adminTab === 'staff-payments') fetchStaffPayments();
   }, [adminTab, staffPaymentsMonth]);
+
+  // Build the location tab list from the GHA payment records themselves
+  useEffect(function() {
+    var ghaList = (staffPayments && staffPayments.gha_payments) || [];
+    if (ghaList.length === 0) { setPaymentLocations(['all']); return; }
+    var locations = ['all'];
+    var seen = {};
+    ghaList.forEach(function(g) {
+      var loc = g.location || 'Unassigned';
+      if (!seen[loc]) {
+        seen[loc] = true;
+        locations.push(loc);
+      }
+    });
+    setPaymentLocations(locations);
+  }, [staffPayments]);
 
   useEffect(function() {
     if (!staffPayMsg) return;
@@ -8094,10 +8113,29 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 tier1: { fee: 1200 }, tier2: { fee: 1500 }, tier3: { fee: 1700 },
               };
               var totals = (staffPayments && staffPayments.totals) || {};
-              var currentList = staffPaymentTab === 'GHA' ? (staffPayments.gha_payments || []) : (staffPayments.sa_payments || []);
+              var ghaList = staffPayments.gha_payments || [];
+              // Filter GHAs by the selected location tab
+              var locationFilteredGhaList = paymentLocationTab === 'all' ? ghaList : ghaList.filter(function(g) {
+                var loc = g.location || 'Unassigned';
+                return loc === paymentLocationTab;
+              });
+              var currentList = staffPaymentTab === 'GHA' ? locationFilteredGhaList : (staffPayments.sa_payments || []);
               var pendingList = currentList.filter(function(p) { return p.payment_status !== 'paid' && p.total_payment > 0; });
               var paidList = currentList.filter(function(p) { return p.payment_status === 'paid'; });
               var displayList = payoutTab === 'pending' ? pendingList : paidList;
+
+              // Count unpaid GHAs per location for the tab badges (based on the full, unfiltered list)
+              var locationCounts = {};
+              ghaList.forEach(function(g) {
+                var loc = g.location || 'Unassigned';
+                if (!locationCounts[loc]) locationCounts[loc] = 0;
+                var commissionDue = g.unpaid_commission != null ? g.unpaid_commission : (g.is_fully_paid ? 0 : g.commission_amount);
+                var inspectionDue = g.total_inspection_payment != null ? g.total_inspection_payment : g.inspection_payment;
+                var ghaIsPaid = g.is_fully_paid != null ? g.is_fully_paid : g.payment_status === 'paid';
+                if (!ghaIsPaid && ((commissionDue || 0) > 0 || (inspectionDue || 0) > 0)) {
+                  locationCounts[loc]++;
+                }
+              });
               return (
                 <div>
                   {copyMsg && (
@@ -8172,10 +8210,52 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   )}
 
+                  {/* Location tabs — GHA payments only */}
+                  {staffPaymentTab === 'GHA' && paymentLocations.length > 1 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px', paddingBottom: '12px', borderBottom: '2px solid #f1f5f9' }}>
+                      {paymentLocations.map(function(loc) {
+                        var unpaidCount = loc === 'all'
+                          ? ghaList.filter(function(g) {
+                              var commissionDue = g.unpaid_commission != null ? g.unpaid_commission : (g.is_fully_paid ? 0 : g.commission_amount);
+                              var ghaIsPaid = g.is_fully_paid != null ? g.is_fully_paid : g.payment_status === 'paid';
+                              return !ghaIsPaid && (commissionDue || 0) > 0;
+                            }).length
+                          : (locationCounts[loc] || 0);
+                        var isActive = paymentLocationTab === loc;
+                        return (
+                          <button key={loc} onClick={function() { setPaymentLocationTab(loc); }}
+                            style={{
+                              padding: '7px 14px', borderRadius: '20px', border: 'none',
+                              cursor: 'pointer', fontWeight: '700', fontSize: '0.78rem',
+                              backgroundColor: isActive ? '#0a2240' : '#f1f5f9',
+                              color: isActive ? '#fff' : '#64748b',
+                              display: 'flex', alignItems: 'center', gap: '6px',
+                            }}>
+                            {loc === 'all' ? 'All Locations' : loc}
+                            {unpaidCount > 0 && (
+                              <span style={{
+                                backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : '#ef4444',
+                                color: '#fff', borderRadius: '10px',
+                                padding: '1px 6px', fontSize: '0.66rem', fontWeight: '800',
+                              }}>
+                                {unpaidCount}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {staffPaymentsLoading ? (
                     <div style={{ textAlign: 'center', padding: '32px' }}><p style={{ color: '#94a3b8' }}>Loading staff payments…</p></div>
                   ) : displayList.length === 0 ? (
-                    payoutTab === 'pending' ? (
+                    staffPaymentTab === 'GHA' ? (
+                      <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                        <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>✓</p>
+                        <p style={{ margin: 0, fontSize: '0.84rem' }}>All payments settled for {paymentLocationTab === 'all' ? 'all locations' : paymentLocationTab}</p>
+                      </div>
+                    ) : payoutTab === 'pending' ? (
                       <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
                         <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>🎉</p>
                         <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0' }}>All payments completed!</p>
@@ -8186,12 +8266,163 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         <p style={{ fontSize: '0.84rem' }}>No payment history for {staffPaymentsMonth} yet</p>
                       </div>
                     )
+                  ) : staffPaymentTab === 'GHA' ? (
+                    <div>
+                      {displayList.map(function(gha) {
+                        var ghaId = gha.gha_id || gha.staff_id || gha.id;
+                        var fullName = gha.full_name || gha.gha_name;
+                        var location = gha.location;
+                        var hasBankDetails = !!(gha.account_number && gha.bank_name && gha.account_name);
+                        var commissionDue = gha.unpaid_commission != null ? gha.unpaid_commission : (gha.is_fully_paid ? 0 : (gha.commission_amount || 0));
+                        var inspectionDue = gha.total_inspection_payment != null ? gha.total_inspection_payment : (gha.inspection_payment || 0);
+                        var confirmedInspections = gha.confirmed_inspections != null ? gha.confirmed_inspections : (gha.inspection_count || 0);
+                        var totalDue = (commissionDue || 0) + (inspectionDue || 0);
+                        var isPaid = gha.is_fully_paid != null ? gha.is_fully_paid : totalDue === 0;
+
+                        return (
+                          <div key={ghaId} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1.5px solid ' + (totalDue > 0 ? '#e2e8f0' : '#bbf7d0'), boxShadow: '0 2px 8px rgba(10,34,64,0.04)' }}>
+
+                            {/* Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#0a2240', fontSize: '0.92rem' }}>
+                                  {gha.gha_code} — {fullName}
+                                </p>
+                                {location && (
+                                  <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.74rem' }}>
+                                    📍 {location}
+                                  </p>
+                                )}
+                              </div>
+                              <span style={{
+                                backgroundColor: totalDue > 0 ? '#fef3c7' : '#f0fff4',
+                                color: totalDue > 0 ? '#92400e' : '#166534',
+                                border: '1px solid ' + (totalDue > 0 ? '#fde68a' : '#bbf7d0'),
+                                borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '800'
+                              }}>
+                                {totalDue > 0 ? '● Payment Due' : '✓ All Paid'}
+                              </span>
+                            </div>
+
+                            {/* Payment breakdown */}
+                            <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 12px', marginBottom: '12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b' }}>Commission Earned</p>
+                                <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>
+                                  ₦{parseFloat(commissionDue || 0).toLocaleString()}
+                                </p>
+                              </div>
+                              {inspectionDue > 0 && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b' }}>
+                                    Inspection Payment ({confirmedInspections} inspections)
+                                  </p>
+                                  <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>
+                                    ₦{parseFloat(inspectionDue || 0).toLocaleString()}
+                                  </p>
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+                                <p style={{ margin: 0, fontSize: '0.80rem', fontWeight: '800', color: '#0a2240' }}>Total Due</p>
+                                <p style={{ margin: 0, fontWeight: '900', color: '#27ae60', fontSize: '0.94rem' }}>
+                                  ₦{parseFloat(totalDue).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Bank details */}
+                            {hasBankDetails ? (
+                              <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #bbf7d0' }}>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#166534', fontSize: '0.80rem' }}>
+                                  🏦 {gha.bank_name}
+                                </p>
+                                <p style={{ margin: '0 0 2px 0', color: '#0a2240', fontWeight: '800', fontSize: '0.86rem', letterSpacing: '0.06em' }}>
+                                  {gha.account_number}
+                                </p>
+                                <p style={{ margin: 0, color: '#64748b', fontSize: '0.76rem' }}>
+                                  {gha.account_name}
+                                </p>
+                              </div>
+                            ) : (
+                              <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #fed7aa' }}>
+                                <p style={{ margin: 0, fontSize: '0.76rem', color: '#c2410c', fontWeight: '600' }}>
+                                  ⚠ No bank account on file — GHA must add bank details
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Action buttons */}
+                            {totalDue > 0 ? (
+                              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {commissionDue > 0 && (
+                                  <button
+                                    disabled={!hasBankDetails}
+                                    onClick={async function() {
+                                      if (!hasBankDetails) { alert('GHA has no bank details on file'); return; }
+                                      if (!window.confirm('Mark commission of ₦' + parseFloat(commissionDue).toLocaleString() + ' as paid to ' + fullName + '?')) return;
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/mark-staff-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ staff_id: ghaId, staff_type: 'GHA', month_year: staffPaymentsMonth }),
+                                        });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        fetchStaffPayments();
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }}
+                                    style={{ flex: 1, padding: '11px', backgroundColor: hasBankDetails ? '#0a2240' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem', cursor: hasBankDetails ? 'pointer' : 'not-allowed' }}>
+                                    ✓ Pay Commission ₦{parseFloat(commissionDue).toLocaleString()}
+                                  </button>
+                                )}
+                                {inspectionDue > 0 && (
+                                  <button
+                                    disabled={!hasBankDetails}
+                                    onClick={async function() {
+                                      if (!hasBankDetails) { alert('GHA has no bank details on file'); return; }
+                                      if (!window.confirm('Mark inspection payment of ₦' + parseFloat(inspectionDue).toLocaleString() + ' as paid to ' + fullName + '?')) return;
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({
+                                            gha_id: ghaId,
+                                            month: staffPaymentsMonth,
+                                            amount: inspectionDue,
+                                            inspection_count: confirmedInspections,
+                                          }),
+                                        });
+                                        var data = await res.json();
+                                        if (!res.ok) throw new Error(data.error || 'Failed');
+                                        fetchStaffPayments();
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }}
+                                    style={{ flex: 1, padding: '11px', backgroundColor: hasBankDetails ? '#27ae60' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem', cursor: hasBankDetails ? 'pointer' : 'not-allowed' }}>
+                                    ✓ Pay Inspection ₦{parseFloat(inspectionDue).toLocaleString()}
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', backgroundColor: '#f0fff4', borderRadius: '10px', border: '1px solid #bbf7d0' }}>
+                                <span style={{ color: '#27ae60', fontWeight: '800' }}>✓</span>
+                                <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>All payments settled</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div>
                       {displayList.map(function(payment) {
                         var staffCode = payment.gha_code || payment.sa_code;
                         var staffName = payment.gha_name || payment.sa_name;
-                        var isPaid = payment.payment_status === 'paid';
+                        // Prefer the new unpaid_commission / is_fully_paid fields from the updated
+                        // endpoint response; fall back to the existing payment_status logic.
+                        var commissionDue = payment.unpaid_commission != null ? payment.unpaid_commission : payment.commission_amount;
+                        var isPaid = payment.is_fully_paid != null ? payment.is_fully_paid : payment.payment_status === 'paid';
 
                         return (
                           <div key={payment.staff_id} style={{
@@ -8246,10 +8477,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             {/* Payment breakdown */}
                             {payment.staff_type === 'GHA' && (
                               <div style={{ marginBottom: '12px' }}>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: payment.commission_amount > 0 || payment.inspection_count > 0 ? '6px' : 0 }}>
-                                  {payment.commission_amount > 0 && (
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: commissionDue > 0 || payment.inspection_count > 0 ? '6px' : 0 }}>
+                                  {commissionDue > 0 && (
                                     <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '4px 10px', fontSize: '0.74rem', fontWeight: '600' }}>
-                                      Commission → ₦{parseFloat(payment.commission_amount).toLocaleString()}
+                                      Commission → ₦{parseFloat(commissionDue).toLocaleString()}
                                     </span>
                                   )}
                                 </div>
@@ -8270,7 +8501,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 <div style={{ backgroundColor: '#0a2240', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <p style={{ margin: 0, color: 'rgba(255,255,255,0.8)', fontSize: '0.78rem', fontWeight: '600' }}>Total Due</p>
                                   <p style={{ margin: 0, color: '#fff', fontWeight: '900', fontSize: '1rem' }}>
-                                    ₦{((payment.commission_amount || 0) + (payment.inspection_payment || 0)).toLocaleString()}
+                                    ₦{((commissionDue || 0) + (payment.inspection_payment || 0)).toLocaleString()}
                                   </p>
                                 </div>
                               </div>
@@ -8456,6 +8687,27 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       <p style={{ margin: '8px 0 0 0', fontSize: '0.78rem', fontWeight: '600', color: snapshotMsg.startsWith('Error') ? '#b91c1c' : '#166534' }}>{snapshotMsg}</p>
                     )}
                   </div>
+
+                  {monthlyHistory && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                      {[
+                        { label: 'Total Revenue', value: monthlyHistory.total_subscription_revenue || 0, color: '#0a2240', icon: '💰' },
+                        { label: 'GHA Commission', value: monthlyHistory.gha_commission || 0, color: '#27ae60', icon: '👷' },
+                        { label: 'SA Commission', value: monthlyHistory.sa_commission || 0, color: '#3b82f6', icon: '🤝' },
+                        { label: 'Inspections', value: monthlyHistory.total_inspections || 0, color: '#f59e0b', icon: '🔍', isCount: true },
+                      ].map(function(stat) {
+                        return (
+                          <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '1.2rem' }}>{stat.icon}</p>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                            <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.94rem' }}>
+                              {stat.isCount ? stat.value : '₦' + parseFloat(stat.value).toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {historyLoading ? (
                     <div style={{ textAlign: 'center', padding: '30px' }}><p style={{ color: '#94a3b8' }}>Loading monthly history…</p></div>
@@ -10314,6 +10566,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [monthlyHistory, setMonthlyHistory]         = useState(null);
   const [historyLoading, setHistoryLoading]         = useState(false);
   const [availableMonths, setAvailableMonths]       = useState([]);
+  const [historyEarnings, setHistoryEarnings]       = useState(null);
   // Earnings tab state
   const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
   const [earningsData, setEarningsData]             = useState(null);
@@ -10454,6 +10707,17 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       console.error('Earnings fetch error:', e.message);
       setEarningsData(null);
     } finally { setEarningsLoading(false); }
+  }
+
+  // Per-agent commission breakdown for the Monthly History tab — the agent_snapshots
+  // commission_generated field isn't populated, so pull it from the earnings endpoint instead.
+  async function fetchHistoryEarnings(month) {
+    var m = month || historyMonth;
+    try {
+      var res = await fetch(API_URL + '/api/gha/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (res.ok) setHistoryEarnings(data);
+    } catch(e) { console.error('History earnings fetch error:', e.message); }
   }
 
   const fetchGHAReferrals = async function() {
@@ -10628,7 +10892,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     if (ghaTab === 'earnings' || ghaTab === 'overview') fetchGHAOverview();
   }, [ghaTab]);
   useEffect(function() {
-    if (ghaTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
+    if (ghaTab === 'monthly-history') { fetchMonthlyHistory(historyMonth); fetchHistoryEarnings(historyMonth); }
   }, [ghaTab, historyMonth]);
   useEffect(function() {
     if (ghaTab === 'earnings') fetchGHAEarnings(selectedMonth);
@@ -10928,27 +11192,38 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* Earnings card */}
-                <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                  <div>
-                    <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MY MONTHLY EARNINGS ({currentGhaRate}%)</p>
-                    <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                      {/* Fall back to computing from total_revenue * commission rate if the backend hasn't pre-calculated monthly_commission */}
-                      {'₦' + (ghaOverview.monthly_commission || Math.round((ghaOverview.total_revenue || 0) * currentGhaRate / 100)).toLocaleString()}
-                    </p>
-                    <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
-                    {ghaEarningsOverview.is_paid
-                      ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
-                      : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
-                    }
-                    <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: ghaEarningsOverview.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                      {ghaEarningsOverview.is_paid ? <><CheckCircle size={12} /> Paid</> : '● Awaiting payment'}
-                    </p>
-                  </div>
-                </div>
+                {/* Earnings card — pending (unpaid) commission only; the earnings API filters is_paid = false */}
+                {(function() {
+                  var pendingCommission = ghaOverview?.pending_commission
+                    ?? ghaOverview?.unpaid_commission
+                    ?? ghaEarningsOverview?.total_commission
+                    ?? ghaOverview?.monthly_commission
+                    ?? 0;
+                  return (
+                    <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                      <div>
+                        <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Pending Payment</p>
+                        <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: pendingCommission > 0 ? '#0a2240' : '#94a3b8', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                          {'₦' + parseFloat(pendingCommission).toLocaleString()}
+                        </p>
+                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
+                        {pendingCommission === 0 && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: '#27ae60', fontWeight: '700' }}>All paid ✓</p>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
+                        {pendingCommission === 0
+                          ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
+                          : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
+                        }
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: pendingCommission === 0 ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                          {pendingCommission === 0 ? <><CheckCircle size={12} /> Paid</> : '● Awaiting payment'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Ratings section */}
                 {(function() {
@@ -11596,8 +11871,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         {ghaTab === 'monthly-history' && (function() {
           var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
           var snapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
+          var earningsRows = (historyEarnings && historyEarnings.earnings) || [];
           var totalAgentsActive = (snapshots || []).length;
-          var yourCommission = monthlyHistory ? (monthlyHistory.total_commission || 0) : 0;
+          var yourCommission = historyEarnings ? (historyEarnings.total_commission || 0) : (monthlyHistory ? (monthlyHistory.total_commission || 0) : 0);
 
           return (
             <div>
@@ -11635,37 +11911,42 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     })}
                   </div>
 
-                  {/* Agent snapshots */}
+                  {/* Agent earnings breakdown — sourced from the earnings endpoint, not agent_snapshots
+                      (commission_generated on the snapshot isn't populated). */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                  {snapshots.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '30px 20px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                      <p style={{ margin: '0 0 8px 0', display: 'flex', justifyContent: 'center' }}><Users size={22} color="#cbd5e1" /></p>
-                      <p style={{ fontWeight: '700', color: '#0a2240', margin: '0 0 4px 0', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>No Agent Snapshots Yet</p>
-                      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>
-                        Agent activity snapshots will appear here once your agents make subscription payments or complete inspections for {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}.
-                      </p>
-                    </div>
+                  {earningsRows.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '16px', fontFamily: "'Inter', sans-serif" }}>
+                      No earnings for {historyMonth}
+                    </p>
                   ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <div style={{ minWidth: '620px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
-                          <span>AGENT NAME</span><span>EMAIL</span><span>TIER</span><span>SUB AMOUNT</span><span>LISTINGS</span><span>COMMISSION</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {snapshots.map(function(a, idx) {
-                            return (
-                              <div key={a.id || a.agent_email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
-                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
-                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || '—'}</span>
-                                <span>{tierBadge(a.tier || a.subscription_tier)}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{fmtMoney(a.subscription_amount)}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listings || a.listing_count || 0}</span>
-                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>{fmtMoney(a.commission_generated)}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {earningsRows.map(function(earning, idx) {
+                        return (
+                          <div key={earning.agent_id || earning.agent_email || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                            <div>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.80rem', fontWeight: '600', color: '#374151', fontFamily: "'Inter', sans-serif" }}>
+                                {earning.agent_email}
+                              </p>
+                              <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>
+                                {fmtMoney(earning.subscription_amount)} × {earning.commission_rate ?? currentGhaRate}%
+                              </p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.90rem', fontFamily: "'Inter', sans-serif" }}>
+                                {fmtMoney(earning.commission_amount)}
+                              </p>
+                              {earning.is_paid != null && (
+                                <span style={{ fontSize: '0.66rem', fontWeight: '700',
+                                  color: earning.is_paid ? '#166534' : '#92400e',
+                                  backgroundColor: earning.is_paid ? '#f0fff4' : '#fef3c7',
+                                  borderRadius: '10px', padding: '1px 6px' }}>
+                                  {earning.is_paid ? '✓ PAID' : 'PENDING'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
