@@ -2475,7 +2475,14 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
   var isGhana = activeCountry && activeCountry.code === 'GH';
-  var isAgencyAccount = agentType === 'agency';
+  var isAgencyAccount = agentType === 'agency' || agentProfile?.agent_type === 'agency';
+  // Which upgrade cards this agent should see:
+  // - Premium: only for non-agency agents currently on Free
+  // - Agency: only for agency-type accounts currently on Free or Premium
+  // - Unlimited: shown to everyone below (its own block handles the
+  //   already-unlimited state), so no free/premium/agency gate applies to it.
+  var showPremiumCard = currentTier === 'free' && !isAgencyAccount;
+  var showAgencyCard  = (currentTier === 'free' || currentTier === 'premium') && isAgencyAccount;
   var PLAN_BASE_PRICES = {
     premium: parseFloat(globalSettings.premium_plan_price || window.__gethomeSettings?.premium_plan_price || 8500),
     agency: parseFloat(globalSettings.agency_plan_price || window.__gethomeSettings?.agency_plan_price || 35000),
@@ -2600,7 +2607,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
       ) : (
         <>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-          {Object.entries(AGENT_TIERS).filter(([k]) => k !== currentTier && k !== 'free' && (!isAgencyAccount || k === 'agency')).map(function([tierKey, tier]) {
+          {Object.entries(AGENT_TIERS).filter(([k]) => (k === 'premium' && showPremiumCard) || (k === 'agency' && showAgencyCard)).map(function([tierKey, tier]) {
             var promoPrice = getPromoPrice(tierKey);
             return (<div key={tierKey}>
               <div style={{ border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
@@ -2727,6 +2734,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                           payment_type: 'unlimited_plan',
                           agent_id: resolvedAgentId,
                           plan: 'unlimited',
+                          previous_tier: currentTier, // track what they're upgrading from
                           duration_months: unlimitedDuration,
                         },
                       }),
@@ -10516,6 +10524,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   const [staffUser, setStaffUser]                   = useState(initialStaffUser);
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
+  const [ghaBankName, setGhaBankName]               = useState(staffUser?.bank_name || '');
+  const [ghaBankAccount, setGhaBankAccount]         = useState(staffUser?.account_number || '');
+  const [ghaBankAccountName, setGhaBankAccountName] = useState(staffUser?.account_name || '');
+  const [ghaBankCode, setGhaBankCode]               = useState(staffUser?.bank_code || '');
   const [bankForm, setBankForm]                     = useState({
     bank_name: staffUser?.bank_name || '',
     account_number: staffUser?.account_number || '',
@@ -10798,7 +10810,15 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       });
       if (res.ok) {
         var data = await res.json();
-        setGhaProfile(data);
+        if (data) {
+          setGhaProfile(data);
+          // Set bank detail states from profile response
+          if (data.bank_name) setGhaBankName(data.bank_name);
+          if (data.account_number) setGhaBankAccount(data.account_number);
+          if (data.account_name) setGhaBankAccountName(data.account_name);
+          if (data.bank_code) setGhaBankCode(data.bank_code);
+          console.log('GHA profile loaded - has bank:', data.has_bank_details, '| bank:', data.bank_name);
+        }
         var stored = JSON.parse(localStorage.getItem('gh_staff_user') || '{}');
         localStorage.setItem('gh_staff_user', JSON.stringify(Object.assign({}, stored, data)));
       }
@@ -11192,34 +11212,52 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* Earnings card — pending (unpaid) commission only; the earnings API filters is_paid = false */}
+                {/* Earnings card — pending (unpaid) commission, plus lifetime totals */}
                 {(function() {
-                  var pendingCommission = ghaOverview?.pending_commission
-                    ?? ghaOverview?.unpaid_commission
-                    ?? ghaEarningsOverview?.total_commission
-                    ?? ghaOverview?.monthly_commission
-                    ?? 0;
+                  // Pending payment (what GHA is owed and not yet paid)
+                  var pendingCommission = ghaOverview?.pending_commission ||
+                    ghaOverview?.total_commission || 0;
+
+                  // This month's new earnings
+                  var thisMonthCommission = ghaOverview?.monthly_commission || 0;
+
                   return (
-                    <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                      <div>
-                        <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#166534', fontWeight: '700', letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>Pending Payment</p>
-                        <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: pendingCommission > 0 ? '#0a2240' : '#94a3b8', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {'₦' + parseFloat(pendingCommission).toLocaleString()}
-                        </p>
-                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
-                        {pendingCommission === 0 && (
-                          <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: '#27ae60', fontWeight: '700' }}>All paid ✓</p>
-                        )}
+                    <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                        <div>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
+                            Pending Payment
+                          </p>
+                          <p style={{ margin: 0, fontWeight: '900', color: pendingCommission > 0 ? '#27ae60' : '#94a3b8', fontSize: '1.3rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {'₦' + parseFloat(pendingCommission).toLocaleString()}
+                          </p>
+                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
+                          {pendingCommission === 0 && (
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#27ae60', fontWeight: '700' }}>✓ All commissions paid</p>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>THIS MONTH</p>
+                          <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.95rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                            {'₦' + parseFloat(thisMonthCommission).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>EARNINGS STATUS</p>
-                        {pendingCommission === 0
-                          ? <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#f0fff4', color: '#166534', border: '1.5px solid #86efac', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>PAID</span>
-                          : <span style={{ padding: '4px 12px', borderRadius: '20px', backgroundColor: '#fffbeb', color: '#92400e', border: '1.5px solid #fde68a', fontWeight: '800', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>UNPAID</span>
-                        }
-                        <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: pendingCommission === 0 ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                          {pendingCommission === 0 ? <><CheckCircle size={12} /> Paid</> : '● Awaiting payment'}
-                        </p>
+
+                      {/* Lifetime stats */}
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                        <div style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600' }}>TOTAL EARNED</p>
+                          <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.84rem' }}>
+                            {'₦' + parseFloat(ghaOverview?.total_ever_earned || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div style={{ flex: 1, backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600' }}>PAID OUT</p>
+                          <p style={{ margin: 0, fontWeight: '800', color: '#27ae60', fontSize: '0.84rem' }}>
+                            {'₦' + parseFloat(ghaOverview?.total_paid_out || 0).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );
