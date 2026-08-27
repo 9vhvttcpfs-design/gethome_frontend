@@ -2531,6 +2531,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   //   already-unlimited state), so no free/premium/agency gate applies to it.
   var showPremiumCard = currentTier === 'free' && !isAgencyAccount;
   var showAgencyCard  = (currentTier === 'free' || currentTier === 'premium') && isAgencyAccount;
+  console.log('AgentUpgradePanel - agentType prop:', agentType, '| agentProfile.agent_type:', agentProfile?.agent_type, '| isAgencyAccount:', isAgencyAccount, '| showAgencyCard:', showAgencyCard);
   var PLAN_BASE_PRICES = {
     premium: parseFloat(globalSettings.premium_plan_price || window.__gethomeSettings?.premium_plan_price || 8500),
     agency: parseFloat(globalSettings.agency_plan_price || window.__gethomeSettings?.agency_plan_price || 35000),
@@ -2972,6 +2973,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             account_name: (subData && subData.account_name) || prev?.account_name || null,
           });
         });
+        console.log('AgentProfile set - agent_type:', agentData?.agent_type, '| profile agent_type:', subData?.agent_type, '| user agent_type:', user?.agent_type);
         console.log('Agent profile loaded - tier:', subData && subData.subscription_tier, '| unlimited:', subData && subData.is_unlimited);
       })
       .catch(function() {});
