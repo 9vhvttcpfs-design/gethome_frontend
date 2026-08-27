@@ -2526,11 +2526,12 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
   var isAgencyAccount = agentType === 'agency' || agentProfile?.agent_type === 'agency';
   // Which upgrade cards this agent should see:
   // - Premium: only for non-agency agents currently on Free
-  // - Agency: only for agency-type accounts currently on Free or Premium
+  // - Agency: any agent currently on Free or Premium — account type does not
+  //   gate which plans can be purchased.
   // - Unlimited: shown to everyone below (its own block handles the
   //   already-unlimited state), so no free/premium/agency gate applies to it.
   var showPremiumCard = currentTier === 'free' && !isAgencyAccount;
-  var showAgencyCard  = (currentTier === 'free' || currentTier === 'premium') && isAgencyAccount;
+  var showAgencyCard  = currentTier === 'free' || currentTier === 'premium';
   console.log('AgentUpgradePanel - agentType prop:', agentType, '| agentProfile.agent_type:', agentProfile?.agent_type, '| isAgencyAccount:', isAgencyAccount, '| showAgencyCard:', showAgencyCard);
   var PLAN_BASE_PRICES = {
     premium: parseFloat(globalSettings.premium_plan_price || window.__gethomeSettings?.premium_plan_price || 8500),
