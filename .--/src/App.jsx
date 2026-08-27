@@ -8700,9 +8700,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
                       {[
                         { label: 'Total Revenue', value: monthlyHistory.total_subscription_revenue || 0, color: '#0a2240', icon: '💰' },
-                        { label: 'GHA Commission', value: monthlyHistory.gha_commission || 0, color: '#27ae60', icon: '👷' },
-                        { label: 'SA Commission', value: monthlyHistory.sa_commission || 0, color: '#3b82f6', icon: '🤝' },
+                        { label: 'GHA Commission', value: monthlyHistory.gha_commission || 0, sub: 'Unpaid: ₦' + parseFloat(monthlyHistory.unpaid_gha_commission || 0).toLocaleString(), color: '#27ae60', icon: '👷' },
+                        { label: 'SA Commission', value: monthlyHistory.sa_commission || 0, sub: 'Unpaid: ₦' + parseFloat(monthlyHistory.unpaid_sa_commission || 0).toLocaleString(), color: '#3b82f6', icon: '🤝' },
                         { label: 'Inspections', value: monthlyHistory.total_inspections || 0, color: '#f59e0b', icon: '🔍', isCount: true },
+                        { label: 'Agents', value: monthlyHistory.agent_subscriptions || 0, color: '#8b5cf6', icon: '👥', isCount: true },
                       ].map(function(stat) {
                         return (
                           <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
@@ -8711,6 +8712,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.94rem' }}>
                               {stat.isCount ? stat.value : '₦' + parseFloat(stat.value).toLocaleString()}
                             </p>
+                            {stat.sub && <p style={{ margin: '2px 0 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>{stat.sub}</p>}
                           </div>
                         );
                       })}
@@ -11909,7 +11911,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         {ghaTab === 'monthly-history' && (function() {
           var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
           var snapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
-          var earningsRows = (historyEarnings && historyEarnings.earnings) || [];
           var totalAgentsActive = (snapshots || []).length;
           var yourCommission = historyEarnings ? (historyEarnings.total_commission || 0) : (monthlyHistory ? (monthlyHistory.total_commission || 0) : 0);
 
@@ -11949,39 +11950,54 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     })}
                   </div>
 
-                  {/* Agent earnings breakdown — sourced from the earnings endpoint, not agent_snapshots
-                      (commission_generated on the snapshot isn't populated). */}
+                  {/* Per-agent breakdown — sourced from the monthly-history response's agents array */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                  {earningsRows.length === 0 ? (
+                  {(monthlyHistory.agents || []).length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '16px', fontFamily: "'Inter', sans-serif" }}>
-                      No earnings for {historyMonth}
+                      No agent activity for {historyMonth}
                     </p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {earningsRows.map(function(earning, idx) {
+                      {(monthlyHistory.agents || []).map(function(agent) {
                         return (
-                          <div key={earning.agent_id || earning.agent_email || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
-                            <div>
-                              <p style={{ margin: '0 0 2px 0', fontSize: '0.80rem', fontWeight: '600', color: '#374151', fontFamily: "'Inter', sans-serif" }}>
-                                {earning.agent_email}
-                              </p>
-                              <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>
-                                {fmtMoney(earning.subscription_amount)} × {earning.commission_rate ?? currentGhaRate}%
-                              </p>
-                            </div>
-                            <div style={{ textAlign: 'right' }}>
-                              <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.90rem', fontFamily: "'Inter', sans-serif" }}>
-                                {fmtMoney(earning.commission_amount)}
-                              </p>
-                              {earning.is_paid != null && (
-                                <span style={{ fontSize: '0.66rem', fontWeight: '700',
-                                  color: earning.is_paid ? '#166534' : '#92400e',
-                                  backgroundColor: earning.is_paid ? '#f0fff4' : '#fef3c7',
-                                  borderRadius: '10px', padding: '1px 6px' }}>
-                                  {earning.is_paid ? '✓ PAID' : 'PENDING'}
+                          <div key={agent.agent_id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontSize: '0.80rem', fontWeight: '600', color: '#374151' }}>
+                                  {agent.agent_email}
+                                </p>
+                                <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8' }}>
+                                  ₦{parseFloat(agent.total_subscription || 0).toLocaleString()} revenue · {agent.payments?.length || 0} payment(s)
+                                </p>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.88rem' }}>
+                                  ₦{parseFloat(agent.total_commission || 0).toLocaleString()}
+                                </p>
+                                <span style={{
+                                  fontSize: '0.66rem', fontWeight: '700', borderRadius: '10px', padding: '1px 6px',
+                                  backgroundColor: agent.is_paid ? '#f0fff4' : '#fef3c7',
+                                  color: agent.is_paid ? '#166534' : '#92400e',
+                                }}>
+                                  {agent.is_paid ? '✓ PAID' : 'PENDING'}
                                 </span>
-                              )}
+                              </div>
                             </div>
+                            {/* Show individual payment breakdown */}
+                            {(agent.payments || []).length > 1 && (
+                              <div style={{ marginTop: '6px', paddingLeft: '8px' }}>
+                                {agent.payments.map(function(p, i) {
+                                  return (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.70rem', color: '#64748b', padding: '2px 0' }}>
+                                      <span>{p.payment_reference?.includes('unlimited') ? '∞ Unlimited Plan' : '📋 Subscription'}</span>
+                                      <span style={{ color: p.is_paid ? '#27ae60' : '#f59e0b', fontWeight: '600' }}>
+                                        ₦{parseFloat(p.commission_amount || 0).toLocaleString()} {p.is_paid ? '✓' : '⏳'}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
