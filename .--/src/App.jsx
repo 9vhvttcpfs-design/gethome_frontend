@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Home, Search, Building2, Star, MapPin, Phone, Mail, User, Users, CheckCircle, AlertCircle, FileText, MessageSquare, Bell, Edit, Lock, BarChart2, Award, Target, Zap, Crown, RefreshCw, Send, Link, Hotel, Layers, X, Phone as PhoneIcon } from 'lucide-react';
+import { Home, Search, Building2, Star, MapPin, Mail, User, Users, CheckCircle, AlertCircle, FileText, MessageSquare, Bell, Edit, Lock, BarChart2, Award, Target, Zap, Crown, RefreshCw, Send, Link, Hotel, Layers, X, Phone as PhoneIcon } from 'lucide-react';
 import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
 import { formatLocalPrice } from './utils/pricing';
@@ -1718,6 +1718,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [depositRef, setDepositRef]               = useState('');
   const [paymentMethod, setPaymentMethod]         = useState(null);
   const [showBankDetails, setShowBankDetails]     = useState(false);
+  const [showAgentPhoto, setShowAgentPhoto]       = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
   const [inspectionBooking, setInspectionBooking]     = useState(null);
   const [inspCustomerName, setInspCustomerName]       = useState('');
@@ -1739,7 +1740,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     setInspCustomerPhone('');
     setInspBookingLoading(false);
   };
-  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); closeInspectionModal(); }, [property?.id]);
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); setShowAgentPhoto(false); closeInspectionModal(); }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
   // Shortlet calculations
@@ -2006,11 +2007,37 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
             {(property.agent_display_name || property.created_by) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 18px', borderBottom: '1px solid #f1f5f9', marginBottom: '4px' }}>
                 {property.agent_photo_url ? (
-                  <img src={property.agent_photo_url} alt='Agent'
-                    style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #27ae60', flexShrink: 0 }} />
+                  <>
+                    <img
+                      src={property.agent_photo_url}
+                      alt='Agent'
+                      onClick={function() { setShowAgentPhoto(true); }}
+                      style={{
+                        width: '52px', height: '52px', borderRadius: '50%',
+                        objectFit: 'cover', border: '2px solid #27ae60',
+                        flexShrink: 0, cursor: 'pointer',
+                      }} />
+                    {/* Full screen photo modal */}
+                    {showAgentPhoto && (
+                      <div onClick={function() { setShowAgentPhoto(false); }}
+                        style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                        <div onClick={function(e) { e.stopPropagation(); }} style={{ position: 'relative', maxWidth: '380px', width: '100%' }}>
+                          <img src={property.agent_photo_url} alt='Agent'
+                            style={{ width: '100%', borderRadius: '16px', objectFit: 'cover' }} />
+                          <p style={{ margin: '12px 0 0 0', color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: '0.90rem' }}>
+                            {property.agent_display_name || 'Verified Agent'}
+                          </p>
+                          <button onClick={function() { setShowAgentPhoto(false); }}
+                            style={{ position: 'absolute', top: '-12px', right: '-12px', backgroundColor: '#fff', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontWeight: '900', cursor: 'pointer', fontSize: '1rem' }}>
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {property.agent_type === 'agency' ? <Building2 size={18} color="#64748b" /> : <User size={18} color="#64748b" />}
+                  <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>
+                    {property.agent_type === 'agency' ? '🏢' : '👤'}
                   </div>
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -2025,14 +2052,35 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       </span>
                     )}
                   </div>
-                  {property.agent_phone && (
-                    <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Phone size={12} /> {property.agent_phone}
-                    </p>
-                  )}
                 </div>
               </div>
             )}
+            {(property.agent_display_name || property.created_by) && (function() {
+              // Get SA WhatsApp for this property
+              var saWa = formatWhatsAppNumber(
+                property.sa_whatsapp ||
+                property.agent_sa_whatsapp ||
+                globalSettings.payment_whatsapp ||
+                '2349139649368'
+              );
+              var enquiryMsg = encodeURIComponent(
+                'Hello, I have an enquiry about a property I found on GetHome.\n\n' +
+                '🏠 Property: ' + (property.title || 'Property') + '\n' +
+                '📍 Location: ' + (property.location || 'N/A') + '\n' +
+                '💰 Price: ₦' + parseFloat(property.rent || property.price || 0).toLocaleString() + '\n\n' +
+                'I would like to make an enquiry about this property. Please assist me.\n\n' +
+                'Thank you.'
+              );
+              return (
+                <div style={{ padding: '0 18px 12px 18px' }}>
+                  <a href={'https://wa.me/' + saWa + '?text=' + enquiryMsg}
+                    target='_blank' rel='noopener noreferrer'
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', padding: '11px', fontSize: '0.84rem', fontWeight: '800', textDecoration: 'none', marginTop: '10px' }}>
+                    💬 Make Enquiry via WhatsApp
+                  </a>
+                </div>
+              );
+            })()}
             {feeRows.map(function(row, i) { return (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '9px 14px' : '11px 18px', borderBottom: i < feeRows.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }}><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', color: '#374151' }}>{row.label}</span><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', fontWeight: '700', color: row.color }}>{row.amount}</span></div>); })}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
               <div>
@@ -2086,7 +2134,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
           </div>
           {isOwnListing ? (
             <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: isMobile ? '14px' : '18px', marginBottom: '16px', textAlign: 'center' }}>
-              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.82rem', color: '#64748b' }}>This is your own listing — you can't book an inspection on it.</p>
+              <p style={{ margin: 0, fontWeight: '600', fontSize: '0.82rem', color: '#64748b' }}>This is your own listing, you can't book an inspection on it.</p>
             </div>
           ) : (
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '14px', padding: isMobile ? '14px' : '18px', marginBottom: '16px' }}>
@@ -2109,7 +2157,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
           )}
           <div style={{ backgroundColor: '#f0fff4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', marginBottom: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px', pointerEvents: 'none' }}>
             <div style={{ width: '28px', height: '28px', backgroundColor: '#dcfce7', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#27ae60', fontWeight: '900', fontSize: '0.8rem', flexShrink: 0 }}>S</div>
-            <div><p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#166534', fontSize: '0.80rem' }}>Your money is 100% protected</p><p style={{ margin: 0, color: '#15803d', fontSize: '0.74rem', lineHeight: '1.5' }}>Funds held in escrow -- never paid to agent until you verify and approve.</p></div>
+            <div><p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#166534', fontSize: '0.80rem' }}>Your money is 100% protected</p><p style={{ margin: 0, color: '#15803d', fontSize: '0.74rem', lineHeight: '1.5' }}>Funds held in escrow, never paid to agent until you verify and approve.</p></div>
           </div>
           {depositDone ? (
             <div style={{ backgroundColor: '#f0fff4', border: '1.5px solid #86efac', borderRadius: '12px', padding: '14px 16px', marginBottom: '10px' }}>
@@ -2684,7 +2732,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                 {[
                   'Unlimited property listings for ' + unlimitedDuration + ' months',
                   'No monthly subscription needed',
-                  'All listing types — Rent, Sale, Shortlet',
+                  'All listing types, Rent, Sale, Shortlet',
                   'GHA verification available on all listings',
                   'Featured listing option available',
                 ].map(function(feature, i) {
@@ -2748,7 +2796,7 @@ function AgentUpgradePanel({ currentTier, agentEmail, agentId, agentType, agentS
                     alert('Error: ' + err.message);
                   }
                 }} style={{ width: '100%', padding: '13px', backgroundColor: '#7e22ce', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: 'pointer' }}>
-                  ∞ Get Unlimited Plan — ₦{unlimitedPrice.toLocaleString()}
+                  ∞ Get Unlimited Plan at ₦{unlimitedPrice.toLocaleString()}
                 </button>
               )}
             </div>
@@ -2895,8 +2943,8 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     // live on `profiles` — confirmed via Supabase SQL editor that `agents`
     // has none of the subscription_* columns. Fetched in parallel and merged.
     return Promise.all([
-      supabase.from('agents').select('phone, profile_photo_url, city').eq('id', user.id).single(),
-      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, subscription_amount, is_unlimited, unlimited_listings, unlimited_expires_at, bank_name, bank_code, account_number, account_name').eq('id', user.id).single(),
+      supabase.from('agents').select('phone, profile_photo_url, city, agent_type, agency_name, nin_verified, cac_verified').eq('id', user.id).single(),
+      supabase.from('profiles').select('subscription_tier, subscription_status, subscription_end, subscription_amount, is_unlimited, unlimited_listings, unlimited_expires_at, bank_name, bank_code, account_number, account_name, agent_type, agency_name').eq('id', user.id).single(),
     ])
       .then(function(results) {
         var agentData = results[0] && results[0].data;
@@ -2904,6 +2952,11 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
         if (!agentData && !subData) return;
         setAgentProfile(function(prev) {
           return Object.assign({}, prev, agentData || {}, {
+            // agent_type/agency_name: prefer the `agents` row, fall back to
+            // `profiles`, then the session `user` — so the Agency plan card
+            // shows even when `user` was logged in before agent_type existed.
+            agent_type: (agentData && agentData.agent_type) || (subData && subData.agent_type) || user?.agent_type || prev?.agent_type || null,
+            agency_name: (agentData && agentData.agency_name) || (subData && subData.agency_name) || user?.agency_name || prev?.agency_name || null,
             subscription_tier: (subData && subData.subscription_tier) || prev?.subscription_tier || 'free',
             subscription_status: (subData && subData.subscription_status) || prev?.subscription_status || 'inactive',
             subscription_end: (subData && subData.subscription_end) || prev?.subscription_end || null,
@@ -4311,7 +4364,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             </p>
           </div>
         )}
-        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} agentProfile={agentProfile} globalSettings={globalSettings} />
+        <AgentUpgradePanel currentTier={agentTier} agentEmail={user?.email} agentId={user?.id} agentType={agentProfile?.agent_type || user?.agent_type} agentStatus={agentStatus} activePromo={activePromo} agentProfile={agentProfile} globalSettings={globalSettings} />
       </div>
       {myListings.length > 0 ? (
         <div style={{ ...cardStyle, padding: isMobile ? '16px' : '28px' }}>
@@ -4430,6 +4483,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [adminFeeInput, setAdminFeeInput]               = useState('');
   const [adminFeeMsg, setAdminFeeMsg]                   = useState('');
   const [deposits, setDeposits]                         = useState([]);
+  const [depositSubscriptions, setDepositSubscriptions] = useState([]);
+  const [depositsTotal, setDepositsTotal]              = useState(0);
   const [depositsLoading, setDepositsLoading]           = useState(false);
   const [depositMsg, setDepositMsg]                     = useState('');
   const [confirmingDepositId, setConfirmingDepositId]   = useState(null);
@@ -4778,7 +4833,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
-      setDeposits(Array.isArray(data) ? data : []);
+      // /api/admin/deposits returns { deposits, total, page, subscriptions } —
+      // fall back to a bare array in case the shape ever changes.
+      if (res.ok) {
+        setDeposits(Array.isArray(data) ? data : (data.deposits || []));
+        setDepositSubscriptions(data.subscriptions || []);
+        setDepositsTotal(data.total || 0);
+        console.log('Deposits loaded:', (data.deposits || []).length, '| subscriptions:', (data.subscriptions || []).length);
+      }
     } catch(e) { console.error('Deposits fetch error:', e.message); }
     finally { setDepositsLoading(false); }
   };
@@ -6340,17 +6402,29 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         <div key={d.id} style={{ ...cardStyle, padding: '11px 14px', borderLeft: isConfirmed ? '3px solid #86efac' : '3px solid #ddd6fe' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.property_title || '—'}</p>
-                              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>{d.property_location || ''}</p>
+                              <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>
+                                {d.customer_name || d.payer_name || d.user_name || 'Unknown Customer'}
+                              </p>
+                              <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                ✉ {d.customer_email || d.payer_email || d.user_email || 'No email'}
+                              </p>
+                              {d.property_title && d.property_title !== 'N/A' && (
+                                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>
+                                  🏠 {d.property_title}{d.property_location && d.property_location !== 'N/A' ? ' · 📍 ' + d.property_location : ''}
+                                </p>
+                              )}
                             </div>
-                            {isConfirmed
-                              ? <span style={{ fontSize: '0.60rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>CONFIRMED</span>
-                              : <span style={{ fontSize: '0.60rem', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>PENDING</span>}
+                            <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
+                              <p style={{ margin: '0 0 3px 0', fontWeight: '900', color: '#27ae60', fontSize: '0.98rem' }}>{fmtNGN(d.deposit_amount || d.amount)}</p>
+                              {isConfirmed
+                                ? <span style={{ fontSize: '0.60rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '2px 8px', borderRadius: '20px', fontWeight: '800' }}>CONFIRMED</span>
+                                : <span style={{ fontSize: '0.60rem', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '20px', fontWeight: '800' }}>PENDING</span>}
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginBottom: '8px', fontSize: '0.74rem' }}>
-                            <span style={{ color: '#64748b' }}>Customer: <strong style={{ color: '#0a2240' }}>{d.user_email || '—'}</strong></span>
-                            <span style={{ color: '#64748b' }}>Amount: <strong style={{ color: '#166534' }}>{fmtNGN(d.deposit_amount)}</strong></span>
-                            <span style={{ color: '#94a3b8', fontSize: '0.70rem' }}>Ref: {d.reference || '—'} · {d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px', fontSize: '0.70rem', color: '#94a3b8' }}>
+                            <span>Ref: {d.deposit_reference || d.reference || d.payment_reference || 'N/A'}</span>
+                            {d.customer_phone && d.customer_phone !== 'N/A' && <span>📞 {d.customer_phone}</span>}
+                            <span>{d.deposit_date || d.created_at ? new Date(d.deposit_date || d.created_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : ''}</span>
                           </div>
                           <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? '8px' : '6px', flexWrap: 'wrap', width: isMobile ? '100%' : undefined }}>
                             <button onClick={function(){ var msg = encodeURIComponent('Hello, following up on deposit ref: ' + (d.reference || '') + ' for: ' + (d.property_title || '')); window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + msg, '_blank'); }}
@@ -6365,6 +6439,38 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               <button onClick={function(){ setDepositViewingProperty(linkedProperty); }}
                                 style={{ padding: '5px 10px', backgroundColor: '#eef2f7', color: '#0a2240', border: '1.5px solid #e2e8f0', borderRadius: '7px', fontSize: '0.68rem', fontWeight: '600', cursor: 'pointer', width: isMobile ? '100%' : undefined }}>View Listing</button>
                             )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Agent Subscription Payments */}
+                {depositSubscriptions.length > 0 && (
+                  <div style={{ marginTop: '20px' }}>
+                    <p style={{ margin: '0 0 12px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>
+                      Agent Subscription Payments
+                    </p>
+                    {depositSubscriptions.map(function(sub, i) {
+                      return (
+                        <div key={i} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                              {sub.full_name || sub.email}
+                            </p>
+                            <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.74rem' }}>{sub.email}</p>
+                            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.70rem' }}>
+                              {sub.subscription_tier} · {sub.subscription_start ? new Date(sub.subscription_start).toLocaleDateString('en-NG') : 'N/A'}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <p style={{ margin: '0 0 4px 0', fontWeight: '900', color: '#27ae60', fontSize: '0.94rem' }}>
+                              ₦{parseFloat(sub.subscription_amount || 0).toLocaleString()}
+                            </p>
+                            <span style={{ backgroundColor: '#f0fff4', color: '#166534', borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                              {sub.subscription_status?.toUpperCase() || 'ACTIVE'}
+                            </span>
                           </div>
                         </div>
                       );
