@@ -4569,7 +4569,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
   const [staffPayMsg, setStaffPayMsg]                   = useState('');
   // Redesigned Staff Payments tab: GHA / SA / Inspection sections, each with location grouping
-  const [staffPayTab, setStaffPayTab]                   = useState('gha'); // 'gha' | 'sa' | 'inspection'
+  const [staffPayTab, setStaffPayTab]                   = useState('gha'); // 'gha' | 'sa'
   const [saLocationTab, setSaLocationTab]               = useState('all');
   // Redesigned Earnings tab
   const [earningsSummary, setEarningsSummary]           = useState({});
@@ -5384,8 +5384,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
   useEffect(function() {
     if (adminTab === 'inspections' && inspectionsSubTab === 'gha-payments') fetchGHAPayments();
-    if (adminTab === 'staff-payments' && staffPayTab === 'inspection') fetchGHAPayments();
-  }, [adminTab, inspectionsSubTab, staffPayTab, ghaPaymentsMonth]);
+  }, [adminTab, inspectionsSubTab, ghaPaymentsMonth]);
 
   // Staff Payments: load on tab open + auto-refresh every 30s while the tab is active.
   // Month changes are driven directly by the input's onChange, so month is not a dep here;
@@ -8044,7 +8043,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             {adminTab === 'staff-payments' && (function() {
               var ghaList = (ghaStaffPayments && ghaStaffPayments.length ? ghaStaffPayments : (staffPayments && (staffPayments.ghas || staffPayments.gha_payments))) || [];
               var saList = (saStaffPayments && saStaffPayments.length ? saStaffPayments : (staffPayments && (staffPayments.sas || staffPayments.sa_payments))) || [];
-              var inspList = (ghaPayments && ghaPayments.gha_payments) || [];
 
               function locOptions(list) {
                 var seen = {}; var out = ['all'];
@@ -8072,70 +8070,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 );
               }
 
-              function renderInspCard(gha) {
-                var hasBankDetails = !!(gha.bank_name && gha.account_number && gha.account_name);
-                var amt = gha.total_inspection_payment || 0;
-                var count = gha.confirmed_inspections != null ? gha.confirmed_inspections : (gha.total_inspections || 0);
-                var name = gha.full_name || gha.gha_name;
-                var isPaid = !!gha.is_paid || amt === 0;
-                return (
-                  <div key={gha.gha_id || gha.gha_code} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1.5px solid ' + (isPaid ? '#bbf7d0' : '#fde68a') }}>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                      <div>
-                        <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#0a2240', fontSize: '0.92rem' }}>
-                          {gha.gha_code} — {name}
-                        </p>
-                        {gha.location && <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>📍 {gha.location}</p>}
-                      </div>
-                      <p style={{ margin: 0, fontWeight: '900', color: isPaid ? '#94a3b8' : '#27ae60', fontSize: '1.1rem' }}>
-                        {isPaid ? '✓ Paid' : '₦' + parseFloat(amt).toLocaleString()}
-                      </p>
-                    </div>
-
-                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '10px 12px', marginBottom: '12px', fontSize: '0.78rem', color: '#374151' }}>
-                      {count} confirmed inspection{count === 1 ? '' : 's'} × ₦{parseFloat(gha.fee_per_inspection || 0).toLocaleString()} = <strong>₦{parseFloat(amt).toLocaleString()}</strong>
-                    </div>
-
-                    {hasBankDetails ? (
-                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #bbf7d0' }}>
-                        <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#166534', fontSize: '0.80rem' }}>🏦 {gha.bank_name}</p>
-                        <p style={{ margin: '0 0 2px 0', color: '#0a2240', fontWeight: '800', fontSize: '0.88rem', letterSpacing: '0.08em' }}>{gha.account_number}</p>
-                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.76rem' }}>{gha.account_name}</p>
-                      </div>
-                    ) : (
-                      <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #fed7aa' }}>
-                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#c2410c', fontWeight: '600' }}>⚠ No bank account on file</p>
-                      </div>
-                    )}
-
-                    {amt > 0 && !gha.is_paid && (
-                      <button
-                        disabled={!hasBankDetails}
-                        onClick={async function() {
-                          if (!hasBankDetails) { alert('No bank account on file'); return; }
-                          if (!window.confirm('Mark ₦' + parseFloat(amt).toLocaleString() + ' inspection payment as paid to ' + name + '?')) return;
-                          try {
-                            var token = localStorage.getItem('gh_token');
-                            var res = await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                              body: JSON.stringify({ gha_id: gha.gha_id, month: ghaPaymentsMonth, amount: amt, inspection_count: count }),
-                            });
-                            var data = await res.json();
-                            if (!res.ok) throw new Error(data.error || 'Failed');
-                            fetchGHAPayments();
-                          } catch(err) { alert('Error: ' + err.message); }
-                        }}
-                        style={{ width: '100%', padding: '12px', fontWeight: '800', fontSize: '0.86rem', border: 'none', borderRadius: '10px', cursor: hasBankDetails ? 'pointer' : 'not-allowed',
-                          backgroundColor: hasBankDetails ? '#0a2240' : '#94a3b8', color: '#fff' }}>
-                        {hasBankDetails ? '✓ Mark ₦' + parseFloat(amt).toLocaleString() + ' as Paid' : 'No Bank Account'}
-                      </button>
-                    )}
-                  </div>
-                );
-              }
-
               var ghaLocOpts = locOptions(ghaList);
               var saLocOpts = locOptions(saList);
               var ghaFiltered = filterByLoc(ghaList, paymentLocationTab);
@@ -8147,7 +8081,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Staff Payments</h2>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <input type="month" value={staffPaymentsMonth} onChange={function(e){ setStaffPaymentsMonth(e.target.value); setGhaPaymentsMonth(e.target.value); fetchStaffPayments(e.target.value); }} style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
-                      <button onClick={function(){ fetchStaffPayments(staffPaymentsMonth); fetchGHAPayments(); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                      <button onClick={function(){ fetchStaffPayments(staffPaymentsMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
                     </div>
                   </div>
 
@@ -8162,10 +8096,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     {[
                       { key: 'gha', label: 'GHA Payments' },
                       { key: 'sa', label: 'SA Payments' },
-                      { key: 'inspection', label: 'Inspection Payments' },
                     ].map(function(t) {
                       return (
-                        <button key={t.key} onClick={function() { setStaffPayTab(t.key); if (t.key === 'inspection') fetchGHAPayments(); }}
+                        <button key={t.key} onClick={function() { setStaffPayTab(t.key); }}
                           style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: '800', fontSize: '0.82rem',
                             backgroundColor: staffPayTab === t.key ? '#0a2240' : '#f1f5f9',
                             color: staffPayTab === t.key ? '#fff' : '#64748b' }}>
@@ -8184,7 +8117,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       ) : ghaFiltered.length === 0 ? (
                         <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No GHA payments for {staffPaymentsMonth}</p>
                       ) : ghaFiltered.map(function(gha) {
+                        // total_due from backend already includes unpaid_commission + inspection_payment
                         var totalDue = gha.total_due || 0;
+                        console.log('GHA', gha.gha_code, '| commission:', gha.unpaid_commission, '| inspection:', gha.inspection_payment, '| total:', totalDue);
                         return (
                           <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1.5px solid ' + (totalDue > 0 ? '#fde68a' : '#bbf7d0') }}>
                             {/* Header */}
@@ -8246,13 +8181,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               </div>
                             )}
 
-                            {/* Pay buttons */}
+                            {/* Pay buttons — commission + inspection, both inside the GHA card */}
                             {totalDue > 0 && (
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                {gha.unpaid_commission > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {/* Pay commission button */}
+                                {(gha.unpaid_commission || 0) > 0 && (
                                   <button disabled={!gha.has_bank_details}
                                     onClick={async function() {
-                                      if (!gha.has_bank_details) { alert('No bank details'); return; }
+                                      if (!gha.has_bank_details) { alert('No bank details on file for this GHA'); return; }
                                       if (!window.confirm('Pay commission ₦' + parseFloat(gha.unpaid_commission).toLocaleString() + ' to ' + gha.full_name + '?')) return;
                                       try {
                                         var token = localStorage.getItem('gh_token');
@@ -8263,34 +8199,76 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                         });
                                         var d = await res.json();
                                         if (!res.ok) throw new Error(d.error || 'Failed');
+                                        alert('Commission paid to ' + gha.full_name);
                                         fetchStaffPayments();
                                       } catch(err) { alert('Error: ' + err.message); }
                                     }}
-                                    style={{ flex: 1, padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed',
-                                      backgroundColor: gha.has_bank_details ? '#0a2240' : '#94a3b8', color: '#fff' }}>
-                                    ✓ Pay Commission ₦{parseFloat(gha.unpaid_commission).toLocaleString()}
+                                    style={{ width: '100%', padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem',
+                                      backgroundColor: gha.has_bank_details ? '#0a2240' : '#94a3b8',
+                                      color: '#fff', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed' }}>
+                                    ✓ Pay Commission — ₦{parseFloat(gha.unpaid_commission || 0).toLocaleString()}
                                   </button>
                                 )}
-                                {gha.inspection_payment > 0 && !gha.inspection_paid && (
+
+                                {/* Pay inspection button */}
+                                {(gha.inspection_payment || 0) > 0 && !gha.inspection_paid && (
                                   <button disabled={!gha.has_bank_details}
                                     onClick={async function() {
-                                      if (!gha.has_bank_details) { alert('No bank details'); return; }
-                                      if (!window.confirm('Pay inspection ₦' + parseFloat(gha.inspection_payment).toLocaleString() + ' to ' + gha.full_name + '?')) return;
+                                      if (!gha.has_bank_details) { alert('No bank details on file for this GHA'); return; }
+                                      if (!window.confirm('Pay inspection fee ₦' + parseFloat(gha.inspection_payment).toLocaleString() + ' to ' + gha.full_name + '? (' + gha.confirmed_inspections + ' inspections)')) return;
                                       try {
                                         var token = localStorage.getItem('gh_token');
                                         var res = await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
                                           method: 'POST',
                                           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                          body: JSON.stringify({ gha_id: gha.gha_id, month: staffPaymentsMonth, amount: gha.inspection_payment, inspection_count: gha.confirmed_inspections }),
+                                          body: JSON.stringify({
+                                            gha_id: gha.gha_id,
+                                            month: staffPaymentsMonth,
+                                            amount: gha.inspection_payment,
+                                            inspection_count: gha.confirmed_inspections,
+                                          }),
                                         });
                                         var d = await res.json();
                                         if (!res.ok) throw new Error(d.error || 'Failed');
+                                        alert('Inspection payment made to ' + gha.full_name);
                                         fetchStaffPayments();
                                       } catch(err) { alert('Error: ' + err.message); }
                                     }}
-                                    style={{ flex: 1, padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed',
-                                      backgroundColor: gha.has_bank_details ? '#27ae60' : '#94a3b8', color: '#fff' }}>
-                                    ✓ Pay Inspection ₦{parseFloat(gha.inspection_payment).toLocaleString()}
+                                    style={{ width: '100%', padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem',
+                                      backgroundColor: gha.has_bank_details ? '#27ae60' : '#94a3b8',
+                                      color: '#fff', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed' }}>
+                                    ✓ Pay Inspection — ₦{parseFloat(gha.inspection_payment || 0).toLocaleString()} ({gha.confirmed_inspections} inspection{gha.confirmed_inspections !== 1 ? 's' : ''})
+                                  </button>
+                                )}
+
+                                {/* Pay all button when both are due */}
+                                {(gha.unpaid_commission || 0) > 0 && (gha.inspection_payment || 0) > 0 && !gha.inspection_paid && (
+                                  <button disabled={!gha.has_bank_details}
+                                    onClick={async function() {
+                                      if (!gha.has_bank_details) { alert('No bank details on file'); return; }
+                                      var total = parseFloat(gha.unpaid_commission || 0) + parseFloat(gha.inspection_payment || 0);
+                                      if (!window.confirm('Pay ALL ₦' + total.toLocaleString() + ' to ' + gha.full_name + '?\n\nCommission: ₦' + parseFloat(gha.unpaid_commission).toLocaleString() + '\nInspection: ₦' + parseFloat(gha.inspection_payment).toLocaleString())) return;
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        // Pay commission
+                                        await fetch(API_URL + '/api/admin/mark-staff-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ staff_id: gha.gha_id, staff_type: 'GHA', month: staffPaymentsMonth }),
+                                        });
+                                        // Pay inspection
+                                        await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ gha_id: gha.gha_id, month: staffPaymentsMonth, amount: gha.inspection_payment, inspection_count: gha.confirmed_inspections }),
+                                        });
+                                        alert('All payments made to ' + gha.full_name);
+                                        fetchStaffPayments();
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }}
+                                    style={{ width: '100%', padding: '11px', border: '2px solid #0a2240', borderRadius: '10px', fontWeight: '900', fontSize: '0.84rem',
+                                      backgroundColor: '#fff', color: '#0a2240', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed' }}>
+                                    ⚡ Pay All — ₦{(parseFloat(gha.unpaid_commission || 0) + parseFloat(gha.inspection_payment || 0)).toLocaleString()}
                                   </button>
                                 )}
                               </div>
@@ -8393,16 +8371,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   )}
 
-                  {/* Inspection Payments */}
-                  {staffPayTab === 'inspection' && (
-                    <div>
-                      {ghaPaymentsLoading ? (
-                        <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>Loading inspection payments…</p>
-                      ) : inspList.length === 0 ? (
-                        <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No inspection payments for {ghaPaymentsMonth}</p>
-                      ) : inspList.map(renderInspCard)}
-                    </div>
-                  )}
                 </div>
               );
             })()}
