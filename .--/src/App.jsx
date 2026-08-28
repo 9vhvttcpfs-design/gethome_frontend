@@ -4528,6 +4528,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [promoteMsg, setPromoteMsg]                     = useState('');
   // Staff Earnings state
   const [earningsMonth, setEarningsMonth]               = useState(new Date().toISOString().slice(0, 7));
+  const earningsMonthRef                                = useRef(earningsMonth);
+  earningsMonthRef.current = earningsMonth;
   const [earningsLoading, setEarningsLoading]           = useState(false);
   const [messages, setMessages]                         = useState([]);
   const [sentMessages, setSentMessages]                 = useState([]);
@@ -4561,6 +4563,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [ghaStaffPayments, setGhaStaffPayments]         = useState([]);
   const [saStaffPayments, setSaStaffPayments]           = useState([]);
   const [staffPaymentsMonth, setStaffPaymentsMonth]     = useState(new Date().toISOString().slice(0, 7));
+  const staffPaymentsMonthRef                           = useRef(staffPaymentsMonth);
+  staffPaymentsMonthRef.current = staffPaymentsMonth;
   const [staffPaymentsLoading, setStaffPaymentsLoading] = useState(false);
   const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
   const [staffPayMsg, setStaffPayMsg]                   = useState('');
@@ -5209,11 +5213,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     finally { setGhaPaymentsLoading(false); }
   };
 
-  const fetchStaffPayments = async function() {
+  const fetchStaffPayments = async function(monthOverride) {
     setStaffPaymentsLoading(true);
     try {
       var token = localStorage.getItem('gh_token');
-      var res = await fetch(API_URL + '/api/admin/staff-payments?month=' + staffPaymentsMonth, {
+      var month = monthOverride || staffPaymentsMonth || new Date().toISOString().slice(0, 7);
+      var res = await fetch(API_URL + '/api/admin/staff-payments?month=' + month, {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
@@ -5382,21 +5387,24 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (adminTab === 'staff-payments' && staffPayTab === 'inspection') fetchGHAPayments();
   }, [adminTab, inspectionsSubTab, staffPayTab, ghaPaymentsMonth]);
 
-  // Staff Payments: load on open + auto-refresh every 30s while the tab is active
+  // Staff Payments: load on tab open + auto-refresh every 30s while the tab is active.
+  // Month changes are driven directly by the input's onChange, so month is not a dep here;
+  // the interval reads the live month from the ref to avoid a stale-closure background fetch.
   useEffect(function() {
     if (adminTab !== 'staff-payments') return;
-    fetchStaffPayments();
-    var interval = setInterval(fetchStaffPayments, 30000);
+    fetchStaffPayments(staffPaymentsMonthRef.current);
+    var interval = setInterval(function() { fetchStaffPayments(staffPaymentsMonthRef.current); }, 30000);
     return function() { clearInterval(interval); };
-  }, [adminTab, staffPaymentsMonth]);
+  }, [adminTab]);
 
-  // Earnings: load on open + auto-refresh every 30s while the tab is active
+  // Earnings: load on tab open + auto-refresh every 30s while the tab is active.
+  // Same pattern as staff-payments above — month is driven by onChange, interval uses the ref.
   useEffect(function() {
     if (adminTab !== 'earnings') return;
-    fetchEarnings();
-    var interval = setInterval(fetchEarnings, 30000);
+    fetchEarnings(earningsMonthRef.current);
+    var interval = setInterval(function() { fetchEarnings(earningsMonthRef.current); }, 30000);
     return function() { clearInterval(interval); };
-  }, [adminTab, earningsMonth]);
+  }, [adminTab]);
 
   // Build the location tab list from the GHA payment records themselves
   useEffect(function() {
@@ -5699,7 +5707,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'earnings') fetchEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
     if (t === 'inspection-fees') fetchInspectionFees();
-    if (t === 'staff-payments') fetchStaffPayments();
+    if (t === 'staff-payments') fetchStaffPayments(staffPaymentsMonth);
     if (t === 'performance') fetchKPIs();
     if (t === 'inbox') { fetchAdminMessages(); if (allSAs.length === 0) fetchAllSAs(); if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }
     if (t === 'settings') fetchAppSettings();
@@ -7943,9 +7951,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                 {/* Month selector + refresh */}
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
                   <input type='month' value={earningsMonth}
-                    onChange={function(e) { setEarningsMonth(e.target.value); }}
+                    onChange={function(e) { setEarningsMonth(e.target.value); fetchEarnings(e.target.value); }}
                     style={{ flex: 1, padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem' }} />
-                  <button onClick={function() { fetchEarnings(); }}
+                  <button onClick={function() { fetchEarnings(earningsMonth); }}
                     style={{ padding: '9px 14px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
                     🔄
                   </button>
@@ -8138,8 +8146,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
                     <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Staff Payments</h2>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <input type="month" value={staffPaymentsMonth} onChange={function(e){ setStaffPaymentsMonth(e.target.value); setGhaPaymentsMonth(e.target.value); }} style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
-                      <button onClick={function(){ fetchStaffPayments(); fetchGHAPayments(); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                      <input type="month" value={staffPaymentsMonth} onChange={function(e){ setStaffPaymentsMonth(e.target.value); setGhaPaymentsMonth(e.target.value); fetchStaffPayments(e.target.value); }} style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                      <button onClick={function(){ fetchStaffPayments(staffPaymentsMonth); fetchGHAPayments(); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
                     </div>
                   </div>
 
@@ -10571,11 +10579,22 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         var data = await res.json();
         if (data) {
           setGhaProfile(data);
-          // Set bank detail states from profile response
-          if (data.bank_name) setGhaBankName(data.bank_name);
-          if (data.account_number) setGhaBankAccount(data.account_number);
-          if (data.account_name) setGhaBankAccountName(data.account_name);
-          if (data.bank_code) setGhaBankCode(data.bank_code);
+          // Explicit bank detail pre-fill from profile response
+          if (data.bank_name) {
+            setGhaBankName(data.bank_name);
+            setGhaBankAccount(data.account_number || '');
+            setGhaBankAccountName(data.account_name || '');
+            setGhaBankCode(data.bank_code || '');
+            setBankForm({
+              bank_name: data.bank_name,
+              account_number: data.account_number || '',
+              account_name: data.account_name || '',
+              bank_code: data.bank_code || '',
+            });
+            console.log('Bank details pre-filled:', data.bank_name, data.account_number);
+          } else {
+            console.log('No bank details found for this GHA');
+          }
           console.log('GHA profile loaded - has bank:', data.has_bank_details, '| bank:', data.bank_name);
         }
         var stored = JSON.parse(localStorage.getItem('gh_staff_user') || '{}');
@@ -11155,8 +11174,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           localStorage.setItem('gh_staff_user', JSON.stringify(updatedUser));
                         } catch(e) {}
 
-                        setBankMsg('Bank details saved successfully! Payments will be sent to this account.');
-                        setTimeout(function() { setBankMsg(''); }, 5000);
+                        setBankMsg('✓ Bank details saved successfully');
+                        // Refresh profile to confirm save
+                        fetchGHAProfile();
+                        setTimeout(function() { setBankMsg(''); }, 3000);
                       } catch(err) {
                         setBankMsg('Error: ' + err.message);
                       } finally {
