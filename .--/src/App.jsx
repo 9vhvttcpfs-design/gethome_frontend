@@ -7937,6 +7937,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <input type="month" value={earningsMonth} onChange={function(e){ setEarningsMonth(e.target.value); fetchEarnings(e.target.value); }}
                       style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
                     <button onClick={function(){ fetchEarnings(earningsMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Load</button>
+                    <button onClick={function(){ fetchEarnings(earningsMonth); fetchStaffPayments(); }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>🔄 Refresh</button>
                   </div>
                 </div>
 
@@ -14215,6 +14216,26 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No history data for this month yet.</p></div>
               ) : (
                 <div>
+                  {monthlyHistory?.totals && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                      {[
+                        { label: 'Total Revenue', value: monthlyHistory.totals.total_revenue || 0, color: '#0a2240' },
+                        { label: 'My Commission', value: monthlyHistory.totals.total_commission || 0, color: '#3b82f6' },
+                        { label: 'Pending Payment', value: monthlyHistory.totals.pending_commission || 0, color: '#f59e0b' },
+                        { label: 'Paid Out', value: monthlyHistory.totals.paid_commission || 0, color: '#27ae60' },
+                      ].map(function(stat) {
+                        return (
+                          <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                            <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.90rem' }}>
+                              ₦{parseFloat(stat.value).toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* GHA Summary */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Summary</h3>
                   {ghaSummary.length === 0 ? (
@@ -14277,27 +14298,52 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       </p>
                     </div>
                   ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <div style={{ minWidth: '760px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
-                          <span>AGENT NAME</span><span>EMAIL</span><span>TIER</span><span>SUB AMOUNT</span><span>LISTINGS</span><span>GHA CODE</span><span>COMMISSION</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {filteredSnapshots.map(function(a, idx) {
-                            return (
-                              <div key={a.id || a.agent_email || a.email || idx} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 0.7fr 1fr 0.6fr 0.8fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
-                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{a.agent_name || a.full_name || '—'}</span>
-                                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{a.agent_email || a.email || '—'}</span>
-                                <span>{tierBadgeSm(a.subscription_tier || a.tier || 'free')}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(a.subscription_amount || 0).toLocaleString()}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{a.listing_count || a.listings || 0}</span>
-                                <span style={{ color: '#0a2240', fontSize: '0.78rem' }}>{a.gha_code || '—'}</span>
-                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(a.gha_commission || a.commission_amount || a.commission_generated || 0).toLocaleString()}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {filteredSnapshots.map(function(snap, idx) {
+                        return (
+                          <div key={snap.agent_id || snap.id || snap.agent_email || idx} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px 14px', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                                  {snap.full_name || snap.agent_name || snap.agent_email || snap.email || '—'}
+                                </p>
+                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                                  {(snap.subscription_tier || snap.tier || 'Subscription')} · ₦{parseFloat(snap.subscription_amount || 0).toLocaleString()} revenue
+                                  {snap.gha_code ? ' · ' + snap.gha_code : ''}
+                                </p>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#3b82f6', fontSize: '0.90rem' }}>
+                                  ₦{parseFloat(snap.commission_amount || 0).toLocaleString()}
+                                </p>
+                                <span style={{ fontSize: '0.66rem', fontWeight: '700', borderRadius: '10px', padding: '1px 6px',
+                                  backgroundColor: snap.is_paid ? '#f0fff4' : '#fef3c7',
+                                  color: snap.is_paid ? '#166534' : '#92400e' }}>
+                                  {snap.is_paid ? '✓ PAID' : 'PENDING'}
+                                </span>
+                              </div>
+                            </div>
+                            {(snap.payments || []).length > 0 && (
+                              <div style={{ marginTop: '6px', borderTop: '1px dashed #e2e8f0', paddingTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                {snap.payments.map(function(p, pi) {
+                                  return (
+                                    <div key={p.id || p.reference || p.payment_reference || pi} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.70rem', color: '#64748b' }}>
+                                      <span>
+                                        {p.reference || p.payment_reference || p.type || 'Payment'}
+                                        {p.paid_at ? ' · ' + new Date(p.paid_at).toLocaleDateString() : ''}
+                                      </span>
+                                      <span style={{ fontWeight: '700', color: '#0a2240' }}>₦{parseFloat(p.amount || 0).toLocaleString()}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {snap.payment_reference?.includes('unlimited') && (
+                              <p style={{ margin: '4px 0 0 0', fontSize: '0.70rem', color: '#8b5cf6', fontWeight: '600' }}>∞ Unlimited Plan</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
