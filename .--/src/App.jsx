@@ -10415,9 +10415,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load monthly history');
+      // The endpoint may return per-agent rows under agent_snapshots (old shape) or earnings (new shape).
+      var rawSnapshots = data.agent_snapshots || data.earnings || [];
       // Auto-generate snapshot if no data exists for this month
-      // (GHA responses don't include gha_summaries — agent_snapshots is the field this view relies on)
-      if ((!data.agent_snapshots || data.agent_snapshots.length === 0) && m <= new Date().toISOString().slice(0, 7)) {
+      if (rawSnapshots.length === 0 && m <= new Date().toISOString().slice(0, 7)) {
         console.log('No snapshot data found for', m, '— auto-generating...');
         await fetch(API_URL + '/api/gha/request-snapshot', {
           method: 'POST',
@@ -10427,14 +10428,26 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         // Re-fetch after snapshot
         var res2 = await fetch(API_URL + '/api/gha/monthly-history?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
         data = await res2.json();
+        rawSnapshots = data.agent_snapshots || data.earnings || [];
       }
-      var enrichedSnapshots = (data.agent_snapshots || []).map(function(snap) {
+      var enrichedSnapshots = rawSnapshots.map(function(snap) {
         return Object.assign({}, snap, {
           agent_email: snap.agent_email || snap.email || '—',
           gha_code: snap.gha_code || '—',
+          commission_amount: parseFloat(snap.commission_amount || snap.total_commission || 0),
+          subscription_amount: parseFloat(snap.subscription_amount || snap.total_subscription || 0),
         });
       });
-      setMonthlyHistory(Object.assign({}, data, { agent_snapshots: enrichedSnapshots }));
+      setMonthlyHistory(Object.assign({}, data, {
+        agent_snapshots: enrichedSnapshots,
+        // Normalize totals from either shape
+        totals: data.totals || {
+          total_revenue: data.total_revenue || 0,
+          total_commission: data.total_commission || 0,
+          pending_commission: data.pending_commission || 0,
+          paid_commission: data.paid_commission || 0,
+        },
+      }));
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
@@ -10906,7 +10919,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     { label: 'ACTIVE SUBS',      value: ghaOverview.active_subscriptions || 0, borderColor: '#27ae60' },
                     { label: 'EXPIRED',          value: ghaOverview.expired_subscriptions || 0, borderColor: '#ef4444' },
                     { label: 'FREE',             value: ghaOverview.free_agents || 0,          borderColor: '#64748b' },
-                    { label: 'INSPECTIONS DONE', value: ghaOverview.inspections_done || 0,     borderColor: '#0d9488' },
+                    { label: 'INSPECTIONS DONE', value: ghaOverview.confirmed_inspections || ghaOverview.inspections_done || ghaOverview.inspection_count || 0, borderColor: '#0d9488' },
                     { label: 'RATING',           value: ghaOverview.average_rating || '—',     borderColor: '#f59e0b' },
                   ].map(function(s) {
                     return (
@@ -10962,10 +10975,19 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 {(function() {
                   // Pending payment (what GHA is owed and not yet paid)
                   var pendingCommission = ghaOverview?.pending_commission ||
+                    ghaOverview?.monthly_commission ||
                     ghaOverview?.total_commission || 0;
 
                   // This month's new earnings
                   var thisMonthCommission = ghaOverview?.monthly_commission || 0;
+
+                  // Lifetime totals — tolerate either field name from the overview endpoint
+                  var totalEarned = ghaOverview?.total_ever_earned ||
+                    ghaOverview?.all_time_commission || 0;
+                  var totalPaidOut = ghaOverview?.total_paid_out ||
+                    ghaOverview?.paid_commission || 0;
+
+                  console.log('GHA overview - pending:', pendingCommission, '| total earned:', totalEarned, '| paid out:', totalPaidOut);
 
                   return (
                     <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e' }}>
@@ -10995,13 +11017,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         <div style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
                           <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600' }}>TOTAL EARNED</p>
                           <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.84rem' }}>
-                            {'₦' + parseFloat(ghaOverview?.total_ever_earned || 0).toLocaleString()}
+                            {'₦' + parseFloat(totalEarned).toLocaleString()}
                           </p>
                         </div>
                         <div style={{ flex: 1, backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
                           <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600' }}>PAID OUT</p>
                           <p style={{ margin: 0, fontWeight: '800', color: '#27ae60', fontSize: '0.84rem' }}>
-                            {'₦' + parseFloat(ghaOverview?.total_paid_out || 0).toLocaleString()}
+                            {'₦' + parseFloat(totalPaidOut).toLocaleString()}
                           </p>
                         </div>
                       </div>
@@ -11574,8 +11596,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                         </div>
                       )}
 
-                      {/* PENDING: Mark as Done flow */}
-                      {status === 'pending' && (
+                      {/* PENDING / ASSIGNED: Mark as Done flow */}
+                      {(status === 'pending' || status === 'assigned') && (
                         <div>
                           {!isMarkingThisOne ? (
                             <button onClick={function(){ setMarkingDone(insp.id); setDoneNotes(function(prev){ return Object.assign({}, prev, { [insp.id]: '' }); }); if (isNew) setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; }); }}
@@ -11656,8 +11678,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         {/* ── MONTHLY HISTORY ── */}
         {ghaTab === 'monthly-history' && (function() {
           var months = Array.from(new Set([historyMonth].concat(availableMonths || []))).sort().reverse();
-          var snapshots = (monthlyHistory && monthlyHistory.agent_snapshots) || [];
-          var totalAgentsActive = (snapshots || []).length;
+          // New endpoint returns per-agent rows under `agents`; older/alternate shape uses `agent_snapshots`.
+          var historyRows = (monthlyHistory && monthlyHistory.agents)
+            || (monthlyHistory && monthlyHistory.agent_snapshots) || [];
+          var totalAgentsActive = historyRows.length;
           var yourCommission = historyEarnings ? (historyEarnings.total_commission || 0) : (monthlyHistory ? (monthlyHistory.total_commission || 0) : 0);
 
           return (
@@ -11702,27 +11726,27 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
                   {/* Per-agent breakdown — sourced from the monthly-history response's agents array */}
                   <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Agents — {new Date(historyMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                  {(monthlyHistory.agents || []).length === 0 ? (
+                  {historyRows.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.82rem', padding: '16px', fontFamily: "'Inter', sans-serif" }}>
                       No agent activity for {historyMonth}
                     </p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {(monthlyHistory.agents || []).map(function(agent) {
+                      {historyRows.map(function(agent, idx) {
                         return (
-                          <div key={agent.agent_id} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
+                          <div key={agent.agent_id || agent.payment_reference || agent.agent_email || idx} style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <div>
                                 <p style={{ margin: '0 0 2px 0', fontSize: '0.80rem', fontWeight: '600', color: '#374151' }}>
                                   {agent.agent_email}
                                 </p>
                                 <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8' }}>
-                                  ₦{parseFloat(agent.total_subscription || 0).toLocaleString()} revenue · {agent.payments?.length || 0} payment(s)
+                                  ₦{parseFloat(agent.total_subscription || agent.subscription_amount || 0).toLocaleString()} revenue · {agent.payments?.length || 0} payment(s)
                                 </p>
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.88rem' }}>
-                                  ₦{parseFloat(agent.total_commission || 0).toLocaleString()}
+                                  ₦{parseFloat(agent.total_commission || agent.commission_amount || 0).toLocaleString()}
                                 </p>
                                 <span style={{
                                   fontSize: '0.66rem', fontWeight: '700', borderRadius: '10px', padding: '1px 6px',
