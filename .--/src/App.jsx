@@ -1725,6 +1725,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [inspCustomerEmail, setInspCustomerEmail]     = useState('');
   const [inspCustomerPhone, setInspCustomerPhone]     = useState('');
   const [inspBookingLoading, setInspBookingLoading]   = useState(false);
+  const [feeBreakdown, setFeeBreakdown]               = useState(null);
   // An agent should never be able to book/pay for an inspection on their own
   // listing — only on other agents' listings, same as any customer.
   var isOwnListing = !!(user && property && property.created_by === user.id);
@@ -1741,19 +1742,36 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     setInspBookingLoading(false);
   };
   useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); setShowAgentPhoto(false); closeInspectionModal(); }, [property?.id]);
+  // Fetch the dynamic, per-property fee breakdown from the backend when the
+  // modal opens. Falls back silently to the client-side calculation below.
+  useEffect(function() {
+    if (!property?.id) return;
+    setFeeBreakdown(null);
+    fetch(API_URL + '/api/properties/' + property.id + '/fee-breakdown')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.grand_total) {
+          setFeeBreakdown(data);
+          console.log('Fee breakdown fetched - escrow rate:', data.escrow_rate, '| escrow fee:', data.escrow_fee);
+        }
+      })
+      .catch(function(e) { console.error('Fee breakdown fetch error:', e.message); });
+  }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
-  // Read escrow rate/cap from global settings, fall back to hardcoded defaults
-  const escrowRate = parseFloat(
+  // Read escrow rate/cap from global settings, fall back to hardcoded defaults.
+  // A dynamic per-property breakdown from the backend (feeBreakdown), when
+  // present, wins over both.
+  const escrowRate = feeBreakdown?.escrow_rate || (parseFloat(
     globalSettings?.escrow_fee_rate ||
     window.__gethomeSettings?.escrow_fee_rate ||
     ESCROW_FEE_RATE
-  ) || ESCROW_FEE_RATE;
-  const escrowCap = parseFloat(
+  ) || ESCROW_FEE_RATE);
+  const escrowCap = feeBreakdown?.escrow_cap || (parseFloat(
     globalSettings?.escrow_fee_cap ||
     window.__gethomeSettings?.escrow_fee_cap ||
     ESCROW_FEE_CAP
-  ) || ESCROW_FEE_CAP;
+  ) || ESCROW_FEE_CAP);
   // Shortlet calculations
   const nightlyCost          = isShortlet ? (Number(property.cost_per_night) || Number(property.price) || 0) : 0;
   const totalAccommodation   = nightlyCost * stayDays;
@@ -1767,8 +1785,10 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const cautionFee = Number(property.caution_fee || 0);
   const svcChg     = Number(property.service_charge || 0);
   const regularBase = rent + agencyFee + agreeFee + cautionFee + svcChg;
-  const escrowFee   = Math.min(Math.round(regularBase * escrowRate), escrowCap);
-  const grandTotal  = regularBase + escrowFee;
+  // Use backend breakdown if available, fall back to client calculation
+  const escrowFee   = feeBreakdown?.escrow_fee || Math.min(Math.round(regularBase * escrowRate), escrowCap);
+  const grandTotal  = feeBreakdown?.grand_total || (regularBase + escrowFee);
+  const escrowLabel = feeBreakdown?.escrow_label || ('GetHome Escrow Fee (' + (escrowRate * 100).toFixed(2) + '%)');
   const feeRows = isShortlet
     ? [
         { label: 'Cost Per Night',                                                  amount: fmtNGN(nightlyCost),         color: '#0a2240' },
@@ -1782,7 +1802,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         { label: 'Agreement / Documentation',  amount: fmtListingPrice(agreeFee),   color: '#e67e22' },
         { label: 'Caution / Security Deposit', amount: fmtListingPrice(cautionFee), color: '#2980b9' },
         { label: 'Service / Maintenance',      amount: fmtListingPrice(svcChg),     color: '#e67e22' },
-        { label: 'GetHome Escrow Fee (' + (escrowRate * 100).toFixed(2) + '%)', amount: fmtListingPrice(escrowFee),  color: '#27ae60' },
+        { label: escrowLabel, amount: fmtListingPrice(escrowFee),  color: '#27ae60' },
       ];
   // Determine inspection fee display — falls back to FREE when no SA has set a fee yet
   const inspectionFeeAmount = parseFloat(
@@ -1917,7 +1937,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: grandTotal,
+          amount: feeBreakdown?.grand_total || grandTotal,
           customer_email: user.email,
           customer_name: user.email,
           purpose: 'Property Deposit - ' + property.title,
