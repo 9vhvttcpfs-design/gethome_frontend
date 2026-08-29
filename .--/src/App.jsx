@@ -1759,24 +1759,30 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   }, [property?.id]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
-  // Read escrow rate/cap from global settings, fall back to hardcoded defaults.
-  // A dynamic per-property breakdown from the backend (feeBreakdown), when
-  // present, wins over both.
-  const escrowRate = feeBreakdown?.escrow_rate || (parseFloat(
+  // Escrow rate/cap: prefer the backend breakdown, then global settings, then
+  // the hardcoded defaults. Resolved synchronously so the fee breakdown renders
+  // correctly on the first paint — before the async fee-breakdown fetch lands.
+  var currentEscrowRate = parseFloat(
+    feeBreakdown?.escrow_rate ||
     globalSettings?.escrow_fee_rate ||
     window.__gethomeSettings?.escrow_fee_rate ||
-    ESCROW_FEE_RATE
-  ) || ESCROW_FEE_RATE);
-  const escrowCap = feeBreakdown?.escrow_cap || (parseFloat(
+    ESCROW_FEE_RATE  // 0.0075 fallback
+  ) || ESCROW_FEE_RATE;
+  var currentEscrowCap = parseFloat(
+    feeBreakdown?.escrow_cap ||
     globalSettings?.escrow_fee_cap ||
     window.__gethomeSettings?.escrow_fee_cap ||
-    ESCROW_FEE_CAP
-  ) || ESCROW_FEE_CAP);
+    ESCROW_FEE_CAP  // 5000 fallback
+  );
+  // Apply the cap only when one is set — a cap of 0 (or unset) means no cap.
+  var applyEscrowCap = function(amount) {
+    return currentEscrowCap > 0 ? Math.min(amount, currentEscrowCap) : amount;
+  };
   // Shortlet calculations
   const nightlyCost          = isShortlet ? (Number(property.cost_per_night) || Number(property.price) || 0) : 0;
   const totalAccommodation   = nightlyCost * stayDays;
   const shortletAgencyFee    = isShortlet ? (Number(property.agency_fee) || 0) : 0;
-  const shortletEscrowFee    = isShortlet ? Math.min(Math.round(totalAccommodation * escrowRate), escrowCap) : 0;
+  const shortletEscrowFee    = isShortlet ? applyEscrowCap(Math.round(totalAccommodation * currentEscrowRate)) : 0;
   const shortletGrandTotal   = totalAccommodation + shortletAgencyFee + shortletEscrowFee;
   // Regular rental calculations
   const rent       = Number(property.rent || (!isShortlet ? property.price : 0) || 0);
@@ -1785,16 +1791,18 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const cautionFee = Number(property.caution_fee || 0);
   const svcChg     = Number(property.service_charge || 0);
   const regularBase = rent + agencyFee + agreeFee + cautionFee + svcChg;
-  // Use backend breakdown if available, fall back to client calculation
-  const escrowFee   = feeBreakdown?.escrow_fee || Math.min(Math.round(regularBase * escrowRate), escrowCap);
-  const grandTotal  = feeBreakdown?.grand_total || (regularBase + escrowFee);
-  const escrowLabel = feeBreakdown?.escrow_label || ('GetHome Escrow Fee (' + (escrowRate * 100).toFixed(2) + '%)');
+  // Calculate escrow directly from settings — don't wait for the feeBreakdown fetch
+  var computedEscrow = Math.round(regularBase * currentEscrowRate);
+  var escrowFee = applyEscrowCap(computedEscrow);
+  var grandTotal = regularBase + escrowFee;
+  var escrowLabel = feeBreakdown?.escrow_label || ('GetHome Escrow Fee (' + (currentEscrowRate * 100).toFixed(2) + '%)');
+  console.log('Escrow calc - rate:', currentEscrowRate, '| cap:', currentEscrowCap, '| base:', regularBase, '| computed:', computedEscrow, '| final:', escrowFee);
   const feeRows = isShortlet
     ? [
         { label: 'Cost Per Night',                                                  amount: fmtNGN(nightlyCost),         color: '#0a2240' },
         { label: 'Stay Duration (' + stayDays + ' night' + (stayDays === 1 ? '' : 's') + ')', amount: fmtNGN(totalAccommodation), color: '#0a2240' },
         { label: 'Agency Fee',                                                      amount: fmtNGN(shortletAgencyFee),   color: '#e67e22' },
-        { label: 'GetHome Escrow Fee (' + (escrowRate * 100).toFixed(2) + '%)',     amount: fmtNGN(shortletEscrowFee),   color: '#27ae60' },
+        { label: 'GetHome Escrow Fee (' + (currentEscrowRate * 100).toFixed(2) + '%)', amount: fmtNGN(shortletEscrowFee),   color: '#27ae60' },
       ]
     : [
         { label: 'Annual Rent',                amount: fmtListingPrice(rent),       color: '#0a2240' },
@@ -1812,8 +1820,6 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     0
   );
   console.log('Inspection fee for property', property.id, ':', inspectionFeeAmount, '| raw inspection_fee:', property.inspection_fee);
-  const inspectionFeeLabel  = inspectionFeeAmount > 0 ? '₦' + inspectionFeeAmount.toLocaleString() : 'FREE';
-  const inspectionFeeColor  = inspectionFeeAmount > 0 ? '#0a2240' : '#27ae60';
   const loanBaseUrl = globalSettings.loan_link || LOAN_PARTNER_URL || 'https://creditdirect.ng/?ref=09077246534';
   const loanUrl = `${loanBaseUrl}${loanBaseUrl.includes('?') ? '&' : '?'}utm_source=gethome&property=${encodeURIComponent(property.title || '')}`;
   const ghBank = globalSettings.bank_details || { bank_name: GETHOME_BANK_NAME, account_number: GETHOME_ACCOUNT_NUMBER, account_name: GETHOME_ACCOUNT_NAME };
@@ -2113,19 +2119,9 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               );
             })()}
             {feeRows.map(function(row, i) { return (<div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '9px 14px' : '11px 18px', borderBottom: i < feeRows.length - 1 ? '1px solid #f1f5f9' : 'none', backgroundColor: i % 2 === 0 ? '#fff' : '#f8fafc' }}><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', color: '#374151' }}>{row.label}</span><span style={{ fontSize: isMobile ? '0.76rem' : '0.84rem', fontWeight: '700', color: row.color }}>{row.amount}</span></div>); })}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-              <div>
-                <p style={{ margin: '0 0 2px 0', fontWeight: '600', color: '#0a2240', fontSize: '0.84rem' }}>Inspection Fee</p>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>
-                  {inspectionFeeAmount > 0
-                    ? 'Required before physical inspection visit'
-                    : 'Complimentary inspection included'}
-                </p>
-              </div>
-              <p style={{ margin: 0, fontWeight: '800', color: inspectionFeeColor, fontSize: '0.92rem' }}>
-                {inspectionFeeLabel}
-              </p>
-            </div>
+            {/* Inspection fee is intentionally NOT shown here — it is handled
+                separately in the Book Inspection flow below, not part of the
+                property fee breakdown / move-in total. */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '11px 14px' : '13px 18px', backgroundColor: '#f0fff4', borderTop: '2px solid #86efac' }}><span style={{ fontSize: isMobile ? '0.82rem' : '0.9rem', fontWeight: '800', color: '#0a2240' }}>{isShortlet ? 'Total Stay Amount' : 'Total Move-In Amount'}</span><span style={{ fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: '900', color: '#27ae60' }}>{fmtListingPrice(isShortlet ? shortletGrandTotal : grandTotal)}</span></div>
           </div>
           <div style={{ marginBottom: '16px' }}>
@@ -9864,7 +9860,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
       {/* Modals */}
       {depositViewingProperty && (
-        <PricingModal property={depositViewingProperty} onClose={function(){ setDepositViewingProperty(null); }} user={user} onUserChange={function(){}} />
+        <PricingModal property={depositViewingProperty} onClose={function(){ setDepositViewingProperty(null); }} user={user} onUserChange={function(){}} globalSettings={typeof window !== 'undefined' ? (window.__gethomeSettings || {}) : {}} />
       )}
 
       {showComposeModal && (
@@ -10193,6 +10189,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [expandedAgent, setExpandedAgent]           = useState(null);
   const [doneNotes, setDoneNotes]                   = useState({});
   const [markingDone, setMarkingDone]               = useState(null);
+  const [ghaInspTab, setGhaInspTab]                 = useState('active');
   const [ghaNotifications, setGhaNotifications]     = useState([]);
   const ghaNotificationsRef                         = useRef([]);
   const [newInspIds, setNewInspIds]                 = useState(new Set());
@@ -11327,34 +11324,71 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               </span>
             </div>
 
-            {/* GHA sees: pending, assigned, gha_done - NOT confirmed (cleared once SA
-                confirms), newest first within each status group. */}
+            {/* GHA sub-tabs: Active (pending/assigned), Done (gha_done, not yet
+                SA-confirmed), Confirmed (SA has confirmed — counts toward pay),
+                Cancelled. Confirmed rows stay visible so the GHA knows the SA
+                signed off. */}
             {(function() {
+              var byNewest = function(a, b) { return new Date(b.created_at) - new Date(a.created_at); };
               var activeInspections = inspections.filter(function(i) {
-                if (i.status === 'confirmed') return false;
-                if (i.status === 'gha_done' && i.cleared_by_gha === true) return false;
-                return true;
+                return (!i.status || i.status === 'pending' || i.status === 'assigned') && !i.cleared_by_gha;
+              }).sort(byNewest);
+              var doneInspections = inspections.filter(function(i) {
+                return i.status === 'gha_done' && !i.cleared_by_gha;
+              }).sort(byNewest);
+              // Show confirmed inspections in GHA view so they know SA confirmed
+              var confirmedInspections = inspections.filter(function(i) {
+                return i.status === 'confirmed';
               }).sort(function(a, b) {
-                // Pending/assigned first, then done
-                var order = { pending: 0, assigned: 1, gha_done: 2, cancelled: 3 };
-                var statusA = order[a.status || 'pending'] ?? 0;
-                var statusB = order[b.status || 'pending'] ?? 0;
-                if (statusA !== statusB) return statusA - statusB;
-                // Within same status newest first
-                return new Date(b.created_at) - new Date(a.created_at);
+                return new Date(b.confirmed_at || b.sa_confirmed_at || b.created_at) - new Date(a.confirmed_at || a.sa_confirmed_at || a.created_at);
               });
+              var cancelledInspections = inspections.filter(function(i) {
+                return i.status === 'cancelled';
+              }).sort(byNewest);
+              var displayedInspections = ghaInspTab === 'active' ? activeInspections
+                : ghaInspTab === 'done' ? doneInspections
+                : ghaInspTab === 'confirmed' ? confirmedInspections
+                : cancelledInspections;
               return inspLoading ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
-            ) : activeInspections.length === 0 ? (
-              <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
-                <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>No inspections assigned to you yet</p>
-              </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
 
+                {/* ── SUB-TAB BAR ── */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                  {[
+                    { key: 'active', label: 'Active', count: activeInspections.length, color: '#f59e0b' },
+                    { key: 'done', label: 'Done', count: doneInspections.length, color: '#3b82f6' },
+                    { key: 'confirmed', label: 'Confirmed ✓', count: confirmedInspections.length, color: '#27ae60' },
+                    { key: 'cancelled', label: 'Cancelled', count: cancelledInspections.length, color: '#ef4444' },
+                  ].map(function(tab) {
+                    var isActive = ghaInspTab === tab.key;
+                    return (
+                      <button key={tab.key} onClick={function() { setGhaInspTab(tab.key); }}
+                        style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                          fontWeight: '700', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif",
+                          backgroundColor: isActive ? tab.color : '#f1f5f9',
+                          color: isActive ? '#fff' : '#64748b' }}>
+                        {tab.label} ({tab.count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {displayedInspections.length === 0 && (
+                  <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
+                    <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
+                    <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>
+                      {ghaInspTab === 'active' ? 'No active inspections assigned to you yet'
+                        : ghaInspTab === 'done' ? 'No inspections awaiting SA confirmation'
+                        : ghaInspTab === 'confirmed' ? 'No SA-confirmed inspections yet'
+                        : 'No cancelled inspections'}
+                    </p>
+                  </div>
+                )}
+
                 {/* ── NEW ASSIGNMENTS ── */}
-                {newInspIds.size > 0 && (
+                {ghaInspTab === 'active' && newInspIds.size > 0 && (
                   <div style={{ marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
                       <h3 style={{ margin: 0, color: '#166534', fontSize: '0.88rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New Assignments</h3>
@@ -11396,8 +11430,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   </div>
                 )}
 
-                {/* ── ALL INSPECTIONS ── */}
-                {activeInspections.map(function(insp) {
+                {/* ── INSPECTIONS FOR THE ACTIVE SUB-TAB ── */}
+                {displayedInspections.map(function(insp) {
                   var status = insp.status || 'pending';
                   var isNew = newInspIds.has(insp.id);
                   var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#cbd5e1';
@@ -11476,15 +11510,20 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       )}
 
                       {/* CONFIRMED: green checkmark card */}
-                      {status === 'confirmed' && (
+                      {status === 'confirmed' && (function() {
+                        var confAt = insp.confirmed_at || insp.sa_confirmed_at;
+                        return (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f0fff4', borderRadius: '10px', padding: '12px 16px', border: '1.5px solid #86efac' }}>
-                          <CheckCircle size={22} color="#27ae60" />
+                          <span style={{ fontSize: '1.1rem' }}>✅</span>
                           <div>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>Inspection Confirmed by SA</p>
-                            {insp.confirmed_at && <p style={{ margin: 0, fontSize: '0.72rem', color: '#4ade80', fontFamily: "'Inter', sans-serif" }}>on {new Date(insp.confirmed_at).toLocaleDateString()}</p>}
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>Confirmed by SA</p>
+                            <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
+                              {confAt ? new Date(confAt).toLocaleDateString('en-NG', { dateStyle: 'medium' }) + ' · ' : ''}This inspection counts toward your payment
+                            </p>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
 
                       {/* PENDING / ASSIGNED: Mark as Done flow */}
                       {(status === 'pending' || status === 'assigned') && (
