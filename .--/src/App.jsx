@@ -4658,6 +4658,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [agencyCommissionEnabled, setAgencyCommissionEnabled] = useState(false);
   const [ghaCommissionRate, setGhaCommissionRate]       = useState('5');
   const [saCommissionRate, setSaCommissionRate]         = useState('5');
+  const [escrowFeeRate, setEscrowFeeRate]               = useState('0.0075');
   const [unlimitedPlanPrice, setUnlimitedPlanPrice]     = useState('100000');
   const [premiumPlanPrice, setPremiumPlanPrice]         = useState('8500');
   const [agencyPlanPrice, setAgencyPlanPrice]           = useState('35000');
@@ -4715,6 +4716,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.unlimited_plan_enabled !== undefined) setUnlimitedPlanEnabled(data.unlimited_plan_enabled === 'true' || data.unlimited_plan_enabled === true);
         if (data.unlimited_plan_duration_months) setUnlimitedDurationMonths(data.unlimited_plan_duration_months);
         if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
+        if (data.escrow_fee_rate) setEscrowFeeRate(data.escrow_fee_rate);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
@@ -9865,6 +9867,57 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 )}
 
+                {/* Escrow Fee Rate — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Escrow Fee Rate</h3>
+                    <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Currently {(parseFloat(escrowFeeRate || 0.0075) * 100).toFixed(2)}% of property price. Applied to all customer transactions.
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                          Rate (decimal — e.g. 0.0075 = 0.75%)
+                        </label>
+                        <input type='number' min='0' max='0.1' step='0.0025'
+                          value={escrowFeeRate}
+                          onChange={function(e) { setEscrowFeeRate(e.target.value); }}
+                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                      </div>
+                      <div style={{ textAlign: 'center', paddingTop: '20px' }}>
+                        <p style={{ margin: 0, fontWeight: '900', color: '#0a2240', fontSize: '1.1rem' }}>
+                          {(parseFloat(escrowFeeRate || 0) * 100).toFixed(3)}%
+                        </p>
+                      </div>
+                    </div>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '0.72rem', color: '#94a3b8' }}>
+                      Example: Property price ₦1,000,000 → Escrow fee ₦{(1000000 * parseFloat(escrowFeeRate || 0)).toLocaleString()}
+                    </p>
+                    <button onClick={async function() {
+                      var rate = parseFloat(escrowFeeRate);
+                      if (isNaN(rate) || rate < 0 || rate > 0.1) {
+                        alert('Rate must be between 0 and 0.1 (10%)');
+                        return;
+                      }
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/admin/settings', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                          body: JSON.stringify({ setting_key: 'escrow_fee_rate', setting_value: String(rate) }),
+                        });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        setSettingsMsg('Escrow fee rate updated to ' + (rate * 100).toFixed(3) + '%');
+                        window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{ width: '100%', padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                      Save Escrow Rate
+                    </button>
+                  </div>
+                )}
+
                 {/* Admin Management — visible only to the super admin */}
                 {isSuperAdmin && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '2px solid #0a2240', boxShadow: '0 2px 8px rgba(10,34,64,0.10)' }}>
@@ -11080,10 +11133,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                     <span style={{ fontSize: '1.1rem' }}>🏦</span>
                     <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
-                    {staffUser?.account_number
-                      ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={11} /> Account Added</span>
-                      : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><AlertCircle size={11} /> No Account Added</span>
-                    }
                   </div>
 
                   <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 16px 0' }}>
@@ -12670,6 +12719,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             whatsapp_number: data.whatsapp_number || f.whatsapp_number,
           });
         });
+        // Pre-fill bank form fields from profile so saved details show directly in the inputs
+        if (data.bank_name || data.account_number || data.account_name || data.bank_code) {
+          setBankForm(function(prev) {
+            return Object.assign({}, prev, {
+              bank_name: data.bank_name || prev.bank_name,
+              account_number: data.account_number || prev.account_number,
+              account_name: data.account_name || prev.account_name,
+              bank_code: data.bank_code || prev.bank_code,
+            });
+          });
+        }
         if (data.whatsapp_number && data.whatsapp_number.trim()) {
           setShowWaBanner(false);
         }
@@ -14954,10 +15014,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '1.1rem' }}>🏦</span>
                 <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.92rem' }}>Bank Account Details</h3>
-                {staffUser?.account_number
-                  ? <span style={{ backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><CheckCircle size={11} /> Account Added</span>
-                  : <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}><AlertCircle size={11} /> No Account Added</span>
-                }
               </div>
 
               <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '0 0 16px 0' }}>
