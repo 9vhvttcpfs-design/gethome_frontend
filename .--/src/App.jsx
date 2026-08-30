@@ -12522,11 +12522,36 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
-      console.log('Pending agents response:', data);
-      setPendingAgents(data.pending || []);
-      console.log('Set pendingAgents count:', (data.pending || []).length);
-      setGhaInspectionAgents(data.pending_gha_inspection || []);
-      setApprovedAgents(data.approved || []);
+      console.log('Pending agents response:', Array.isArray(data) ? data.length + ' agents' : data);
+
+      // Handle both old shape {pending:[...]} and new flat array shape
+      var allAgents = Array.isArray(data) ? data : (data.pending || []).concat(data.pending_gha_inspection || []).concat(data.approved || []);
+
+      // Split by status for the three state variables
+      var APPROVED_STATUSES = ['approved'];
+      var GHA_INSPECTION_STATUSES = ['pending_gha_inspection'];
+      var PENDING_STATUSES = ['pending', 'awaiting_review', 'pending_sa_review', 'pending_sa review'];
+
+      var pendingList = allAgents.filter(function(a) {
+        return PENDING_STATUSES.includes(a.status) ||
+          // Catch-all: any status not in approved or gha_inspection goes to pending
+          (!APPROVED_STATUSES.includes(a.status) && !GHA_INSPECTION_STATUSES.includes(a.status));
+      });
+
+      var ghaInspectionList = allAgents.filter(function(a) {
+        return GHA_INSPECTION_STATUSES.includes(a.status);
+      });
+
+      var approvedList = allAgents.filter(function(a) {
+        return APPROVED_STATUSES.includes(a.status);
+      });
+
+      setPendingAgents(pendingList);
+      setGhaInspectionAgents(ghaInspectionList);
+      setApprovedAgents(approvedList);
+
+      console.log('Status values seen:', [...new Set(allAgents.map(function(a) { return a.status; }))]);
+      console.log('Pending agents split - pending:', pendingList.length, '| gha inspection:', ghaInspectionList.length, '| approved:', approvedList.length);
     } catch(e) {
       console.error('Fetch pending agents error:', e.message);
     }
