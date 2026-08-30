@@ -11302,307 +11302,208 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         )}
 
         {/* ── INSPECTIONS ── */}
-        {ghaTab === 'inspections' && (
+        {ghaTab === 'inspections' && (function() {
+          // "done" from the backend is `gha_done`; some rows only carry
+          // gha_done_at. Normalise so the tab filters and the card UI agree.
+          var isDone = function(i) {
+            return i.status === 'done' || i.status === 'gha_done'
+              || (i.gha_done_at != null && i.status !== 'confirmed' && i.status !== 'cancelled');
+          };
+          var byNewest = function(a, b) { return new Date(b.created_at) - new Date(a.created_at); };
+          var activeInspections = inspections.filter(function(i) {
+            return (!i.status || i.status === 'pending' || i.status === 'assigned')
+              && !isDone(i) && !i.cleared_by_gha;
+          }).sort(byNewest);
+          var doneInspections = inspections.filter(function(i) {
+            return isDone(i) && !i.cleared_by_gha;
+          }).sort(byNewest);
+          var confirmedInspections = inspections.filter(function(i) {
+            return i.status === 'confirmed';
+          }).sort(function(a, b) {
+            return new Date(b.sa_confirmed_at || b.confirmed_at || b.created_at) - new Date(a.sa_confirmed_at || a.confirmed_at || a.created_at);
+          });
+          var cancelledInspections = inspections.filter(function(i) {
+            return i.status === 'cancelled';
+          }).sort(byNewest);
+          var displayedInspections = ghaInspTab === 'active' ? activeInspections
+            : ghaInspTab === 'done' ? doneInspections
+            : ghaInspTab === 'confirmed' ? confirmedInspections
+            : cancelledInspections;
+
+          if (inspLoading) {
+            return <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>;
+          }
+
+          return (
           <div>
-            {/* Heading + refresh */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>My Assigned Inspections</h2>
-              <button onClick={fetchInspections} style={{ padding: '7px 14px', border: '1.5px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', color: '#0a2240', fontWeight: '600', fontSize: '0.78rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Refresh</button>
-            </div>
+            {/* Single clean inspection header */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>My Inspections</h3>
+                <button onClick={function() { fetchInspections(); }}
+                  style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '5px 10px', fontSize: '0.72rem', color: '#64748b', cursor: 'pointer' }}>
+                  🔄 Refresh
+                </button>
+              </div>
 
-            {/* Summary row */}
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{inspections.length} Total</span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return !i.status || i.status === 'pending' || i.status === 'assigned'; }).length} Pending / Assigned
-              </span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return i.status === 'gha_done' || (i.gha_done_at && i.status !== 'confirmed' && i.status !== 'cancelled'); }).length} Done
-              </span>
-              <span style={{ padding: '3px 12px', borderRadius: '20px', fontSize: '0.74rem', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>
-                {inspections.filter(function(i){ return i.status === 'confirmed'; }).length} Confirmed
-              </span>
-            </div>
-
-            {/* GHA sub-tabs: Active (pending/assigned), Done (gha_done, not yet
-                SA-confirmed), Confirmed (SA has confirmed — counts toward pay),
-                Cancelled. Confirmed rows stay visible so the GHA knows the SA
-                signed off. */}
-            {(function() {
-              var byNewest = function(a, b) { return new Date(b.created_at) - new Date(a.created_at); };
-              var activeInspections = inspections.filter(function(i) {
-                return (!i.status || i.status === 'pending' || i.status === 'assigned') && !i.cleared_by_gha;
-              }).sort(byNewest);
-              var doneInspections = inspections.filter(function(i) {
-                return i.status === 'gha_done' && !i.cleared_by_gha;
-              }).sort(byNewest);
-              // Show confirmed inspections in GHA view so they know SA confirmed
-              var confirmedInspections = inspections.filter(function(i) {
-                return i.status === 'confirmed';
-              }).sort(function(a, b) {
-                return new Date(b.confirmed_at || b.sa_confirmed_at || b.created_at) - new Date(a.confirmed_at || a.sa_confirmed_at || a.created_at);
-              });
-              var cancelledInspections = inspections.filter(function(i) {
-                return i.status === 'cancelled';
-              }).sort(byNewest);
-              var displayedInspections = ghaInspTab === 'active' ? activeInspections
-                : ghaInspTab === 'done' ? doneInspections
-                : ghaInspTab === 'confirmed' ? confirmedInspections
-                : cancelledInspections;
-              return inspLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading inspections…</p></div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-
-                {/* ── SUB-TAB BAR ── */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                  {[
-                    { key: 'active', label: 'Active', count: activeInspections.length, color: '#f59e0b' },
-                    { key: 'done', label: 'Done', count: doneInspections.length, color: '#3b82f6' },
-                    { key: 'confirmed', label: 'Confirmed ✓', count: confirmedInspections.length, color: '#27ae60' },
-                    { key: 'cancelled', label: 'Cancelled', count: cancelledInspections.length, color: '#ef4444' },
-                  ].map(function(tab) {
-                    var isActive = ghaInspTab === tab.key;
-                    return (
-                      <button key={tab.key} onClick={function() { setGhaInspTab(tab.key); }}
-                        style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
-                          fontWeight: '700', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif",
-                          backgroundColor: isActive ? tab.color : '#f1f5f9',
-                          color: isActive ? '#fff' : '#64748b' }}>
-                        {tab.label} ({tab.count})
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {displayedInspections.length === 0 && (
-                  <div style={{ ...cardSt, padding: '48px 24px', textAlign: 'center' }}>
-                    <div style={{ marginBottom: '10px', display: 'flex', justifyContent: 'center' }}><FileText size={32} color="#cbd5e1" /></div>
-                    <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif", fontWeight: '500' }}>
-                      {ghaInspTab === 'active' ? 'No active inspections assigned to you yet'
-                        : ghaInspTab === 'done' ? 'No inspections awaiting SA confirmation'
-                        : ghaInspTab === 'confirmed' ? 'No SA-confirmed inspections yet'
-                        : 'No cancelled inspections'}
-                    </p>
-                  </div>
-                )}
-
-                {/* ── NEW ASSIGNMENTS ── */}
-                {ghaInspTab === 'active' && newInspIds.size > 0 && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                      <h3 style={{ margin: 0, color: '#166534', fontSize: '0.88rem', fontWeight: '800', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>New Assignments</h3>
-                      <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800', fontFamily: "'Inter', sans-serif" }}>{newInspIds.size} NEW</span>
-                    </div>
-                    {inspections.filter(function(i){ return newInspIds.has(i.id); }).map(function(insp) {
-                      var inspDateStr = insp.inspection_date || insp.requested_date;
-                      var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                      var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
-                      var rawPhone = formatWhatsAppNumber(insp.customer_phone || insp.phone);
-                      var ghaName = staffUser.full_name || staffUser.name || 'your GetHome agent';
-                      var propAddr = insp.property_address || insp.property_title || 'the property';
-                      var waMsg = encodeURIComponent('Hello, I am ' + ghaName + ' from GetHome. I am your assigned inspection agent for the property at ' + propAddr + '. Your inspection is scheduled for ' + waDateStr + '. Please confirm this is still convenient for you.');
-                      return (
-                        <div key={insp.id} className="new-assignment-card" style={{ borderRadius: '14px', border: '3px solid #27ae60', backgroundColor: '#f0fff4', padding: '18px 20px', marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                            <span style={{ padding: '3px 12px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', backgroundColor: '#22c55e', color: '#fff', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>NEW</span>
-                            <button onClick={function(){ setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; }); }}
-                              style={{ padding: '4px 10px', backgroundColor: 'transparent', border: '1px solid #86efac', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '600', color: '#166534', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                              Acknowledge
-                            </button>
-                          </div>
-                          <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{propAddr}</p>
-                          <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
-                          {(insp.customer_email || insp.user_email) && <p style={{ margin: '0 0 10px 0', fontSize: '0.76rem', color: '#1e40af', fontFamily: "'Inter', sans-serif" }}>{insp.customer_email || insp.user_email}</p>}
-                          <div style={{ backgroundColor: '#dcfce7', borderRadius: '8px', padding: '10px 14px', marginBottom: '10px', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ fontSize: '1rem', flexShrink: 0 }}>📅</span>
-                            <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{inspDateFmt}</p>
-                          </div>
-                          {rawPhone && (
-                            <a href={'https://wa.me/' + rawPhone + '?text=' + waMsg} target="_blank" rel="noreferrer"
-                              style={{ display: 'block', width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}>
-                              WhatsApp Customer: {insp.customer_phone || insp.phone}
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* ── INSPECTIONS FOR THE ACTIVE SUB-TAB ── */}
-                {displayedInspections.map(function(insp) {
-                  var status = insp.status || 'pending';
-                  var isNew = newInspIds.has(insp.id);
-                  var borderColor = status === 'confirmed' ? '#22c55e' : status === 'gha_done' ? '#f59e0b' : '#cbd5e1';
-                  var isMarkingThisOne = markingDone === insp.id;
-                  var currentNote = doneNotes[insp.id] || '';
-                  var rawPhone = formatWhatsAppNumber(insp.customer_phone || insp.phone);
-                  var inspDateStr = insp.inspection_date || insp.requested_date;
-                  var inspDateFmt = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-                  var waDateStr = inspDateStr ? new Date(inspDateStr).toLocaleString('en-NG', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'the scheduled date';
-                  var ghaName = staffUser.full_name || staffUser.name || 'your GetHome agent';
-                  var propAddr = insp.property_address || insp.property_title || 'the property';
-                  var waMsg = encodeURIComponent('Hello, I am ' + ghaName + ' from GetHome. I am your assigned inspection agent for the property at ' + propAddr + '. Your inspection is scheduled for ' + waDateStr + '. Please confirm this is still convenient for you.');
-                  var MIN_NOTES = 20;
-                  var noteOk = currentNote.trim().length >= MIN_NOTES;
+              {/* Single tab bar */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { key: 'active', label: 'Active', count: activeInspections.length, color: '#f59e0b' },
+                  { key: 'done', label: 'Done', count: doneInspections.length, color: '#3b82f6' },
+                  { key: 'confirmed', label: 'Confirmed', count: confirmedInspections.length, color: '#27ae60' },
+                  { key: 'cancelled', label: 'Cancelled', count: cancelledInspections.length, color: '#ef4444' },
+                ].map(function(tab) {
+                  var isActive = ghaInspTab === tab.key;
                   return (
-                    <div key={insp.id} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + (isNew ? '#27ae60' : borderColor) }}>
-
-                      {/* Top: address + NEW badge */}
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                        <p style={{ margin: 0, fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Plus Jakarta Sans', sans-serif", flex: 1 }}>{propAddr}</p>
-                        {isNew && <span style={{ padding: '2px 10px', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '900', backgroundColor: '#22c55e', color: '#fff', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif", flexShrink: 0 }}>NEW</span>}
-                      </div>
-
-                      {/* Customer section */}
-                      <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', marginBottom: '12px', border: '1.5px solid #e2e8f0' }}>
-                        <p style={{ margin: '0 0 2px 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>CUSTOMER</p>
-                        <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', fontFamily: "'Inter', sans-serif" }}>{insp.customer_name || '—'}</p>
-                        {(insp.customer_email || insp.user_email) && (
-                          <a href={'mailto:' + (insp.customer_email || insp.user_email)} style={{ display: 'block', fontSize: '0.78rem', color: '#1e40af', textDecoration: 'none', marginBottom: rawPhone ? '10px' : '0', fontFamily: "'Inter', sans-serif" }}>
-                            {insp.customer_email || insp.user_email}
-                          </a>
-                        )}
-                        {rawPhone && (
-                          <a href={'https://wa.me/' + rawPhone + '?text=' + waMsg} target="_blank" rel="noreferrer"
-                            style={{ display: 'block', padding: '11px 14px', backgroundColor: '#25D366', color: '#fff', borderRadius: '10px', fontWeight: '700', fontSize: '0.86rem', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', fontFamily: "'Inter', sans-serif" }}>
-                            WhatsApp: {insp.customer_phone || insp.phone}
-                          </a>
-                        )}
-                      </div>
-
-                      {/* Inspection date/time */}
-                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '10px 14px', marginBottom: '12px', border: '1.5px solid #86efac', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>📅</span>
-                        <p style={{ margin: 0, fontWeight: '800', color: '#166534', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{inspDateFmt}</p>
-                      </div>
-
-                      {/* Badges */}
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: insp.inspection_type === 'virtual' ? '#eff6ff' : '#f5f3ff', color: insp.inspection_type === 'virtual' ? '#1e40af' : '#7c3aed', border: '1px solid ' + (insp.inspection_type === 'virtual' ? '#bfdbfe' : '#ddd6fe'), fontFamily: "'Inter', sans-serif" }}>
-                          {insp.inspection_type === 'virtual' ? 'Virtual Tour' : 'Physical Visit'}
-                        </span>
-                        {status === 'gha_done' && (
-                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontFamily: "'Inter', sans-serif" }}>Awaiting SA Confirmation</span>
-                        )}
-                        {status === 'confirmed' && (
-                          <span style={{ fontSize: '0.64rem', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif", display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <CheckCircle size={10} /> Confirmed{insp.confirmed_at ? ' · ' + new Date(insp.confirmed_at).toLocaleDateString() : ''}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* SA notes */}
-                      {(insp.sa_notes || insp.notes) && (
-                        <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1.5px solid #e2e8f0' }}>
-                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>SA NOTES</p>
-                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#475569', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.sa_notes || insp.notes}</p>
-                        </div>
-                      )}
-
-                      {/* GHA notes (once submitted) */}
-                      {insp.gha_notes && status !== 'pending' && (
-                        <div style={{ backgroundColor: '#fffbeb', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', border: '1.5px solid #fde68a' }}>
-                          <p style={{ margin: '0 0 2px 0', fontSize: '0.66rem', color: '#92400e', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>MY INSPECTION NOTES</p>
-                          <p style={{ margin: 0, fontSize: '0.80rem', color: '#78350f', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{insp.gha_notes}</p>
-                        </div>
-                      )}
-
-                      {/* CONFIRMED: green checkmark card */}
-                      {status === 'confirmed' && (function() {
-                        var confAt = insp.confirmed_at || insp.sa_confirmed_at;
-                        return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#f0fff4', borderRadius: '10px', padding: '12px 16px', border: '1.5px solid #86efac' }}>
-                          <span style={{ fontSize: '1.1rem' }}>✅</span>
-                          <div>
-                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#166534', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>Confirmed by SA</p>
-                            <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
-                              {confAt ? new Date(confAt).toLocaleDateString('en-NG', { dateStyle: 'medium' }) + ' · ' : ''}This inspection counts toward your payment
-                            </p>
-                          </div>
-                        </div>
-                        );
-                      })()}
-
-                      {/* PENDING / ASSIGNED: Mark as Done flow */}
-                      {(status === 'pending' || status === 'assigned') && (
-                        <div>
-                          {!isMarkingThisOne ? (
-                            <button onClick={function(){ setMarkingDone(insp.id); setDoneNotes(function(prev){ return Object.assign({}, prev, { [insp.id]: '' }); }); if (isNew) setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; }); }}
-                              style={{ width: '100%', padding: '13px', backgroundColor: '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '1rem', cursor: 'pointer', fontFamily: "'Inter', sans-serif", letterSpacing: '-0.2px' }}>
-                              Mark as Done
-                            </button>
-                          ) : (
-                            <div>
-                              <p style={{ margin: '0 0 6px 0', fontSize: '0.78rem', fontWeight: '700', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>Inspection Notes <span style={{ color: '#94a3b8', fontWeight: '400' }}>(minimum 20 characters)</span></p>
-                              <textarea
-                                value={currentNote}
-                                onChange={function(e){ var v = e.target.value; setDoneNotes(function(prev){ return Object.assign({}, prev, { [insp.id]: v }); }); }}
-                                placeholder="Describe what you found, condition of the property, any issues observed, your recommendations for the customer…"
-                                rows={5}
-                                style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid ' + (currentNote.length > 0 && !noteOk ? '#fca5a5' : '#e2e8f0'), fontSize: '0.82rem', fontFamily: "'Inter', sans-serif", resize: 'vertical', color: '#0a2240', lineHeight: '1.6', boxSizing: 'border-box', marginBottom: '4px' }}
-                              />
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <span style={{ fontSize: '0.72rem', color: noteOk ? '#166534' : currentNote.length > 0 ? '#b91c1c' : '#94a3b8', fontWeight: '600', fontFamily: "'Inter', sans-serif", display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                                  {currentNote.trim().length} / 20 characters{noteOk && <CheckCircle size={11} />}
-                                </span>
-                                <button onClick={function(){ setMarkingDone(null); }} style={{ fontSize: '0.72rem', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Inter', sans-serif" }}>Cancel</button>
-                              </div>
-                              <button onClick={async function() {
-                                if (!noteOk) { showMsg('Error: Please write at least 20 characters of inspection notes.'); return; }
-                                try {
-                                  var res = await fetch(API_URL + '/api/gha/mark-inspection-done', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                    body: JSON.stringify({ inspection_id: insp.id, notes: currentNote })
-                                  });
-                                  var data = await res.json();
-                                  if (!res.ok) throw new Error(data.error || 'Failed');
-                                  setInspections(function(prev){ return prev.map(function(x){ return x.id === insp.id ? Object.assign({}, x, { status: 'gha_done', gha_notes: currentNote, gha_done_at: new Date().toISOString() }) : x; }); });
-                                  setMarkingDone(null);
-                                  setNewInspIds(function(prev){ var next = new Set(prev); next.delete(insp.id); return next; });
-                                  showMsg('Inspection marked as done. Awaiting SA confirmation.');
-                                } catch(e) { showMsg('Error: ' + e.message); }
-                              }} disabled={!noteOk}
-                                style={{ width: '100%', padding: '13px', backgroundColor: noteOk ? '#22c55e' : '#94a3b8', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '1rem', cursor: noteOk ? 'pointer' : 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
-                                Submit Inspection Report
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* GHA DONE: submitted state */}
-                      {status === 'gha_done' && (
-                        <button disabled style={{ width: '100%', padding: '11px', backgroundColor: '#fef3c7', color: '#92400e', border: '1.5px solid #fde68a', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'not-allowed', fontFamily: "'Inter', sans-serif" }}>
-                          Submitted — Awaiting SA Confirmation
-                        </button>
-                      )}
-                      {status === 'gha_done' && (
-                        <button onClick={async function() {
-                          try {
-                            var token = localStorage.getItem('gh_staff_token');
-                            var res = await fetch(API_URL + '/api/gha/clear-inspection', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                              body: JSON.stringify({ inspection_id: insp.id }),
-                            });
-                            if (res.ok) fetchInspections();
-                          } catch(e) { console.error('Clear error:', e.message); }
-                        }} style={{ backgroundColor: 'transparent', border: '1.5px solid #94a3b8', color: '#94a3b8', borderRadius: '8px', padding: '5px 12px', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', marginTop: '6px' }}>
-                          Clear from list
-                        </button>
-                      )}
-
-                    </div>
+                    <button key={tab.key} onClick={function() { setGhaInspTab(tab.key); }}
+                      style={{ padding: '6px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                        fontWeight: '700', fontSize: '0.76rem',
+                        backgroundColor: isActive ? tab.color : '#f1f5f9',
+                        color: isActive ? '#fff' : '#64748b' }}>
+                      {tab.label} ({tab.count})
+                    </button>
                   );
                 })}
               </div>
+            </div>
+
+            {/* Inspection cards */}
+            {displayedInspections.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                <p style={{ fontSize: '1.5rem', margin: '0 0 8px 0' }}>
+                  {ghaInspTab === 'active' ? '📋' : ghaInspTab === 'done' ? '🔍' : ghaInspTab === 'confirmed' ? '✅' : '❌'}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.84rem' }}>No {ghaInspTab} inspections</p>
+              </div>
+            ) : displayedInspections.map(function(insp) {
+              var done = isDone(insp);
+              var confirmed = insp.status === 'confirmed';
+              var cancelled = insp.status === 'cancelled';
+              var isActiveInsp = !done && !confirmed && !cancelled;
+              var myNotes = insp.gha_notes || insp.notes;
+              var confAt = insp.sa_confirmed_at || insp.confirmed_at;
+              var statusLabel = confirmed ? 'CONFIRMED' : done ? 'DONE' : cancelled ? 'CANCELLED' : (insp.status || 'pending').toUpperCase();
+              return (
+                <div key={insp.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '14px 16px', marginBottom: '10px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(10,34,64,0.04)' }}>
+
+                  {/* Property and customer info */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                      {insp.property_address || insp.property_title || 'Property'}
+                    </p>
+                    <p style={{ margin: '0 0 2px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                      👤 {insp.customer_name || 'Customer'} · 📞 {insp.customer_phone || insp.phone || 'N/A'}
+                    </p>
+                    {(insp.inspection_date || insp.requested_date) && (
+                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem' }}>
+                        📅 {new Date(insp.inspection_date || insp.requested_date).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Status badge */}
+                  <div style={{ marginBottom: '10px' }}>
+                    <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '0.68rem', fontWeight: '800',
+                      backgroundColor: confirmed ? '#f0fff4' : done ? '#eff6ff' : cancelled ? '#fff7ed' : '#fef3c7',
+                      color: confirmed ? '#166534' : done ? '#1e40af' : cancelled ? '#c2410c' : '#92400e' }}>
+                      {statusLabel}
+                    </span>
+                  </div>
+
+                  {/* Notes display for done/confirmed */}
+                  {(done || confirmed) && myNotes && (
+                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>My Notes</p>
+                      <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151', lineHeight: 1.6 }}>{myNotes}</p>
+                    </div>
+                  )}
+
+                  {/* Confirmed banner */}
+                  {confirmed && (
+                    <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>✅</span>
+                      <div>
+                        <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: '#166534', fontSize: '0.78rem' }}>SA Confirmed — Counts for Payment</p>
+                        <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
+                          {confAt ? new Date(confAt).toLocaleDateString('en-NG') : ''}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mark as done form for active inspections */}
+                  {isActiveInsp && (
+                    <div style={{ marginTop: '10px' }}>
+                      <textarea
+                        placeholder='Inspection notes — minimum 20 characters required...'
+                        value={doneNotes[insp.id] || ''}
+                        onChange={function(e) {
+                          var val = e.target.value;
+                          setDoneNotes(function(prev) { return Object.assign({}, prev, { [insp.id]: val }); });
+                        }}
+                        onClick={function(e) { e.stopPropagation(); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', minHeight: '80px', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 8px 0' }}>
+                        <span style={{ fontSize: '0.70rem', color: (doneNotes[insp.id] || '').length >= 20 ? '#27ae60' : '#94a3b8' }}>
+                          {(doneNotes[insp.id] || '').length}/20 minimum
+                        </span>
+                      </div>
+                      <button
+                        disabled={(doneNotes[insp.id] || '').trim().length < 20}
+                        onClick={async function() {
+                          var note = (doneNotes[insp.id] || '').trim();
+                          if (note.length < 20) { alert('Please add at least 20 characters of inspection notes.'); return; }
+                          try {
+                            var token = localStorage.getItem('gh_staff_token');
+                            var res = await fetch(API_URL + '/api/gha/mark-inspection-done', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                              body: JSON.stringify({ inspection_id: insp.id, notes: note }),
+                            });
+                            var data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Failed');
+                            setDoneNotes(function(prev) { var n = Object.assign({}, prev); delete n[insp.id]; return n; });
+                            setInspections(function(prev) {
+                              return prev.map(function(i) {
+                                return i.id === insp.id ? Object.assign({}, i, { status: 'gha_done', gha_notes: note, notes: note, gha_done_at: new Date().toISOString() }) : i;
+                              });
+                            });
+                            setNewInspIds(function(prev) { var next = new Set(prev); next.delete(insp.id); return next; });
+                            setGhaInspTab('done');
+                            alert('Inspection marked as done! SA will review and confirm.');
+                          } catch(e) { alert('Error: ' + e.message); }
+                        }}
+                        style={{ width: '100%', padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.84rem',
+                          backgroundColor: (doneNotes[insp.id] || '').trim().length >= 20 ? '#0a2240' : '#94a3b8',
+                          color: '#fff', cursor: (doneNotes[insp.id] || '').trim().length >= 20 ? 'pointer' : 'not-allowed' }}>
+                        ✓ Mark as Done
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Clear button for done inspections */}
+                  {done && !confirmed && (
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_staff_token');
+                        var res = await fetch(API_URL + '/api/gha/clear-inspection', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                          body: JSON.stringify({ inspection_id: insp.id }),
+                        });
+                        if (res.ok) fetchInspections();
+                      } catch(e) { console.error('Clear error:', e.message); }
+                    }} style={{ width: '100%', marginTop: '8px', padding: '8px', backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#94a3b8', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '600', cursor: 'pointer' }}>
+                      Clear from list
+                    </button>
+                  )}
+                </div>
               );
-            })()}
+            })}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── MONTHLY HISTORY ── */}
         {ghaTab === 'monthly-history' && (function() {
@@ -12939,19 +12840,37 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
         {/* ── OVERVIEW ── */}
         {saTab === 'overview' && (function() {
-          // Fall back to computing from total_revenue * commission rate if the
-          // backend hasn't pre-calculated monthly_earnings for this SA.
-          var saEarningsDisplay = saOverview.monthly_earnings || Math.round((saOverview.total_revenue || 0) * currentSaRate / 100);
+          // Commission figures come straight from /api/sa/overview. Field names
+          // vary by backend version, so fall back through the known aliases.
+          var pendingComm = saOverview?.pending_commission || saOverview?.monthly_commission || 0;
+          var paidOut = saOverview?.total_paid_out || saOverview?.paid_out || 0;
+          var totalEarned = saOverview?.total_ever_earned || 0;
           return (
           <div>
             <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+              {[
+                { label: 'Pending Payment', value: pendingComm, color: '#f59e0b' },
+                { label: 'Total Earned', value: totalEarned, color: '#0a2240' },
+                { label: 'Paid Out', value: paidOut, color: '#27ae60' },
+                { label: 'Agents This Month', value: saOverview?.total_agents_this_month || 0, color: '#3b82f6', isCount: true },
+              ].map(function(stat) {
+                return (
+                  <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '14px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                    <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.94rem' }}>
+                      {stat.isCount ? stat.value : '₦' + parseFloat(stat.value).toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
             <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
               {[
                 { label: 'TOTAL AGENTS',           value: saOverview.total_agents || 0,                             borderColor: '#0a2240' },
                 { label: 'ACTIVE SUBSCRIPTIONS',    value: saOverview.active_subscriptions || 0,                     borderColor: '#27ae60' },
                 { label: 'EXPIRED',                 value: saOverview.expired_subscriptions || 0,                    borderColor: '#ef4444' },
                 { label: 'TOTAL GHAs',               value: saOverview.total_ghas || 0,                              borderColor: '#0d9488' },
-                { label: 'MONTHLY EARNINGS',         value: '₦' + saEarningsDisplay.toLocaleString(), borderColor: '#7c3aed' },
                 { label: 'PENDING AGENTS',           value: saOverview.pending_agents || 0,                          borderColor: '#f59e0b' },
                 { label: 'INSPECTIONS CONFIRMED',    value: saOverview.inspections_confirmed || 0,                   borderColor: '#1e40af' },
               ].map(function(s) {
@@ -12959,14 +12878,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   <div key={s.label} style={{ ...cardSt, padding: '18px 20px', borderLeft: '4px solid ' + s.borderColor, flex: '1 1 140px' }}>
                     <p style={{ fontSize: isMobile ? '1.4rem' : '1.8rem', fontWeight: '900', color: '#0a2240', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.value}</p>
                     <p style={{ fontSize: '0.66rem', color: '#94a3b8', margin: 0, fontWeight: '700', letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: "'Inter', sans-serif" }}>{s.label}</p>
-                    {s.label === 'MONTHLY EARNINGS' && (
-                      <>
-                        <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: saOverview.earnings_paid ? '#27ae60' : '#f59e0b', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          {saOverview.earnings_paid ? <><CheckCircle size={11} /> Paid this month</> : '● Pending payment'}
-                        </p>
-                        <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentSaRate}%</span>
-                      </>
-                    )}
                   </div>
                 );
               })}
@@ -13659,16 +13570,22 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
                   {subscriptions.map(function(s, i) {
+                    // Agent list only — name/email and tier. Subscription amount
+                    // and SA-commission figures are intentionally not shown here.
+                    var tier = s.tier || s.subscription_tier || '';
+                    var tierColor = tier === 'unlimited' ? '#8b5cf6'
+                      : tier === 'agency' ? '#0a2240' : '#27ae60';
+                    var tierLabel = tier === 'unlimited' ? '∞ Unlimited'
+                      : tier === 'agency' ? '🏢 Agency' : '⭐ Premium';
                     return (
-                      <div key={s.id || i} style={{ ...cardSt, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <div key={s.id || (s.agent_id || '') + (s.payment_reference || '') || i} style={{ ...cardSt, padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.agent_name || s.full_name || s.email}</p>
-                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>{s.email}{s.gha_code ? ' · GHA: ' + s.gha_code : ''}</p>
+                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{s.agent_name || s.full_name || s.email || s.agent_email}</p>
+                          <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem', fontFamily: "'Inter', sans-serif" }}>{s.email || s.agent_email}{s.gha_code ? ' · GHA: ' + s.gha_code : ''}</p>
                         </div>
-                        <span style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{s.tier || s.subscription_tier}</span>
-                        <span style={{ fontWeight: '800', color: '#166534', fontSize: '0.88rem', fontFamily: "'Inter', sans-serif" }}>₦{Number(s.amount || 0).toLocaleString()}</span>
-                        <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: s.paid ? '#f0fff4' : '#fffbeb', color: s.paid ? '#166534' : '#92400e', border: '1px solid ' + (s.paid ? '#86efac' : '#fde68a') }}>{s.paid ? 'PAID' : 'UNPAID'}</span>
-                        <span style={{ fontSize: '0.70rem', color: '#7c3aed', fontWeight: '700', fontFamily: "'Inter', sans-serif" }}>{currentSaRate}%: {fmtMoney((s.amount || 0) * (currentSaRate / 100))}</span>
+                        <span style={{ backgroundColor: tierColor + '15', color: tierColor, border: '1px solid ' + tierColor + '40', borderRadius: '20px', padding: '3px 10px', fontSize: '0.74rem', fontWeight: '800' }}>
+                          {tierLabel}
+                        </span>
                       </div>
                     );
                   })}
@@ -14312,17 +14229,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               ) : (
                 <div>
                   {monthlyHistory?.totals && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
                       {[
-                        { label: 'Total Revenue', value: monthlyHistory.totals.total_revenue || 0, color: '#0a2240' },
-                        { label: 'My Commission', value: monthlyHistory.totals.total_commission || 0, color: '#3b82f6' },
-                        { label: 'Pending Payment', value: monthlyHistory.totals.pending_commission || 0, color: '#f59e0b' },
+                        { label: 'My Commission', value: monthlyHistory.totals.total_sa_commission || monthlyHistory.totals.total_commission || 0, color: '#3b82f6' },
+                        { label: 'Pending', value: monthlyHistory.totals.pending_commission || 0, color: '#f59e0b' },
                         { label: 'Paid Out', value: monthlyHistory.totals.paid_commission || 0, color: '#27ae60' },
                       ].map(function(stat) {
                         return (
-                          <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
-                            <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.90rem' }}>
+                          <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '10px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '0.64rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                            <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.84rem' }}>
                               ₦{parseFloat(stat.value).toLocaleString()}
                             </p>
                           </div>
