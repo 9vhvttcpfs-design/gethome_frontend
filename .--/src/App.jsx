@@ -8335,16 +8335,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       ) : (
                         <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
                           <div style={{ minWidth: '860px' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
-                              <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span><span>INSPECTIONS</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
+                              <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {ghaSummary.map(function(g) {
-                                var insCompleted = g.inspections_completed || g.inspections_done || 0;
-                                var insPaid = g.inspections_paid || 0;
-                                var insUnpaid = g.inspections_unpaid || 0;
                                 return (
-                                  <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
+                                  <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
                                     <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code}</span>
                                     <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_name || g.full_name || '—'}</span>
                                     <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.total_agents || 0}</span>
@@ -8352,39 +8349,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.revenue || 0).toLocaleString()}</span>
                                     <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.gha_commission || 0).toLocaleString()}</span>
                                     <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.sa_commission || 0).toLocaleString()}</span>
-                                    <div>
-                                      {/* Inspection breakdown */}
-                                      {(insCompleted > 0) && (
-                                        <div style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                          <span style={{ color: '#64748b' }}>🔍 {insCompleted} inspection{insCompleted !== 1 ? 's' : ''}</span>
-                                          {insPaid > 0 && (
-                                            <span style={{ color: '#27ae60', fontWeight: '600' }}>
-                                              ✓ {insPaid} paid
-                                            </span>
-                                          )}
-                                          {insUnpaid > 0 && (
-                                            <span style={{ color: '#f59e0b', fontWeight: '600' }}>
-                                              ⏳ {insUnpaid} pending
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                      {(insCompleted === 0) && (
-                                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>No inspections this month</p>
-                                      )}
-                                    </div>
                                   </div>
                                 );
                               })}
                               {/* Totals row */}
-                              <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', borderRadius: '8px', alignItems: 'center', marginTop: '4px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', background: 'linear-gradient(135deg, #0a2240 0%, #0d3060 100%)', borderRadius: '8px', alignItems: 'center', marginTop: '4px' }}>
                                 <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem', gridColumn: 'span 2' }}>TOTALS</span>
                                 <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.total_agents}</span>
                                 <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.active_subscriptions}</span>
                                 <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>₦{Number(ghaTotals.revenue).toLocaleString()}</span>
                                 <span style={{ fontWeight: '900', color: '#22c55e', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_gha_commission || 0).toLocaleString()}</span>
                                 <span style={{ fontWeight: '900', color: '#60a5fa', fontSize: '0.80rem' }}>₦{Number(mhTotals.total_sa_commission || 0).toLocaleString()}</span>
-                                <span style={{ fontWeight: '900', color: '#fff', fontSize: '0.80rem' }}>{ghaTotals.inspections_done}</span>
                               </div>
                             </div>
                           </div>
@@ -8392,30 +8367,52 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       )}
 
                       {/* GHA Inspection Payments */}
-                      {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0; }).length > 0 && (
+                      {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0 || g.already_paid_count > 0; }).length > 0 && (
                         <div style={{ marginTop: '20px' }}>
                           <h3 style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.94rem', margin: '0 0 12px 0' }}>
                             GHA Inspection Payments — {historyMonth}
                           </h3>
-                          {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0; }).map(function(gha) {
+                          {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0 || g.already_paid_count > 0; }).map(function(gha) {
                             return (
-                              <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid ' + (gha.is_paid ? '#bbf7d0' : '#e2e8f0'), display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                  <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
-                                    {gha.gha_code} — {gha.full_name}
+                              <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                                  {gha.gha_code} — {gha.full_name}
+                                </p>
+
+                                {/* Previously paid inspections */}
+                                {(gha.already_paid_count > 0) && (
+                                  <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid #bbf7d0' }}>
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase' }}>
+                                      Previously Paid
+                                    </p>
+                                    <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534' }}>
+                                      ✓ {gha.already_paid_count} inspection{gha.already_paid_count !== 1 ? 's' : ''} — paid on {gha.paid_at ? new Date(gha.paid_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : 'N/A'}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Unpaid inspections due */}
+                                {gha.confirmed_inspections > 0 && (
+                                  <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #bfdbfe' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                      <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af' }}>
+                                        🔍 {gha.confirmed_inspections} new inspection{gha.confirmed_inspections !== 1 ? 's' : ''} × ₦{parseFloat(gha.fee_per_inspection || 0).toLocaleString()}
+                                      </p>
+                                      <p style={{ margin: 0, fontWeight: '800', color: '#1e40af', fontSize: '0.80rem' }}>
+                                        ₦{parseFloat(gha.total_inspection_payment || 0).toLocaleString()}
+                                      </p>
+                                    </div>
+                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
+                                      {gha.confirmed_inspections <= 10 ? 'Tier 1 (1-10)' : gha.confirmed_inspections <= 20 ? 'Tier 2 (11-20)' : 'Tier 3 (21+)'}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {gha.confirmed_inspections === 0 && gha.already_paid_count === 0 && (
+                                  <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
+                                    No confirmed inspections this month
                                   </p>
-                                  <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
-                                    {gha.confirmed_inspections} inspections × ₦{(gha.fee_per_inspection || 0).toLocaleString()}
-                                  </p>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#0a2240', fontSize: '0.94rem' }}>
-                                    ₦{(gha.total_inspection_payment || 0).toLocaleString()}
-                                  </p>
-                                  <span style={{ backgroundColor: gha.is_paid ? '#f0fff4' : '#fff7ed', color: gha.is_paid ? '#166534' : '#c2410c', borderRadius: '20px', padding: '2px 8px', fontSize: '0.66rem', fontWeight: '800' }}>
-                                    {gha.is_paid ? '✓ PAID' : 'UNPAID'}
-                                  </span>
-                                </div>
+                                )}
                               </div>
                             );
                           })}
