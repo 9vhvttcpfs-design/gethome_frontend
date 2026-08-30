@@ -10832,7 +10832,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         {/* ── OVERVIEW ── */}
         {ghaTab === 'overview' && (
           <div>
-            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', margin: '0 0 20px 0' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+              <button onClick={function() { fetchGHAOverview(); }}
+                style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '5px 10px', fontSize: '0.72rem', color: '#64748b', cursor: 'pointer' }}>
+                🔄 Refresh
+              </button>
+            </div>
             {overviewLoading ? (
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading...</p></div>
             ) : (
@@ -12897,7 +12903,13 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           var overviewMonthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
           return (
           <div>
-            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 20px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', margin: '0 0 20px 0' }}>
+              <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Overview</h2>
+              <button onClick={function() { fetchSAOverview(); }}
+                style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '5px 10px', fontSize: '0.72rem', color: '#64748b', cursor: 'pointer' }}>
+                🔄 Refresh
+              </button>
+            </div>
             <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '16px 18px', border: '1px solid #e2e8f0', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <div>
                 <p style={{ margin: '0 0 4px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Current Month</p>
