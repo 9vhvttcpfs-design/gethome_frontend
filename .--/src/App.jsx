@@ -4595,6 +4595,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [staffPaymentsLoading, setStaffPaymentsLoading] = useState(false);
   const [expandedGhaId, setExpandedGhaId]               = useState(null);
   const [expandedSaId, setExpandedSaId]                 = useState(null);
+  const [expandedInspGhaId, setExpandedInspGhaId]       = useState(null);
   const [staffPaymentTab, setStaffPaymentTab]           = useState('GHA');
   const [staffPayMsg, setStaffPayMsg]                   = useState('');
   // Redesigned Staff Payments tab: GHA / SA / Inspection sections, each with location grouping
@@ -8274,19 +8275,34 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 16px 0' }}>Monthly History</h2>
 
                   {/* Month selector row */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
                     <span style={{ fontSize: '0.82rem', fontWeight: '700', color: '#0a2240' }}>Viewing Month:</span>
-                    <select value={historyMonth} onChange={function(e){ setHistoryMonth(e.target.value); }}
-                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', fontWeight: '600' }}>
-                      {months.map(function(m) {
-                        return <option key={m} value={m}>{new Date(m + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</option>;
-                      })}
-                    </select>
+                    <input type="month" value={historyMonth}
+                      onChange={function(e) { setHistoryMonth(e.target.value); }}
+                      style={{ flex: 1, minWidth: '160px', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', fontWeight: '600' }} />
                     <button onClick={function() { fetchMonthlyHistory(historyMonth); }}
-                      style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '6px 12px', fontSize: '0.74rem', color: '#64748b', cursor: 'pointer', marginLeft: '8px' }}>
-                      🔄 Refresh
+                      style={{ padding: '9px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                      🔄
                     </button>
                   </div>
+
+                  {/* Quick-select month chips */}
+                  {months.length > 1 && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                      {months.slice(0, 6).map(function(m) {
+                        var isSel = historyMonth === m;
+                        return (
+                          <button key={m} onClick={function() { setHistoryMonth(m); }}
+                          style={{ padding: '4px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                            backgroundColor: isSel ? '#0a2240' : '#f1f5f9',
+                            color: isSel ? '#fff' : '#64748b',
+                            fontSize: '0.74rem', fontWeight: '700' }}>
+                            {new Date(m + '-01').toLocaleString('default', { month: 'short', year: '2-digit' })}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Take Snapshot Now (admin only) */}
                   <div style={{ marginBottom: '20px' }}>
@@ -8373,45 +8389,130 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             GHA Inspection Payments — {historyMonth}
                           </h3>
                           {inspectionHistory.filter(function(g) { return g.confirmed_inspections > 0 || g.already_paid_count > 0; }).map(function(gha) {
+                            var isExpanded = expandedInspGhaId === gha.gha_id;
+                            var totalDue = gha.total_inspection_payment || 0;
+                            var hasBankDetails = !!(gha.bank_name && gha.account_number && gha.account_name) || !!gha.has_bank_details;
+
                             return (
-                              <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
-                                <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
-                                  {gha.gha_code} — {gha.full_name}
-                                </p>
+                              <div key={gha.gha_id} style={{ backgroundColor: '#fff', borderRadius: '14px', marginBottom: '10px', border: '1.5px solid ' + (totalDue > 0 ? '#bfdbfe' : '#bbf7d0'), overflow: 'hidden' }}>
 
-                                {/* Previously paid inspections */}
-                                {(gha.already_paid_count > 0) && (
-                                  <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid #bbf7d0' }}>
-                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase' }}>
-                                      Previously Paid
+                                {/* Collapsed header */}
+                                <div onClick={function() { setExpandedInspGhaId(isExpanded ? null : gha.gha_id); }}
+                                  style={{ padding: '14px 16px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div>
+                                    <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#0a2240', fontSize: '0.90rem' }}>
+                                      {gha.gha_code} — {gha.full_name}
                                     </p>
-                                    <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534' }}>
-                                      ✓ {gha.already_paid_count} inspection{gha.already_paid_count !== 1 ? 's' : ''} — paid on {gha.paid_at ? new Date(gha.paid_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : 'N/A'}
-                                    </p>
+                                    {gha.location && <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>📍 {gha.location}</p>}
                                   </div>
-                                )}
-
-                                {/* Unpaid inspections due */}
-                                {gha.confirmed_inspections > 0 && (
-                                  <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #bfdbfe' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                      <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af' }}>
-                                        🔍 {gha.confirmed_inspections} new inspection{gha.confirmed_inspections !== 1 ? 's' : ''} × ₦{parseFloat(gha.fee_per_inspection || 0).toLocaleString()}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{ textAlign: 'right' }}>
+                                      <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: totalDue > 0 ? '#3b82f6' : '#27ae60', fontSize: '0.94rem' }}>
+                                        {totalDue > 0 ? '₦' + parseFloat(totalDue).toLocaleString() : '✓ Settled'}
                                       </p>
-                                      <p style={{ margin: 0, fontWeight: '800', color: '#1e40af', fontSize: '0.80rem' }}>
-                                        ₦{parseFloat(gha.total_inspection_payment || 0).toLocaleString()}
+                                      <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
+                                        {gha.confirmed_inspections || 0} inspection{(gha.confirmed_inspections || 0) !== 1 ? 's' : ''}
                                       </p>
                                     </div>
-                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
-                                      {gha.confirmed_inspections <= 10 ? 'Tier 1 (1-10)' : gha.confirmed_inspections <= 20 ? 'Tier 2 (11-20)' : 'Tier 3 (21+)'}
-                                    </p>
+                                    <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>{isExpanded ? '▲' : '▼'}</span>
                                   </div>
-                                )}
+                                </div>
 
-                                {gha.confirmed_inspections === 0 && gha.already_paid_count === 0 && (
-                                  <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
-                                    No confirmed inspections this month
-                                  </p>
+                                {/* Expanded details */}
+                                {isExpanded && (
+                                  <div style={{ padding: '0 16px 16px 16px', borderTop: '1px solid #f1f5f9' }}>
+
+                                    {/* Previously paid */}
+                                    {(gha.already_paid_count || 0) > 0 && (
+                                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', margin: '12px 0 8px 0', border: '1px solid #bbf7d0' }}>
+                                        <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', fontWeight: '700', color: '#166534', textTransform: 'uppercase' }}>Previously Paid</p>
+                                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#166534' }}>
+                                          ✓ {gha.already_paid_count} inspection{gha.already_paid_count !== 1 ? 's' : ''} — paid {gha.paid_at ? new Date(gha.paid_at).toLocaleDateString('en-NG', { dateStyle: 'medium' }) : ''}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Unpaid inspections */}
+                                    {(gha.confirmed_inspections || 0) > 0 ? (
+                                      <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', border: '1px solid #bfdbfe' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                          <p style={{ margin: 0, fontSize: '0.76rem', color: '#1e40af', fontWeight: '600' }}>
+                                            🔍 {gha.confirmed_inspections} new × ₦{parseFloat(gha.fee_per_inspection || 0).toLocaleString()}
+                                          </p>
+                                          <p style={{ margin: 0, fontWeight: '800', color: '#1e40af' }}>
+                                            ₦{parseFloat(totalDue).toLocaleString()}
+                                          </p>
+                                        </div>
+                                        <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
+                                          {(gha.confirmed_inspections || 0) <= 10 ? 'Tier 1 (1-10)' : (gha.confirmed_inspections || 0) <= 20 ? 'Tier 2 (11-20)' : 'Tier 3 (21+)'}
+                                        </p>
+                                        {/* Inspection list */}
+                                        {(gha.inspections || []).slice(0, 3).map(function(insp, i) {
+                                          return (
+                                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #dbeafe', fontSize: '0.72rem', color: '#374151' }}>
+                                              <span>{insp.customer_name || 'Customer'}</span>
+                                              <span style={{ color: '#64748b' }}>
+                                                {insp.sa_confirmed_at ? new Date(insp.sa_confirmed_at).toLocaleDateString('en-NG') : ''}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                        {(gha.inspections || []).length > 3 && (
+                                          <p style={{ margin: '4px 0 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>
+                                            +{gha.inspections.length - 3} more
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <p style={{ margin: '12px 0', fontSize: '0.78rem', color: '#94a3b8', textAlign: 'center' }}>
+                                        No unpaid inspections
+                                      </p>
+                                    )}
+
+                                    {/* Bank details */}
+                                    {hasBankDetails ? (
+                                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #bbf7d0' }}>
+                                        <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#166534', fontSize: '0.78rem' }}>🏦 {gha.bank_name}</p>
+                                        <p style={{ margin: '0 0 2px 0', color: '#0a2240', fontWeight: '800', fontSize: '0.86rem', letterSpacing: '0.06em' }}>{gha.account_number}</p>
+                                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.74rem' }}>{gha.account_name}</p>
+                                      </div>
+                                    ) : (
+                                      <div style={{ backgroundColor: '#fff7ed', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', border: '1px solid #fed7aa' }}>
+                                        <p style={{ margin: 0, fontSize: '0.74rem', color: '#c2410c', fontWeight: '600' }}>⚠ No bank account on file</p>
+                                      </div>
+                                    )}
+
+                                    {/* Pay button */}
+                                    {totalDue > 0 && (
+                                      <button disabled={!hasBankDetails}
+                                        onClick={async function() {
+                                          if (!hasBankDetails) { alert('No bank details on file'); return; }
+                                          if (!window.confirm('Pay ₦' + parseFloat(totalDue).toLocaleString() + ' inspection payment to ' + gha.full_name + '?')) return;
+                                          try {
+                                            var token = localStorage.getItem('gh_token');
+                                            var res = await fetch(API_URL + '/api/admin/mark-inspection-payment-paid', {
+                                              method: 'POST',
+                                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                              body: JSON.stringify({ gha_id: gha.gha_id, month_year: historyMonth, amount: totalDue, inspection_count: gha.confirmed_inspections }),
+                                            });
+                                            var d = await res.json();
+                                            if (!res.ok) throw new Error(d.error || 'Failed');
+                                            fetchMonthlyHistory(historyMonth);
+                                            setExpandedInspGhaId(null);
+                                          } catch(err) { alert('Error: ' + err.message); }
+                                        }}
+                                        style={{ width: '100%', padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.84rem',
+                                          backgroundColor: hasBankDetails ? '#27ae60' : '#94a3b8',
+                                          color: '#fff', cursor: hasBankDetails ? 'pointer' : 'not-allowed' }}>
+                                        ✓ Pay ₦{parseFloat(totalDue).toLocaleString()} Inspection Payment
+                                      </button>
+                                    )}
+                                    {totalDue === 0 && (
+                                      <div style={{ backgroundColor: '#f0fff4', borderRadius: '8px', padding: '10px', textAlign: 'center' }}>
+                                        <p style={{ margin: 0, color: '#166534', fontWeight: '700', fontSize: '0.82rem' }}>✓ All inspection payments settled</p>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             );
