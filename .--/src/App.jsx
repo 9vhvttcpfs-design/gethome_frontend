@@ -8340,6 +8340,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {ghaSummary.map(function(g) {
+                                var insCompleted = g.inspections_completed || g.inspections_done || 0;
+                                var insPaid = g.inspections_paid || 0;
+                                var insUnpaid = g.inspections_unpaid || 0;
                                 return (
                                   <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center' }}>
                                     <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code}</span>
@@ -8349,7 +8352,27 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                     <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.revenue || 0).toLocaleString()}</span>
                                     <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.gha_commission || 0).toLocaleString()}</span>
                                     <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.sa_commission || 0).toLocaleString()}</span>
-                                    <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_done || 0}</span>
+                                    <div>
+                                      {/* Inspection breakdown */}
+                                      {(insCompleted > 0) && (
+                                        <div style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                          <span style={{ color: '#64748b' }}>🔍 {insCompleted} inspection{insCompleted !== 1 ? 's' : ''}</span>
+                                          {insPaid > 0 && (
+                                            <span style={{ color: '#27ae60', fontWeight: '600' }}>
+                                              ✓ {insPaid} paid
+                                            </span>
+                                          )}
+                                          {insUnpaid > 0 && (
+                                            <span style={{ color: '#f59e0b', fontWeight: '600' }}>
+                                              ⏳ {insUnpaid} pending
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                      {(insCompleted === 0) && (
+                                        <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>No inspections this month</p>
+                                      )}
+                                    </div>
                                   </div>
                                 );
                               })}
@@ -14288,6 +14311,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {ghaSummary.map(function(g) {
+                            var insCompleted = g.inspections_completed || g.inspections_done || 0;
+                            var insPaid = g.inspections_paid || 0;
+                            var insUnpaid = g.inspections_unpaid || 0;
                             return (
                               <div key={g.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
                                 <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code}</span>
@@ -14297,7 +14323,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>₦{Number(g.total_subscription_revenue || g.revenue || 0).toLocaleString()}</span>
                                 <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.total_gha_commission || g.gha_commission || 0).toLocaleString()}</span>
                                 <span style={{ color: '#1e40af', fontWeight: '800', fontSize: '0.80rem' }}>₦{Number(g.total_sa_commission || g.sa_commission || 0).toLocaleString()}</span>
-                                <span style={{ color: '#0a2240', fontWeight: '700', fontSize: '0.80rem' }}>{g.inspections_completed || g.inspections_done || 0}</span>
+                                <div>
+                                  {/* Inspection breakdown */}
+                                  {(insCompleted > 0) && (
+                                    <div style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ color: '#64748b' }}>🔍 {insCompleted} inspection{insCompleted !== 1 ? 's' : ''}</span>
+                                      {insPaid > 0 && (
+                                        <span style={{ color: '#27ae60', fontWeight: '600' }}>
+                                          ✓ {insPaid} paid
+                                        </span>
+                                      )}
+                                      {insUnpaid > 0 && (
+                                        <span style={{ color: '#f59e0b', fontWeight: '600' }}>
+                                          ⏳ {insUnpaid} pending
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {(insCompleted === 0) && (
+                                    <p style={{ margin: 0, fontSize: '0.72rem', color: '#94a3b8' }}>No inspections this month</p>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
