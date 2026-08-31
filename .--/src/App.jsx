@@ -10387,7 +10387,13 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var data = await res.json();
       if (res.ok) {
         setGhaOverview(data);
-        console.log('GHA overview response - pending_commission:', data.pending_commission, '| monthly_commission:', data.monthly_commission, '| total_commission:', data.total_commission, '| agents count:', (data.agents||[]).length);
+        console.log('=== GHA OVERVIEW RESPONSE ===');
+        console.log('pending_commission:', data.pending_commission);
+        console.log('monthly_commission:', data.monthly_commission);
+        console.log('total_commission:', data.total_commission);
+        console.log('agents count:', (data.agents||[]).length);
+        console.log('agents:', JSON.stringify((data.agents||[]).map(function(a){ return {email:a.email, tier:a.subscription_tier}; })));
+        console.log('==============================');
         // Also sync agents list if returned
         if (data.agents) setAgents(data.agents);
         // Store this GHA's individual commission rate for display elsewhere
@@ -10495,6 +10501,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
           paid_commission: data.paid_commission || 0,
         },
       }));
+      console.log('=== GHA MONTHLY HISTORY ===');
+      console.log('agent_snapshots count:', (data.agent_snapshots||[]).length);
+      console.log('snapshots:', JSON.stringify((data.agent_snapshots||[]).slice(0,3)));
+      console.log('===========================');
       setAvailableMonths(Array.isArray(data.available_months) ? data.available_months : []);
     } catch(e) {
       console.error('Monthly history fetch error:', e.message);
@@ -12456,6 +12466,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var data = await res.json();
       if (res.ok) {
         setSaOverview(data);
+        console.log('=== SA OVERVIEW RESPONSE ===');
+        console.log('pending_commission:', data.pending_commission);
+        console.log('total_ever_earned:', data.total_ever_earned);
+        console.log('total_agents:', data.total_agents);
+        console.log('==============================');
         // Store this SA's individual commission rate for display elsewhere
         if (data.commission_rate) window.__saCommissionRate = data.commission_rate;
       }
@@ -14938,7 +14953,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
 
         {/* ── EARNINGS ── */}
         {saTab === 'earnings' && (function() {
-          var ghaRows = (earningsData && earningsData.gha_breakdown) || [];
+          // Get data from multiple sources
+          var earningRows = (earningsData?.earnings || []);
+          var ghaRows = (earningsData?.gha_breakdown || []);
+
+          // Also get subscriptions list which has per-agent detail
+          var agentRows = subscriptions || [];
+
+          // Use whichever has more data
+          var displayRows = agentRows.length >= earningRows.length ? agentRows : earningRows;
+
+          console.log('Earnings tab display - agentRows:', agentRows.length, '| earningRows:', earningRows.length, '| ghaRows:', ghaRows.length);
           return (
             <div>
               <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Earnings</h2>
@@ -14987,29 +15012,84 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentSaRate}%</span>
                   </div>
 
-                  {/* GHA breakdown table */}
-                  <h3 style={{ color: '#0a2240', fontSize: '0.94rem', fontWeight: '800', margin: '0 0 10px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Breakdown — {new Date(selectedMonth + '-01').toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
-                  {ghaRows.length === 0 ? (
-                    <div style={{ ...cardSt, padding: '40px 24px', textAlign: 'center' }}>
-                      <p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No contributing GHAs for this month.</p>
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <div style={{ minWidth: '360px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
-                          <span>GHA</span><span>COMMISSION CONTRIBUTED</span>
+                  {/* Summary */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                      { label: 'Total Commission', value: earningsData?.total_commission || earningsData?.total_earnings_this_month || 0, color: '#3b82f6' },
+                      { label: 'Unpaid', value: earningsData?.unpaid_earnings || 0, color: '#f59e0b' },
+                      { label: 'Paid Out', value: earningsData?.paid_earnings || 0, color: '#27ae60' },
+                      { label: 'Active Agents', value: earningsData?.active_subscriptions || 0, color: '#0a2240', isCount: true },
+                    ].map(function(stat) {
+                      return (
+                        <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: '10px', padding: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.66rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>{stat.label}</p>
+                          <p style={{ margin: 0, fontWeight: '900', color: stat.color, fontSize: '0.90rem' }}>
+                            {stat.isCount ? stat.value : '₦' + parseFloat(stat.value).toLocaleString()}
+                          </p>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                          {ghaRows.map(function(g, idx) {
-                            return (
-                              <div key={g.gha_id || idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 10px', padding: '10px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', alignItems: 'center', fontFamily: "'Inter', sans-serif" }}>
-                                <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{g.gha_code ? (g.gha_code + ' - ' + g.gha_name) : g.gha_id}</span>
-                                <span style={{ color: '#166534', fontWeight: '800', fontSize: '0.80rem' }}>{fmtMoney(g.commission_amount)}</span>
-                              </div>
-                            );
-                          })}
+                      );
+                    })}
+                  </div>
+
+                  {/* Agent list */}
+                  <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>
+                    Agent Subscriptions ({displayRows.length})
+                  </p>
+
+                  {displayRows.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px', fontSize: '0.84rem' }}>
+                      No subscriptions for {selectedMonth || subMonth}
+                    </p>
+                  ) : displayRows.map(function(row, i) {
+                    var tier = row.subscription_tier || row.plan_type || 'premium';
+                    var isUnlimited = tier === 'unlimited' || (row.payment_reference || '').includes('unlimited');
+                    var tierColor = isUnlimited ? '#8b5cf6' : tier === 'agency' ? '#0a2240' : '#27ae60';
+                    var tierLabel = isUnlimited ? '∞ Unlimited' : tier === 'agency' ? '🏢 Agency' : '⭐ Premium';
+                    return (
+                      <div key={row.agent_id + (row.payment_reference || i)} style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '12px 14px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>
+                              {row.agent_name || row.full_name || row.agent_email || row.email}
+                            </p>
+                            <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                              {row.agent_email || row.email}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '10px' }}>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '900', color: '#3b82f6', fontSize: '0.86rem' }}>
+                              ₦{parseFloat(row.commission_amount || 0).toLocaleString()}
+                            </p>
+                            <span style={{ backgroundColor: tierColor + '15', color: tierColor, borderRadius: '20px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: '800' }}>
+                              {tierLabel}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+                          <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>
+                            Sub: ₦{parseFloat(row.subscription_amount || 0).toLocaleString()} · {row.commission_rate || 0}%
+                          </span>
+                          <span style={{ fontSize: '0.70rem', fontWeight: '600',
+                            color: row.is_paid ? '#27ae60' : '#f59e0b' }}>
+                            {row.is_paid ? '✓ Paid' : '⏳ Pending'}
+                          </span>
                         </div>
                       </div>
+                    );
+                  })}
+
+                  {/* GHA breakdown at bottom */}
+                  {ghaRows.length > 0 && (
+                    <div style={{ marginTop: '16px', backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>By GHA</p>
+                      {ghaRows.map(function(g, idx) {
+                        return (
+                          <div key={g.gha_id || idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                            <span style={{ fontSize: '0.78rem', color: '#374151' }}>{g.gha_code} — {g.gha_name}</span>
+                            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#166534' }}>₦{parseFloat(g.commission_amount || 0).toLocaleString()}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
