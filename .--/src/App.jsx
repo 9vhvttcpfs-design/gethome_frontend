@@ -7779,6 +7779,25 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     style={{ padding: '9px 14px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
                     🔄
                   </button>
+                  <button onClick={async function() {
+                    try {
+                      var token = localStorage.getItem('gh_token');
+                      var res = await fetch(API_URL + '/api/admin/trigger-earnings-recovery', {
+                        method: 'POST',
+                        headers: { Authorization: 'Bearer ' + token }
+                      });
+                      var data = await res.json();
+                      if (res.ok) {
+                        alert('Recovery job started! Refreshing in 30 seconds...');
+                        setTimeout(function() {
+                          fetchEarnings(earningsMonth);
+                          fetchStaffPayments(staffPaymentsMonth);
+                        }, 30000);
+                      }
+                    } catch(e) { alert('Error: ' + e.message); }
+                  }} style={{ padding: '9px 14px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
+                    ⚡ Recover Missing
+                  </button>
                 </div>
 
                 {/* Summary cards */}
@@ -10519,6 +10538,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/gha/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
+      console.log('GHA earnings response - earnings count:', (data.earnings||[]).length, '| fields:', Object.keys(data||{}));
+      console.log('GHA earnings rows:', JSON.stringify((data.earnings||[]).slice(0,3)));
       setEarningsData(data);
     } catch(e) {
       console.error('Earnings fetch error:', e.message);
