@@ -10380,7 +10380,16 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [availableMonths, setAvailableMonths]       = useState([]);
   const [historyEarnings, setHistoryEarnings]       = useState(null);
   // Earnings tab state
-  const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
+  // Default to billing month (rolls to next month on 28th)
+  var defaultMonth = (function() {
+    var now = new Date();
+    if (now.getDate() >= 28) {
+      var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return next.toISOString().slice(0, 7);
+    }
+    return now.toISOString().slice(0, 7);
+  })();
+  const [selectedMonth, setSelectedMonth]           = useState(defaultMonth);
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [messages, setMessages]                     = useState([]);
@@ -10538,9 +10547,29 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/gha/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
-      console.log('GHA earnings response - earnings count:', (data.earnings||[]).length, '| fields:', Object.keys(data||{}));
-      console.log('GHA earnings rows:', JSON.stringify((data.earnings||[]).slice(0,3)));
+
+      // If no earnings for this month try previous month automatically
+      if ((data.earnings || []).length === 0 && m === defaultMonth) {
+        var prevDate = new Date(m + '-01T00:00:00.000Z');
+        prevDate.setMonth(prevDate.getMonth() - 1);
+        var prevMonth = prevDate.toISOString().slice(0, 7);
+        console.log('No earnings for', m, '- trying previous month:', prevMonth);
+
+        var res2 = await fetch(API_URL + '/api/gha/earnings?month=' + prevMonth, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        var data2 = await res2.json();
+        if (res2.ok && (data2.earnings || []).length > 0) {
+          setSelectedMonth(prevMonth);
+          setEarningsData(data2);
+          console.log('GHA earnings loaded from prev month:', prevMonth, '| count:', data2.earnings.length);
+          return;
+        }
+      }
+
       setEarningsData(data);
+      console.log('GHA earnings response - earnings count:', (data.earnings||[]).length, '| month:', m);
+      console.log('GHA earnings rows:', JSON.stringify((data.earnings||[]).slice(0,3)));
     } catch(e) {
       console.error('Earnings fetch error:', e.message);
       setEarningsData(null);
@@ -12280,7 +12309,16 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [expandedGha, setExpandedGha]         = useState(null);
   const [subscriptions, setSubscriptions]     = useState([]);
   const [subsLoading, setSubsLoading]         = useState(false);
-  const [subMonth, setSubMonth]               = useState(new Date().toISOString().slice(0, 7));
+  // Default to billing month (rolls to next month on 28th)
+  var defaultMonth = (function() {
+    var now = new Date();
+    if (now.getDate() >= 28) {
+      var next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return next.toISOString().slice(0, 7);
+    }
+    return now.toISOString().slice(0, 7);
+  })();
+  const [subMonth, setSubMonth]               = useState(defaultMonth);
   const [deposits, setDeposits]               = useState([]);
   const [depositsLoading, setDepositsLoading] = useState(false);
   const [depositMsg, setDepositMsg]           = useState('');
@@ -12375,7 +12413,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [availableMonths, setAvailableMonths]       = useState([]);
   const [historyAgentSearch, setHistoryAgentSearch] = useState('');
   // Earnings tab state
-  const [selectedMonth, setSelectedMonth]           = useState(new Date().toISOString().slice(0, 7));
+  // Uses billing-month default (defaultMonth) defined above
+  const [selectedMonth, setSelectedMonth]           = useState(defaultMonth);
   const [earningsData, setEarningsData]             = useState(null);
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saEarningsData, setSaEarningsData]         = useState(null);
@@ -12461,10 +12500,34 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       });
       var data = await res.json();
       console.log('Subscriptions response - subscriptions:', (data.subscriptions||[]).length, '| agents:', (data.agents||[]).length);
-      var subList = Array.isArray(data) ? data
-        : Array.isArray(data.subscriptions) ? data.subscriptions
-        : Array.isArray(data.agents) ? data.agents
-        : [];
+      var pickSubs = function(d) {
+        return Array.isArray(d) ? d
+          : Array.isArray(d.subscriptions) ? d.subscriptions
+          : Array.isArray(d.agents) ? d.agents
+          : [];
+      };
+      var subList = pickSubs(data);
+
+      // If no subscriptions for this month try previous month automatically
+      if (subList.length === 0 && currentMonth === defaultMonth) {
+        var prevDate = new Date(currentMonth + '-01T00:00:00.000Z');
+        prevDate.setMonth(prevDate.getMonth() - 1);
+        var prevMonth = prevDate.toISOString().slice(0, 7);
+        console.log('No subscriptions for', currentMonth, '- trying previous month:', prevMonth);
+
+        var res2 = await fetch(API_URL + '/api/sa/subscriptions?month=' + prevMonth, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        var data2 = await res2.json();
+        var subList2 = res2.ok ? pickSubs(data2) : [];
+        if (subList2.length > 0) {
+          setSubMonth(prevMonth);
+          setSubscriptions(subList2);
+          console.log('Subscriptions loaded from prev month:', prevMonth, '| count:', subList2.length);
+          return;
+        }
+      }
+
       setSubscriptions(subList);
     } catch(e) { console.error(e); }
     finally { setSubsLoading(false); }
@@ -12770,8 +12833,28 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/sa/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + authToken } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
+
+      // If no earnings for this month try previous month automatically
+      if ((data.earnings || []).length === 0 && m === defaultMonth) {
+        var prevDate = new Date(m + '-01T00:00:00.000Z');
+        prevDate.setMonth(prevDate.getMonth() - 1);
+        var prevMonth = prevDate.toISOString().slice(0, 7);
+        console.log('No SA earnings for', m, '- trying previous month:', prevMonth);
+
+        var res2 = await fetch(API_URL + '/api/sa/earnings?month=' + prevMonth, {
+          headers: { Authorization: 'Bearer ' + authToken }
+        });
+        var data2 = await res2.json();
+        if (res2.ok && (data2.earnings || []).length > 0) {
+          setSelectedMonth(prevMonth);
+          setEarningsData(data2);
+          console.log('SA earnings loaded from prev month:', prevMonth, '| count:', data2.earnings.length);
+          return;
+        }
+      }
+
       console.log('SA earnings response fields:', Object.keys(data || {}));
-      console.log('SA earnings - total_commission:', data.total_commission, '| earnings count:', (data.earnings||[]).length, '| active_subscriptions:', data.active_subscriptions);
+      console.log('SA earnings - total_commission:', data.total_commission, '| earnings count:', (data.earnings||[]).length, '| active_subscriptions:', data.active_subscriptions, '| month:', m);
       setEarningsData(data);
     } catch(e) {
       console.error('Earnings fetch error:', e.message);
