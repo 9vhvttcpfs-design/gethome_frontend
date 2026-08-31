@@ -10387,6 +10387,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
       var data = await res.json();
       if (res.ok) {
         setGhaOverview(data);
+        console.log('GHA overview response - pending_commission:', data.pending_commission, '| monthly_commission:', data.monthly_commission, '| total_commission:', data.total_commission, '| agents count:', (data.agents||[]).length);
         // Also sync agents list if returned
         if (data.agents) setAgents(data.agents);
         // Store this GHA's individual commission rate for display elsewhere
@@ -11040,6 +11041,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     ghaOverview?.paid_commission || 0;
 
                   console.log('GHA overview - pending:', pendingCommission, '| total earned:', totalEarned, '| paid out:', totalPaidOut);
+                  console.log('GHA overview agents sample:', (ghaOverview?.agents||[]).slice(0,2).map(function(a) { return {email: a.email, tier: a.subscription_tier, is_unlimited: a.is_unlimited}; }));
 
                   return (
                     <div style={{ ...cardSt, padding: '20px 24px', background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)', borderLeft: '4px solid #22c55e' }}>
@@ -11255,6 +11257,25 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                   var isExpanded = expandedAgent === agentKey;
                   var isConfirming = confirmingId === agentKey;
                   var isGhaVerified = !!a.gha_confirmed;
+
+                  // Agent may show free in profile but have earnings - check both
+                  var agentTier = a.subscription_tier;
+                  var agentIsUnlimited = a.is_unlimited || a.unlimited_listings;
+
+                  // If profile says free but agent has subscription_amount > 0, use that
+                  if (agentTier === 'free' && parseFloat(a.subscription_amount || 0) > 0) {
+                    agentTier = 'premium'; // was subscribed, profile may be stale
+                  }
+
+                  var tierLabel = agentIsUnlimited ? '∞ Unlimited'
+                    : agentTier === 'agency' ? '🏢 Agency'
+                    : agentTier === 'premium' ? '⭐ Premium'
+                    : '🆓 Free';
+
+                  var tierColor = agentIsUnlimited ? '#8b5cf6'
+                    : agentTier === 'agency' ? '#0a2240'
+                    : agentTier === 'premium' ? '#27ae60'
+                    : '#94a3b8';
                   return (
                     <div key={agentKey} style={{ ...cardSt, padding: '18px 20px' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
@@ -11265,7 +11286,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           {a.phone && <p style={{ margin: '0 0 6px 0', color: '#94a3b8', fontSize: '0.73rem', fontFamily: "'Inter', sans-serif" }}>{a.phone}</p>}
                           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                             {verLevelBadge(a.verification_level || a.level)}
-                            {tierBadge(a.subscription_tier)}
+                            <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: tierColor, color: '#fff', fontFamily: "'Inter', sans-serif" }}>{tierLabel}</span>
                             <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#0a2240', color: '#fff', fontFamily: "'Inter', sans-serif" }}>{a.listing_count || 0} Listings</span>
                             {(a.is_subscription_expired || expired) ? (
                               <>
@@ -11279,8 +11300,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                           {/* Plan expiry */}
                           {(function() {
-                            var tier = a.subscription_tier || 'free';
-                            var isUnlimited = a.is_unlimited;
+                            var tier = agentTier || 'free';
+                            var isUnlimited = agentIsUnlimited;
                             var expiryDate = a.unlimited_expires_at || a.subscription_end || a.subscription_expires_at;
                             var isExpired = expiryDate && new Date(expiryDate) < new Date();
                             var daysLeft = expiryDate ? Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) : null;
@@ -12403,10 +12424,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   async function fetchSubscriptions() {
     setSubsLoading(true);
     try {
-      var res = await fetch(API_URL + '/api/sa/subscriptions?month=' + subMonth, { headers: { Authorization: 'Bearer ' + token } });
+      var currentMonth = subMonth || new Date().toISOString().slice(0, 7);
+      var res = await fetch(API_URL + '/api/sa/subscriptions?month=' + currentMonth, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
       var data = await res.json();
-      // API returns { agents, total_revenue, sa_commission, by_month }, not a bare array
-      setSubscriptions(Array.isArray(data) ? data : (Array.isArray(data.agents) ? data.agents : []));
+      console.log('Subscriptions response - subscriptions:', (data.subscriptions||[]).length, '| agents:', (data.agents||[]).length);
+      var subList = Array.isArray(data) ? data
+        : Array.isArray(data.subscriptions) ? data.subscriptions
+        : Array.isArray(data.agents) ? data.agents
+        : [];
+      setSubscriptions(subList);
     } catch(e) { console.error(e); }
     finally { setSubsLoading(false); }
   }
@@ -12706,6 +12734,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
       var res = await fetch(API_URL + '/api/sa/earnings?month=' + m, { headers: { Authorization: 'Bearer ' + authToken } });
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load earnings');
+      console.log('SA earnings response fields:', Object.keys(data || {}));
+      console.log('SA earnings - total_commission:', data.total_commission, '| earnings count:', (data.earnings||[]).length, '| active_subscriptions:', data.active_subscriptions);
       setEarningsData(data);
     } catch(e) {
       console.error('Earnings fetch error:', e.message);
