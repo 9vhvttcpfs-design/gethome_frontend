@@ -11277,6 +11277,32 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                             ) : null}
                             {isGhaVerified && <span style={{ fontSize: '0.64rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', fontFamily: "'Inter', sans-serif" }}>GHA CONFIRMED</span>}
                           </div>
+                          {/* Plan expiry */}
+                          {(function() {
+                            var tier = a.subscription_tier || 'free';
+                            var isUnlimited = a.is_unlimited;
+                            var expiryDate = a.unlimited_expires_at || a.subscription_end || a.subscription_expires_at;
+                            var isExpired = expiryDate && new Date(expiryDate) < new Date();
+                            var daysLeft = expiryDate ? Math.ceil((new Date(expiryDate) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+
+                            if (tier === 'free' && !isUnlimited) {
+                              return <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>Free plan</span>;
+                            }
+                            return (
+                              <div style={{ marginTop: '4px' }}>
+                                <span style={{ fontSize: '0.70rem', fontWeight: '700',
+                                  color: isExpired ? '#ef4444' : daysLeft <= 7 ? '#f59e0b' : '#27ae60' }}>
+                                  {isUnlimited ? '∞ Unlimited' : tier}
+                                  {expiryDate && (
+                                    <span style={{ fontWeight: '400', marginLeft: '4px' }}>
+                                      · {isExpired ? 'Expired ' : daysLeft <= 7 ? daysLeft + 'd left · ' : 'Expires '}
+                                      {new Date(expiryDate).toLocaleDateString('en-NG', { dateStyle: 'medium' })}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: isMobile ? '100%' : undefined }}>
                           <button onClick={function(){ window.open('https://wa.me/' + formatWhatsAppNumber(a.phone) + '?text=' + encodeURIComponent('Hello ' + (a.full_name || 'Agent') + ', this is your GetHome GHA. Please check your registration details.'), '_blank'); }}
@@ -12343,7 +12369,23 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     try {
       var res = await fetch(API_URL + '/api/sa/my-ghas', { headers: { Authorization: 'Bearer ' + token } });
       var data = await res.json();
-      setGhas(Array.isArray(data) ? data : []);
+      var list = Array.isArray(data) ? data : [];
+      setGhas(list);
+      // Enrich each GHA with its inspection counts (pending / done / confirmed)
+      var enrichedGhas = await Promise.all(list.map(async function(gha) {
+        try {
+          var ir = await fetch(API_URL + '/api/sa/gha-inspections?gha_id=' + gha.id, {
+            headers: { Authorization: 'Bearer ' + token }
+          });
+          var idata = await ir.json();
+          return Object.assign({}, gha, {
+            pending_inspections: idata.pending || 0,
+            confirmed_inspections: idata.confirmed || 0,
+            done_inspections: idata.done || 0,
+          });
+        } catch(e) { return gha; }
+      }));
+      setGhas(enrichedGhas);
     } catch(e) { console.error(e); }
     finally { setGhasLoading(false); }
   }
@@ -12725,7 +12767,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     return function() { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
   useEffect(function() {
-    if (saTab === 'subscriptions') fetchSubscriptions();
+    // Earnings + Subscriptions both read from /api/sa/overview and the
+    // subscriptions list — refetch both whenever either tab opens.
+    if (saTab === 'earnings' || saTab === 'subscriptions') { fetchSAOverview(); fetchSubscriptions(); }
     if (saTab === 'inspections') {
       fetchInspections();
       var inspInterval = setInterval(function(){ fetchInspections(true); }, 60000);
@@ -12747,6 +12791,15 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   useEffect(function() {
     if (saTab === 'monthly-history') fetchMonthlyHistory(historyMonth);
   }, [saTab, historyMonth]);
+
+  useEffect(function() {
+    if (saTab !== 'earnings' && saTab !== 'subscriptions') return;
+    var interval = setInterval(function() {
+      fetchSAOverview();
+      fetchSubscriptions();
+    }, 60000);
+    return function() { clearInterval(interval); };
+  }, [saTab]);
 
   useEffect(function() {
     if (saTab !== 'earnings') return;
@@ -13200,6 +13253,23 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             ) : (
                               <span style={{ fontSize: '0.72rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>
                                 <span style={{ color: '#f59e0b' }}>★</span> <span style={{ fontWeight: '700' }}>{Number(gha.average_rating || 0).toFixed(1)}</span> <span style={{ color: '#94a3b8' }}>({gha.total_ratings})</span>
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                            {gha.pending_inspections > 0 && (
+                              <span style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: '600' }}>
+                                ⏳ {gha.pending_inspections} pending
+                              </span>
+                            )}
+                            {gha.done_inspections > 0 && (
+                              <span style={{ fontSize: '0.72rem', color: '#3b82f6', fontWeight: '600' }}>
+                                🔍 {gha.done_inspections} done
+                              </span>
+                            )}
+                            {gha.confirmed_inspections > 0 && (
+                              <span style={{ fontSize: '0.72rem', color: '#27ae60', fontWeight: '600' }}>
+                                ✓ {gha.confirmed_inspections} confirmed
                               </span>
                             )}
                           </div>
