@@ -13001,12 +13001,27 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   }, [saGhas, pendingAgents]);
 
   var saCity = (profileForm.location || staffUser.location || '').trim();
-  var cityFilteredPendingAgents = saCity
-    ? pendingAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
-    : pendingAgents;
-  var cityFilteredGhaAgents = saCity
-    ? ghaInspectionAgents.filter(function(a) { return (a.city || '').trim().toLowerCase() === saCity.toLowerCase(); })
-    : ghaInspectionAgents;
+
+  // SA location and agent city are free-text and often disagree on granularity
+  // (SA "Abuja" vs agent "Lugbe"). Match on any word overlap between the SA
+  // location and the agent's city/office address, always surface agents with no
+  // city set, and fall back to the full list if nothing matches so an agent is
+  // never invisible to every SA.
+  var looseCityFilter = function(list) {
+    if (!saCity) return list;
+    var saWords = saCity.toLowerCase().split(/[\s,]+/).filter(function(w) { return w.length > 2; });
+    var matched = list.filter(function(a) {
+      if (!a.city) return true;
+      var agentText = ((a.city || '') + ' ' + (a.office_address || '')).toLowerCase();
+      var agentWords = agentText.split(/[\s,]+/).filter(function(w) { return w.length > 2; });
+      return saWords.some(function(w) { return agentText.includes(w); }) ||
+             agentWords.some(function(w) { return saCity.toLowerCase().includes(w); });
+    });
+    return matched.length > 0 ? matched : list;
+  };
+
+  var cityFilteredPendingAgents = looseCityFilter(pendingAgents);
+  var cityFilteredGhaAgents = looseCityFilter(ghaInspectionAgents);
   var filteredAgents = agents.filter(function(a) {
     if (!agentSearch.trim()) return true;
     var q = agentSearch.toLowerCase();
