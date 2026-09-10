@@ -5399,6 +5399,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (adminTab === 'agents' && !checkingAuth && sessionUser) {
       fetchAgents();
       fetchApprovedAgents();
+      // Poll while the Agents tab is open so SA assignments / rejections
+      // surface without a manual refresh (no realtime channel admin-side).
+      var interval = setInterval(function() { fetchAgents(); fetchApprovedAgents(); }, 30000);
+      return function() { clearInterval(interval); };
     }
   }, [adminTab]);
 
@@ -5916,6 +5920,16 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 {!isPending && (
                                   <p style={{ margin: '2px 0 0 0', color: '#94a3b8', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}>
                                     {agent.city && <><MapPin size={11} /> {agent.city} · </>}{isRejectedTab ? 'Rejected' : 'Approved'}: {approvalDate ? new Date(approvalDate).toLocaleDateString() : 'Unknown'}
+                                  </p>
+                                )}
+                                {agent.sa_id && (
+                                  <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: '#27ae60', fontWeight: '600' }}>
+                                    ✓ Assigned to {agent.gha_code || 'GHA'} by SA
+                                  </p>
+                                )}
+                                {(isRejectedTab || agent.status === 'rejected') && (
+                                  <p style={{ margin: '2px 0 0 0', fontSize: '0.70rem', color: '#ef4444', fontWeight: '600' }}>
+                                    ✕ Rejected{agent.rejection_reason ? ': ' + agent.rejection_reason : ''}
                                   </p>
                                 )}
                               </div>
@@ -9040,6 +9054,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     var codeLabel = inboxTab === 'inbox' ? (msg.sender_code || msg.sender_type || '') : (msg.recipient_code || msg.recipient_type || '');
                     var msgText = msg.message || '';
                     var preview = msgText.length > 60 ? msgText.slice(0, 60) + '…' : msgText;
+                    var msgBadge = msg.message_type === 'inspection_note' ? { label: 'INSPECTION', bg: '#eff6ff', color: '#1e40af' }
+                      : msg.message_type === 'new_listing_alert' ? { label: 'NEW LISTING', bg: '#f0fff4', color: '#166534' }
+                      : msg.message_type === 'payment_received' ? { label: 'PAYMENT', bg: '#fef3c7', color: '#92400e' }
+                      : msg.message_type === 'agent_assigned' ? { label: 'ASSIGNED ✅', bg: '#f0fff4', color: '#166534' }
+                      : msg.message_type === 'agent_rejected' ? { label: 'REJECTED ✕', bg: '#fff7ed', color: '#c2410c' }
+                      : null;
                     return (
                       <div key={msg.id}
                         onClick={function(){
@@ -9055,6 +9075,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
                               <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>{codeLabel}</span>
+                              {msgBadge && <span style={{ fontSize: '0.60rem', padding: '2px 8px', borderRadius: '20px', fontWeight: '800', backgroundColor: msgBadge.bg, color: msgBadge.color }}>{msgBadge.label}</span>}
                               <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>{msg.subject || '(no subject)'}</span>
                             </div>
                             <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem' }}>{preview}</p>
@@ -9086,6 +9107,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     ? { bg: '#eff6ff', color: '#1e40af', border: '#bfdbfe', label: 'New Listing Alert' }
                     : m.message_type === 'payment_received'
                     ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0', label: 'Payment Received' }
+                    : m.message_type === 'agent_assigned'
+                    ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0', label: 'Agent Assigned ✅' }
+                    : m.message_type === 'agent_rejected'
+                    ? { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', label: 'Agent Rejected ✕' }
                     : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
                   return (
                     <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', padding: '20px 24px' }}>
@@ -13072,12 +13097,17 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     // confirmation, an agent verification request, and a
                     // confirmed inspection all land in this same feed and
                     // shouldn't look identical to a fresh customer request.
-                    var notifIcon = notif.type === 'inspection_fee_paid' ? '💰'
+                    var notifIcon = notif.type === 'agent_assigned' ? '✅'
+                      : notif.type === 'agent_rejected' ? '❌'
+                      : notif.type === 'inspection_fee_paid' ? '💰'
+                      : notif.type === 'rating_link_ready' ? '⭐'
                       : notif.type === 'inspection_request' ? '🔍'
                       : notif.type === 'agent_verification_request' ? '👤'
                       : notif.type === 'inspection_confirmed' ? '✓'
                       : '🔔';
-                    var notifFallbackTitle = notif.type === 'agent_verification_request' ? 'Agent verification request'
+                    var notifFallbackTitle = notif.type === 'agent_assigned' ? 'Agent assigned to GHA'
+                      : notif.type === 'agent_rejected' ? 'Agent rejected'
+                      : notif.type === 'agent_verification_request' ? 'Agent verification request'
                       : notif.type === 'inspection_fee_paid' ? 'Inspection fee paid'
                       : notif.type === 'inspection_confirmed' ? 'Inspection confirmed'
                       : 'Inspection request';
