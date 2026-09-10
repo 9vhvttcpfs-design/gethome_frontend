@@ -13632,9 +13632,15 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                       var verColor = verLevel === 'GOLD' ? { bg: '#fef9c3', color: '#92400e', border: '#fde68a' } : verLevel === 'SILVER' ? { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' } : { bg: '#fef3c7', color: '#78350f', border: '#fcd34d' };
                       return (
                         <div key={a.id} style={{ ...cardSt, padding: '16px' }}>
-                          <p style={{ margin: '0 0 3px 0', fontWeight: '800', fontSize: '0.92rem', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.full_name || 'Agent'}</p>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '3px' }}>
+                            <p style={{ margin: 0, fontWeight: '800', fontSize: '0.92rem', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{a.full_name || 'Agent'}</p>
+                            <span style={{ flexShrink: 0, backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '20px', padding: '3px 10px', fontSize: '0.70rem', fontWeight: '800', whiteSpace: 'nowrap' }}>⏳ Awaiting Approval</span>
+                          </div>
                           <p style={{ margin: '0 0 2px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
                             <a href={'mailto:' + a.email} style={{ color: '#2563eb' }}>{a.email}</a>
+                          </p>
+                          <p style={{ margin: '0 0 2px 0', fontSize: '0.74rem', color: '#64748b', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <MapPin size={11} /> {a.city || a.office_address || 'Location not set'}
                           </p>
                           {a.phone && (
                             <p style={{ margin: '0 0 10px 0', fontSize: '0.78rem', fontFamily: "'Inter', sans-serif" }}>
