@@ -13289,10 +13289,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <p style={{ margin: '0 0 4px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Current Month</p>
                 <p style={{ margin: 0, fontWeight: '900', color: '#0a2240', fontSize: '0.98rem' }}>{overviewMonthLabel}</p>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: '0 0 4px 0', fontSize: '0.68rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Agents This Month</p>
-                <p style={{ margin: 0, fontWeight: '900', color: '#3b82f6', fontSize: '0.98rem' }}>{saOverview?.total_agents_this_month || 0}</p>
-              </div>
             </div>
             <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
               {[
