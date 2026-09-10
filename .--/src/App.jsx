@@ -4629,10 +4629,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [adminAssignGha, setAdminAssignGha]             = useState({});
   const [adminAssignGhaMsg, setAdminAssignGhaMsg]       = useState({});
   const [adminAssigningGha, setAdminAssigningGha]       = useState({});
-  // Inspection Performance panel state
-  const [ghaInspPerfStats, setGhaInspPerfStats]         = useState([]);
-  const [ghaInspPerfMonth, setGhaInspPerfMonth]         = useState(new Date().toISOString().slice(0, 7));
-  const [ghaInspPerfLoading, setGhaInspPerfLoading]     = useState(false);
   // GHA Management sub-tab + Ratings panel state
   const [ghaMgmtSubTab, setGhaMgmtSubTab]               = useState('directory');
   const [allRatings, setAllRatings]                     = useState({ leaderboard: [], recent_reviews: [] });
@@ -4883,22 +4879,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
       }
     } catch(e) { console.error('Deposits fetch error:', e.message); }
     finally { setDepositsLoading(false); }
-  };
-
-  const fetchGhaInspPerfStats = async function(month) {
-    var m = month || ghaInspPerfMonth;
-    setGhaInspPerfLoading(true);
-    try {
-      var token = localStorage.getItem('gh_token');
-      var res = await fetch(API_URL + '/api/gha-inspection-stats?month=' + m, {
-        headers: { Authorization: 'Bearer ' + token }
-      });
-      if (res.ok) {
-        var data = await res.json();
-        setGhaInspPerfStats(Array.isArray(data) ? data : []);
-      }
-    } catch(e) { console.error('GHA inspection stats error:', e.message); }
-    finally { setGhaInspPerfLoading(false); }
   };
 
   const fetchAllRatings = async function() {
@@ -5415,10 +5395,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }, [adminTab]);
 
   useEffect(function() {
-    if (adminTab === 'gha-management') fetchGhaInspPerfStats(ghaInspPerfMonth);
-  }, [ghaInspPerfMonth]);
-
-  useEffect(function() {
     if (adminTab === 'inspections' && inspectionsSubTab === 'gha-payments') fetchGHAPayments();
   }, [adminTab, inspectionsSubTab, ghaPaymentsMonth]);
 
@@ -5738,7 +5714,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'listings') fetchListings();
     if (t === 'deposits') fetchDeposits();
     if (t === 'sa-management') { if (allSAs.length === 0) fetchAllSAs(); fetchSALocations(); }
-    if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchGhaInspPerfStats(ghaInspPerfMonth); fetchAllRatings(); }
+    if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchAllRatings(); }
     if (t === 'earnings') fetchEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
     if (t === 'inspection-fees') fetchInspectionFees();
@@ -7659,63 +7635,6 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 </div>
 
-                {/* ── INSPECTION PERFORMANCE ── */}
-                <div style={{ marginTop: '28px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px', flexWrap: 'wrap' }}>
-                    <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: 0 }}>Inspection Performance</h3>
-                    <input type="month" value={ghaInspPerfMonth}
-                      onChange={function(e){ setGhaInspPerfMonth(e.target.value); fetchGhaInspPerfStats(e.target.value); }}
-                      style={{ padding: '5px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.80rem', color: '#0a2240', cursor: 'pointer' }} />
-                    <button onClick={function(){ fetchGhaInspPerfStats(ghaInspPerfMonth); }}
-                      style={{ padding: '5px 12px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
-                  </div>
-                  {(function() {
-                    if (ghaInspPerfLoading) return (
-                      <div style={{ textAlign: 'center', padding: '24px' }}><p style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Loading…</p></div>
-                    );
-                    var statsMap = {};
-                    ghaInspPerfStats.forEach(function(s){ statsMap[s.gha_id] = s; });
-                    var rows = allGHAsAdmin.map(function(g) {
-                      var stat = statsMap[g.id] || {};
-                      var saInfo = allSAs.find(function(s){ return s.id === g.sa_id || (s.sa_code || s.staff_id) === g.sa_code; });
-                      return {
-                        gha_code: g.gha_code || g.staff_id || '',
-                        gha_name: g.full_name || g.name || '',
-                        sa_code: g.sa_code || (saInfo && (saInfo.sa_code || saInfo.staff_id)) || '-',
-                        completed: stat.completed_count || 0,
-                        pending: stat.pending_count || 0,
-                      };
-                    });
-                    rows.sort(function(a, b){ return b.completed - a.completed; });
-                    if (rows.length === 0) return (
-                      <div style={{ ...cardStyle, padding: '28px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontSize: '0.82rem' }}>No GHAs found.</p></div>
-                    );
-                    var medalBorder = ['3px solid #f59e0b', '3px solid #94a3b8', '3px solid #cd7f32'];
-                    return (
-                      <div style={{ overflowX: isMobile ? 'auto' : undefined }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 1fr 0.8fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.60rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', minWidth: isMobile ? '500px' : undefined }}>
-                          <span>GHA CODE</span><span>NAME</span><span>SA</span><span>COMPLETED THIS MONTH</span><span>PENDING NOW</span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: isMobile ? '500px' : undefined }}>
-                          {rows.map(function(row, idx) {
-                            var isInactive = row.completed === 0;
-                            var borderLeft = idx < 3 ? medalBorder[idx] : '3px solid transparent';
-                            var textColor = isInactive ? '#94a3b8' : '#0a2240';
-                            return (
-                              <div key={row.gha_code + idx} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 1fr 0.8fr', gap: '0 10px', padding: '9px 14px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderLeft: borderLeft, borderRadius: '8px', alignItems: 'center' }}>
-                                <span style={{ fontWeight: '800', fontSize: '0.74rem', color: isInactive ? '#94a3b8' : '#22c55e', fontFamily: "'Inter', sans-serif" }}>{row.gha_code}</span>
-                                <span style={{ fontWeight: '600', fontSize: '0.78rem', color: textColor, fontFamily: "'Inter', sans-serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.gha_name}</span>
-                                <span style={{ fontSize: '0.72rem', color: isInactive ? '#94a3b8' : '#475569', fontFamily: "'Inter', sans-serif" }}>{row.sa_code}</span>
-                                <span style={{ fontWeight: '800', fontSize: '0.82rem', color: isInactive ? '#94a3b8' : '#166534', fontFamily: "'Inter', sans-serif" }}>{row.completed}</span>
-                                <span style={{ fontWeight: '700', fontSize: '0.78rem', color: isInactive ? '#94a3b8' : '#b45309', fontFamily: "'Inter', sans-serif" }}>{row.pending}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
                 </>)}
 
                 {ghaMgmtSubTab === 'ratings' && (
