@@ -1757,6 +1757,48 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
       })
       .catch(function(e) { console.error('Fee breakdown fetch error:', e.message); });
   }, [property?.id]);
+  // Return from a Property Deposit checkout: if this modal was re-opened for
+  // the property we stashed before redirecting to Flutterwave, drop straight
+  // into the "Payment Successful" state.
+  useEffect(function() {
+    if (!property?.id) return;
+    try {
+      var raw = localStorage.getItem('gh_pending_deposit');
+      var pd = raw ? JSON.parse(raw) : null;
+      if (!pd || String(pd.property_id) !== String(property.id)) return;
+      var age = Date.now() - (pd.timestamp || 0);
+      localStorage.removeItem('gh_pending_deposit');
+      if (age > 4 * 60 * 60 * 1000) return;
+      setDepositRef(pd.reference || '');
+      setDepositDone(true);
+    } catch (e) {}
+  }, [property?.id]);
+  // After the deposit payment lands, hand the customer off to the SA on
+  // WhatsApp. Runs post-redirect so the popup may be blocked — the
+  // "Send Payment Confirmation to SA" button below is the reliable fallback.
+  useEffect(function() {
+    if (!depositDone) return;
+    try {
+      // Use SA WhatsApp from fee breakdown - SA confirms payment from their end
+      var saWhatsApp = formatWhatsAppNumber(
+        feeBreakdown?.sa_whatsapp ||   // SA linked to this property's agent
+        property?.sa_whatsapp ||        // SA from property object
+        globalSettings?.payment_whatsapp || // fallback to GetHome number
+        '2349139649368'
+      );
+      var saName = feeBreakdown?.sa_name || 'your SA';
+      var paymentAmount = feeBreakdown?.grand_total || grandTotal;
+      var successMsg = encodeURIComponent(
+        'Hello ' + saName + ', I have successfully made a payment on GetHome.\n\n' +
+        '🏠 Property: ' + (property?.title || 'Property') + '\n' +
+        '📍 Location: ' + (property?.location || 'N/A') + '\n' +
+        '💰 Amount Paid: ₦' + parseFloat(paymentAmount || 0).toLocaleString() + '\n' +
+        '🔖 Reference: ' + (depositRef || 'N/A') + '\n\n' +
+        'Please confirm my payment. Thank you.'
+      );
+      window.open('https://wa.me/' + saWhatsApp + '?text=' + successMsg, '_blank');
+    } catch (e) {}
+  }, [depositDone]);
   if (!property) return null;
   const isShortlet = (property.purpose || '').toLowerCase().trim() === 'shortlet' || (property.purpose || '').toLowerCase().trim() === 'short let';
   // Escrow rate/cap: prefer the backend breakdown, then global settings, then
@@ -1952,6 +1994,23 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Payment initialization failed');
+      // Stash the deposit details so we can re-open this property's modal in
+      // its "Payment Successful" state (with the SA WhatsApp confirm button)
+      // once Flutterwave redirects the customer back to the app.
+      try {
+        localStorage.setItem('gh_pending_deposit', JSON.stringify({
+          property_id: property.id,
+          property_title: property.title || '',
+          property_location: property.location || '',
+          property_price: Number(property.rent || property.price || 0),
+          amount: feeBreakdown?.grand_total || grandTotal,
+          reference: data.reference || data.tx_ref || data.txRef || '',
+          sa_whatsapp: feeBreakdown?.sa_whatsapp || property.sa_whatsapp || property.agent_sa_whatsapp || globalSettings?.payment_whatsapp || '',
+          sa_name: feeBreakdown?.sa_name || property.agent_display_name || 'your SA',
+          customer_email: user.email,
+          timestamp: Date.now(),
+        }));
+      } catch (e) {}
       window.location.href = data.checkout_url;
     } catch (err) {
       alert('Error: ' + err.message);
@@ -2093,8 +2152,10 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               </div>
             )}
             {(property.agent_display_name || property.created_by) && (function() {
-              // Get SA WhatsApp for this property
+              // Get SA WhatsApp for this property — prefer the SA linked via the
+              // fee breakdown, then the property object, then the GetHome number.
               var saWa = formatWhatsAppNumber(
+                feeBreakdown?.sa_whatsapp ||
                 property.sa_whatsapp ||
                 property.agent_sa_whatsapp ||
                 globalSettings.payment_whatsapp ||
@@ -2210,6 +2271,30 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
               }} style={{ width: '100%', padding: '10px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '9px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
                 Resend WhatsApp Notification
               </button>
+              <a href={(function() {
+                // Use SA WhatsApp from fee breakdown - SA confirms payment from their end
+                var saWhatsApp = formatWhatsAppNumber(
+                  feeBreakdown?.sa_whatsapp ||   // SA linked to this property's agent
+                  property?.sa_whatsapp ||        // SA from property object
+                  globalSettings?.payment_whatsapp || // fallback to GetHome number
+                  '2349139649368'
+                );
+                var saName = feeBreakdown?.sa_name || 'your SA';
+                var paymentAmount = feeBreakdown?.grand_total || grandTotal;
+                var successMsg = encodeURIComponent(
+                  'Hello ' + saName + ', I have successfully made a payment on GetHome.\n\n' +
+                  '🏠 Property: ' + (property?.title || 'Property') + '\n' +
+                  '📍 Location: ' + (property?.location || 'N/A') + '\n' +
+                  '💰 Amount Paid: ₦' + parseFloat(paymentAmount || 0).toLocaleString() + '\n' +
+                  '🔖 Reference: ' + (depositRef || 'N/A') + '\n\n' +
+                  'Please confirm my payment. Thank you.'
+                );
+                return 'https://wa.me/' + saWhatsApp + '?text=' + successMsg;
+              })()}
+                target='_blank' rel='noopener noreferrer'
+                style={{ display: 'block', width: '100%', padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.88rem', textDecoration: 'none', textAlign: 'center', marginTop: '12px', boxSizing: 'border-box' }}>
+                💬 Send Payment Confirmation to SA
+              </a>
             </div>
           ) : (
             <div style={{ marginBottom: '10px' }}>
@@ -12933,7 +13018,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'agents', label: 'Agents' },
     { id: 'listings', label: 'Listings' },
     { id: 'subscriptions', label: 'Subscriptions' },
-    { id: 'payments', label: 'Customer Payments' },
     { id: 'inspections', label: 'Inspections' },
     { id: 'monthly-history', label: 'Monthly History' },
     { id: 'earnings', label: 'Earnings' },
@@ -13138,13 +13222,12 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             {mobileNavOpen && (
               <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', boxShadow: '0 8px 24px rgba(10,34,64,0.12)', zIndex: 999, overflow: 'hidden', marginTop: '4px' }}>
                 {saTabs.map(function(tab) {
-                  var badge = tab.id === 'payments' ? deposits.filter(function(d){ return !d.deposit_confirmed; }).length : tab.id === 'inspections' ? saDisplayNotifications.filter(function(n){ return !n.read; }).length : tab.id === 'inbox' ? messageUnread : 0;
+                  var badge = tab.id === 'inspections' ? saDisplayNotifications.filter(function(n){ return !n.read; }).length : tab.id === 'inbox' ? messageUnread : 0;
                   return (
                     <button key={tab.id}
                       onClick={function() {
                         setSaTab(tab.id);
                         setMobileNavOpen(false);
-                        if (tab.id === 'payments') fetchDeposits();
                         if (tab.id === 'inspections' && inspections.length === 0) fetchInspections();
                         if (tab.id === 'inbox') fetchMessages();
                       }}
@@ -13163,10 +13246,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
               var t = tab.id, label = tab.label;
               var active = saTab === t;
               return (
-                <button key={t} onClick={function(){ setSaTab(t); if (t === 'payments') fetchDeposits(); if (t === 'inspections' && inspections.length === 0) fetchInspections(); if (t === 'inbox') fetchMessages(); }}
+                <button key={t} onClick={function(){ setSaTab(t); if (t === 'inspections' && inspections.length === 0) fetchInspections(); if (t === 'inbox') fetchMessages(); }}
                   style={{ padding: '8px 18px', borderRadius: '10px', border: 'none', backgroundColor: active ? '#0a2240' : '#f1f5f9', color: active ? '#fff' : '#334155', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', boxShadow: active ? '0 2px 8px rgba(10,34,64,0.15)' : 'none', fontFamily: "'Inter', sans-serif", display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {label}
-                  {t === 'payments' && deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{deposits.filter(function(d){ return !d.deposit_confirmed; }).length}</span>}
                   {t === 'inspections' && saDisplayNotifications.filter(function(n){ return !n.read; }).length > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{saDisplayNotifications.filter(function(n){ return !n.read; }).length}</span>}
                   {t === 'inbox' && messageUnread > 0 && <span style={{ backgroundColor: '#ef4444', color: '#fff', borderRadius: '999px', padding: '1px 7px', fontSize: '0.66rem', fontWeight: '800', lineHeight: '1.4' }}>{messageUnread}</span>}
                 </button>
@@ -13228,14 +13310,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                 <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>No coverage areas assigned</p>
               )}
             </div>
-            {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
-              <div style={{ ...cardSt, padding: '14px 18px', backgroundColor: '#fffbeb', borderLeft: '4px solid #f59e0b' }}>
-                <p style={{ margin: 0, fontWeight: '700', color: '#92400e', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>
-                  {deposits.filter(function(d){ return !d.deposit_confirmed; }).length} pending customer deposit{deposits.filter(function(d){ return !d.deposit_confirmed; }).length !== 1 ? 's' : ''} awaiting confirmation
-                  <button onClick={function(){ setSaTab('payments'); }} style={{ marginLeft: '12px', padding: '4px 10px', border: 'none', borderRadius: '6px', backgroundColor: '#f59e0b', color: '#fff', fontWeight: '700', fontSize: '0.72rem', cursor: 'pointer' }}>View</button>
-                </p>
-              </div>
-            )}
           </div>
           );
         })()}
@@ -13945,84 +14019,6 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── CUSTOMER PAYMENTS ── */}
-        {saTab === 'payments' && (
-          <div>
-            <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              Customer Payments
-              {deposits.filter(function(d){ return !d.deposit_confirmed; }).length > 0 && (
-                <span style={{ marginLeft: '8px', padding: '2px 10px', borderRadius: '20px', backgroundColor: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontSize: '0.72rem', fontWeight: '800' }}>
-                  {deposits.filter(function(d){ return !d.deposit_confirmed; }).length} pending
-                </span>
-              )}
-            </h2>
-            {depositMsg && (
-              <div style={{ backgroundColor: depositMsg.startsWith('Error') ? '#fef2f2' : '#f0fff4', border: '1.5px solid ' + (depositMsg.startsWith('Error') ? '#fecaca' : '#86efac'), borderRadius: '10px', padding: '12px 16px', marginBottom: '14px' }}>
-                <p style={{ margin: 0, color: depositMsg.startsWith('Error') ? '#b91c1c' : '#166534', fontWeight: '600', fontSize: '0.86rem', fontFamily: "'Inter', sans-serif" }}>{depositMsg}</p>
-              </div>
-            )}
-            {depositsLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading deposits...</p></div>
-            ) : deposits.length === 0 ? (
-              <div style={{ ...cardSt, padding: '30px', textAlign: 'center' }}><p style={{ color: '#94a3b8', margin: 0, fontFamily: "'Inter', sans-serif" }}>No deposit requests yet.</p></div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {deposits.slice().sort(function(a, b) {
-                  if (!a.deposit_confirmed && b.deposit_confirmed) return -1;
-                  if (a.deposit_confirmed && !b.deposit_confirmed) return 1;
-                  return new Date(b.created_at) - new Date(a.created_at);
-                }).map(function(d) {
-                  var isConfirmed = !!d.deposit_confirmed;
-                  var isConfirming = confirmingId === d.id;
-                  return (
-                    <div key={d.id} style={{ ...cardSt, padding: '14px 16px', borderLeft: isConfirmed ? '3px solid #86efac' : '3px solid #ddd6fe' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{d.property_title || '—'}</p>
-                          <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.76rem', fontFamily: "'Inter', sans-serif" }}>{d.property_location || ''}</p>
-                        </div>
-                        {isConfirmed
-                          ? <span style={{ fontSize: '0.65rem', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>CONFIRMED</span>
-                          : <span style={{ fontSize: '0.65rem', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', padding: '2px 9px', borderRadius: '20px', fontWeight: '800', flexShrink: 0 }}>AWAITING CONFIRMATION</span>
-                        }
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '3px 16px', marginBottom: '10px' }}>
-                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Customer: <span style={{ color: '#0a2240' }}>{d.user_email || '—'}</span></p>
-                        <p style={{ margin: 0, fontSize: '0.76rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>Amount: <strong style={{ color: '#166534' }}>₦{Number(d.deposit_amount || 0).toLocaleString()}</strong></p>
-                        <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Ref: {d.reference || '—'}</p>
-                        <p style={{ margin: 0, fontSize: '0.74rem', color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>{d.created_at ? new Date(d.created_at).toLocaleDateString() : ''}</p>
-                      </div>
-                      {!isConfirmed && (
-                        <button onClick={async function() {
-                          setConfirmingId(d.id);
-                          try {
-                            var res = await fetch(API_URL + '/api/sa/confirm-deposit', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                              body: JSON.stringify({ property_id: d.id })
-                            });
-                            var result = await res.json();
-                            if (!res.ok) throw new Error(result.error || 'Failed to confirm deposit');
-                            setDeposits(function(prev) { return prev.map(function(x){ return x.id === d.id ? Object.assign({}, x, { deposit_confirmed: true }) : x; }); });
-                            setDepositMsg('Deposit confirmed for ' + (d.property_title || 'property') + '.');
-                            setTimeout(function(){ setDepositMsg(''); }, 5000);
-                          } catch(e) {
-                            setDepositMsg('Error: ' + e.message);
-                            setTimeout(function(){ setDepositMsg(''); }, 5000);
-                          } finally { setConfirmingId(null); }
-                        }} disabled={isConfirming}
-                          style={{ padding: '7px 14px', backgroundColor: isConfirming ? '#94a3b8' : '#166534', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isConfirming ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif" }}>
-                          {isConfirming ? 'Confirming...' : 'Confirm Deposit'}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             )}
           </div>
@@ -16422,6 +16418,96 @@ function AppContent() {
       console.error('Inspection payment return error:', e.message);
     }
   }, []);
+  // Handle return from a Property Deposit / booking checkout. Before
+  // redirecting to Flutterwave, handleEscrowPayment stashes the property
+  // details in `gh_pending_deposit`; on the way back we re-open that
+  // property's modal so its in-modal "Payment Successful" state (with the
+  // SA WhatsApp confirm button) can show. If the listing can't be found in
+  // the loaded list we fall back to the standalone success screen.
+  useEffect(function() {
+    try {
+      var sp = new URLSearchParams(window.location.search);
+      var status = (sp.get('status') || '').toLowerCase();
+      var isPaidReturn = status === 'successful' || status === 'completed'
+        || sp.get('payment') === 'success' || sp.get('deposit') === 'success';
+
+      var raw = localStorage.getItem('gh_pending_deposit');
+      var pd = null;
+      try { pd = JSON.parse(raw || 'null'); } catch(e) {}
+      if (!pd) return;
+
+      var age = Date.now() - (pd.timestamp || 0);
+      var fourHours = 4 * 60 * 60 * 1000;
+      // Without an explicit success signal in the URL, only trust a very
+      // fresh stash so a plain back-navigation can't trigger a false success.
+      if (!isPaidReturn && age > 30 * 60 * 1000) { localStorage.removeItem('gh_pending_deposit'); return; }
+      if (age > fourHours) { localStorage.removeItem('gh_pending_deposit'); return; }
+
+      // Carry the Flutterwave reference through to the confirm message.
+      if (!pd.reference) {
+        pd.reference = sp.get('tx_ref') || sp.get('transaction_id') || sp.get('reference') || '';
+        try { localStorage.setItem('gh_pending_deposit', JSON.stringify(pd)); } catch(e) {}
+      }
+
+      if (selectedProperty && String(selectedProperty.id) === String(pd.property_id)) return;
+
+      var match = (properties || []).find(function(p) { return String(p.id) === String(pd.property_id); });
+      if (match) {
+        setSelectedProperty(match);
+      } else if (!isLoading) {
+        // Property list has finished loading and this listing isn't in it —
+        // show the standalone success screen instead of the in-modal state.
+        setInspectionSuccessPage({
+          customer_name: '',
+          customer_email: pd.customer_email || '',
+          customer_phone: '',
+          property_title: pd.property_title || 'Your selected property',
+          property_location: pd.property_location || '',
+          property_price: pd.property_price || 0,
+          sa_whatsapp: pd.sa_whatsapp || '2349139649368',
+          sa_name: pd.sa_name || 'GetHome Team',
+          fee: pd.amount || 0,
+          fee_payment_amount: pd.amount || 0,
+          inspection_fee: pd.amount || 0,
+          reference: pd.reference || '',
+          timestamp: Date.now(),
+          __deposit: true,
+        });
+        localStorage.removeItem('gh_pending_deposit');
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    } catch(e) {
+      console.error('Deposit payment return error:', e.message);
+    }
+  }, [properties, selectedProperty, isLoading]);
+  // After a successful customer payment, hand the customer off to the SA on
+  // WhatsApp. This runs on page load (post-redirect) so the browser may block
+  // the popup — the on-screen "Send Payment Confirmation to SA" button is the
+  // reliable fallback.
+  useEffect(function() {
+    if (!inspectionSuccessPage) return;
+    // Auto-handoff only for the deposit/booking flow; the inspection screen
+    // keeps its existing tap-to-send UX (its own "Book Inspection" button).
+    if (!inspectionSuccessPage.__deposit) return;
+    try {
+      var i = inspectionSuccessPage;
+      var saWhatsApp = formatWhatsAppNumber(
+        i.sa_whatsapp ||                     // SA carried through from the fee breakdown
+        globalSettings?.payment_whatsapp ||  // fallback to GetHome number
+        '2349139649368'
+      );
+      var saName = i.sa_name || 'your SA';
+      var successMsg = encodeURIComponent(
+        'Hello ' + saName + ', I have successfully made a payment on GetHome.\n\n' +
+        '🏠 Property: ' + (i.property_title || 'Property') + '\n' +
+        '📍 Location: ' + (i.property_location || 'N/A') + '\n' +
+        '💰 Amount Paid: ₦' + parseFloat(i.fee || i.fee_payment_amount || i.inspection_fee || 0).toLocaleString() + '\n' +
+        '🔖 Reference: ' + (i.reference || i.tx_ref || 'N/A') + '\n\n' +
+        'Please confirm my payment. Thank you.'
+      );
+      window.open('https://wa.me/' + saWhatsApp + '?text=' + successMsg, '_blank');
+    } catch(e) {}
+  }, [inspectionSuccessPage]);
   const searchFiltered = function(list) {
     var result = list;
     if (searchQuery.trim()) {
@@ -16484,6 +16570,24 @@ function AppContent() {
       '_Sent via GetHome — trygethome.online_'
     );
     var waLink = 'https://wa.me/' + saNum + '?text=' + bookingMsg;
+    var isDeposit = !!insp.__deposit;
+    var paidAmount = parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0);
+    // SA WhatsApp payment-confirmation handoff — the SA (carried through from
+    // the property fee breakdown) confirms the payment from their end.
+    var saWhatsApp = formatWhatsAppNumber(
+      insp.sa_whatsapp ||                  // SA linked to this property's agent
+      globalSettings?.payment_whatsapp ||  // fallback to GetHome number
+      '2349139649368'
+    );
+    var saName = insp.sa_name || 'your SA';
+    var successMsg = encodeURIComponent(
+      'Hello ' + saName + ', I have successfully made a payment on GetHome.\n\n' +
+      '🏠 Property: ' + (insp.property_title || 'Property') + '\n' +
+      '📍 Location: ' + (insp.property_location || 'N/A') + '\n' +
+      '💰 Amount Paid: ₦' + paidAmount.toLocaleString() + '\n' +
+      '🔖 Reference: ' + (insp.reference || insp.tx_ref || 'N/A') + '\n\n' +
+      'Please confirm my payment. Thank you.'
+    );
     return (
       <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
@@ -16498,7 +16602,7 @@ function AppContent() {
             Payment Confirmed!
           </h2>
           <p style={{ color: '#64748b', fontSize: '0.84rem', margin: '0 0 20px 0', lineHeight: 1.6 }}>
-            Your inspection fee of <strong>₦{parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0).toLocaleString()}</strong> has been received.
+            Your {isDeposit ? 'payment' : 'inspection fee'} of <strong>₦{paidAmount.toLocaleString()}</strong> has been received.
           </p>
           <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '12px 14px', marginBottom: '20px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
             <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.86rem' }}>
@@ -16508,35 +16612,46 @@ function AppContent() {
               📍 {insp.property_location || 'N/A'}
             </p>
             <p style={{ margin: 0, color: '#27ae60', fontSize: '0.78rem', fontWeight: '700' }}>
-              Fee paid: ₦{parseFloat(insp.fee || insp.fee_payment_amount || insp.inspection_fee || 0).toLocaleString()} ✓
+              {isDeposit ? 'Amount paid' : 'Fee paid'}: ₦{paidAmount.toLocaleString()} ✓
             </p>
           </div>
-          <a href={waLink}
-            target='_blank'
-            rel='noopener noreferrer'
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-              backgroundColor: '#25D366', color: '#fff',
-              borderRadius: '14px', padding: '16px 20px',
-              fontSize: '1rem', fontWeight: '900',
-              textDecoration: 'none', marginBottom: '12px',
-              boxShadow: '0 4px 12px rgba(37,211,102,0.3)',
-            }}>
-            📱 Book Inspection via WhatsApp
+          {!isDeposit && (
+            <>
+              <a href={waLink}
+                target='_blank'
+                rel='noopener noreferrer'
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                  backgroundColor: '#25D366', color: '#fff',
+                  borderRadius: '14px', padding: '16px 20px',
+                  fontSize: '1rem', fontWeight: '900',
+                  textDecoration: 'none', marginBottom: '12px',
+                  boxShadow: '0 4px 12px rgba(37,211,102,0.3)',
+                }}>
+                📱 Book Inspection via WhatsApp
+              </a>
+              <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: '0 0 16px 0' }}>
+                Tap above to send your inspection request to our team
+              </p>
+            </>
+          )}
+          <a href={'https://wa.me/' + saWhatsApp + '?text=' + successMsg}
+            target='_blank' rel='noopener noreferrer'
+            style={{ display: 'block', width: '100%', padding: '13px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '800', fontSize: '0.88rem', textDecoration: 'none', textAlign: 'center', marginTop: isDeposit ? '4px' : '0', marginBottom: '16px', boxSizing: 'border-box' }}>
+            💬 Send Payment Confirmation to SA
           </a>
-          <p style={{ color: '#94a3b8', fontSize: '0.74rem', margin: '0 0 16px 0' }}>
-            Tap above to send your inspection request to our team
-          </p>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button onClick={function() {
-              setInspectionSuccessPage(null);
-              setShowNavAuth(false);
-              setCustomerAccountTab('inspections');
-              setShowAccountModal(true);
-              setTimeout(function() { fetchCustomerInspections(); }, 300);
-            }} style={{ flex: 1, padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
-              My Inspections
-            </button>
+            {!isDeposit && (
+              <button onClick={function() {
+                setInspectionSuccessPage(null);
+                setShowNavAuth(false);
+                setCustomerAccountTab('inspections');
+                setShowAccountModal(true);
+                setTimeout(function() { fetchCustomerInspections(); }, 300);
+              }} style={{ flex: 1, padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer' }}>
+                My Inspections
+              </button>
+            )}
             <button onClick={function() { setInspectionSuccessPage(null); }}
               style={{ flex: 1, padding: '11px', backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '10px', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer' }}>
               Back to App
