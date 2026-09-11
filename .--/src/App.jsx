@@ -1717,6 +1717,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
   const [depositDone, setDepositDone]             = useState(false);
   const [depositRef, setDepositRef]               = useState('');
   const [paymentMethod, setPaymentMethod]         = useState(null);
+  const [customerPhone, setCustomerPhone]         = useState(user?.phone || '');
   const [showBankDetails, setShowBankDetails]     = useState(false);
   const [showAgentPhoto, setShowAgentPhoto]       = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
@@ -1741,7 +1742,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
     setInspCustomerPhone('');
     setInspBookingLoading(false);
   };
-  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setShowBankDetails(false); setShowAgentPhoto(false); closeInspectionModal(); }, [property?.id]);
+  useEffect(function() { setAddOns({ cleaning: false, relocation: false }); setPaymentStatus('idle'); setInspectionMode('whatsapp'); setAuthWall(null); setMediaIndex(0); setLightboxOpen(false); setStayDays(1); setDescExpanded(false); setDepositSubmitting(false); setDepositDone(false); setDepositRef(''); setPaymentMethod(null); setCustomerPhone(user?.phone || ''); setShowBankDetails(false); setShowAgentPhoto(false); closeInspectionModal(); }, [property?.id]);
   // Fetch the dynamic, per-property fee breakdown from the backend when the
   // modal opens. Falls back silently to the client-side calculation below.
   useEffect(function() {
@@ -1988,6 +1989,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
           amount: feeBreakdown?.grand_total || grandTotal,
           customer_email: user.email,
           customer_name: user.email,
+          customer_phone: customerPhone || user?.phone || '',
           purpose: 'Property Deposit - ' + property.title,
           property_id: property.id,
         }),
@@ -2298,6 +2300,18 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
             </div>
           ) : (
             <div style={{ marginBottom: '10px' }}>
+              {/* Customer phone for deposit */}
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                  Phone Number
+                </label>
+                <input
+                  type='tel'
+                  placeholder='e.g. 08012345678'
+                  value={customerPhone || ''}
+                  onChange={function(e) { setCustomerPhone(e.target.value); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '16px', boxSizing: 'border-box' }} />
+              </div>
               {[
                 { key: 'flutterwave', recommended: true,
                   title: 'Pay with Flutterwave', sub: 'Card, bank transfer, USSD & more' },
