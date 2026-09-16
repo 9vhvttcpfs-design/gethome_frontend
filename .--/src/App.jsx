@@ -7957,6 +7957,124 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <input type="month" value={staffPaymentsMonth} onChange={function(e){ setStaffPaymentsMonth(e.target.value); setGhaPaymentsMonth(e.target.value); fetchStaffPayments(e.target.value); }} style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
                       <button onClick={function(){ fetchStaffPayments(staffPaymentsMonth); }} style={{ padding: '7px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                      <button onClick={function() {
+                        try {
+                          var rows = [];
+
+                          // Header
+                          rows.push([
+                            'Staff Type', 'Code', 'Full Name', 'Location',
+                            'Bank Name', 'Account Number', 'Account Name',
+                            'Unpaid Commission', 'Inspection Count', 'Inspection Payment',
+                            'Total Due', 'Bank Details Status', 'Month'
+                          ].join(','));
+
+                          // GHA rows
+                          (ghaStaffPayments || []).forEach(function(gha) {
+                            var ghaTotalDue = parseFloat(gha.unpaid_commission || 0) + ((!gha.inspection_paid && gha.inspection_payment) ? parseFloat(gha.inspection_payment) : 0);
+                            rows.push([
+                              'GHA',
+                              gha.gha_code || '',
+                              '"' + (gha.full_name || '').replace(/"/g, '""') + '"',
+                              '"' + (gha.location || '').replace(/"/g, '""') + '"',
+                              '"' + (gha.bank_name || '').replace(/"/g, '""') + '"',
+                              gha.account_number || '',
+                              '"' + (gha.account_name || '').replace(/"/g, '""') + '"',
+                              parseFloat(gha.unpaid_commission || 0).toFixed(2),
+                              gha.confirmed_inspections || 0,
+                              parseFloat(gha.inspection_payment || 0).toFixed(2),
+                              ghaTotalDue.toFixed(2),
+                              gha.has_bank_details ? 'Complete' : 'Missing',
+                              staffPaymentsMonth,
+                            ].join(','));
+                          });
+
+                          // SA rows
+                          (saStaffPayments || []).forEach(function(sa) {
+                            rows.push([
+                              'SA',
+                              sa.sa_code || '',
+                              '"' + (sa.full_name || '').replace(/"/g, '""') + '"',
+                              '"' + (sa.location || '').replace(/"/g, '""') + '"',
+                              '"' + (sa.bank_name || '').replace(/"/g, '""') + '"',
+                              sa.account_number || '',
+                              '"' + (sa.account_name || '').replace(/"/g, '""') + '"',
+                              parseFloat(sa.unpaid_commission || 0).toFixed(2),
+                              '',
+                              '',
+                              parseFloat(sa.total_due || 0).toFixed(2),
+                              sa.has_bank_details ? 'Complete' : 'Missing',
+                              staffPaymentsMonth,
+                            ].join(','));
+                          });
+
+                          // Totals row
+                          var totalGhaComm = (ghaStaffPayments || []).reduce(function(s, g) { return s + parseFloat(g.unpaid_commission || 0); }, 0);
+                          var totalSaComm = (saStaffPayments || []).reduce(function(s, g) { return s + parseFloat(g.total_due || 0); }, 0);
+                          var totalInsp = (ghaStaffPayments || []).reduce(function(s, g) { return s + ((!g.inspection_paid && g.inspection_payment) ? parseFloat(g.inspection_payment || 0) : 0); }, 0);
+                          var grandTotal = totalGhaComm + totalSaComm + totalInsp;
+
+                          rows.push('');
+                          rows.push([
+                            'TOTALS', '', '', '', '', '', '',
+                            totalGhaComm.toFixed(2),
+                            '',
+                            totalInsp.toFixed(2),
+                            grandTotal.toFixed(2),
+                            '',
+                            staffPaymentsMonth,
+                          ].join(','));
+
+                          // Commission breakdown rows
+                          rows.push('');
+                          rows.push(['--- COMMISSION BREAKDOWN ---'].join(','));
+                          rows.push(['Staff Code', 'Agent Email', 'Plan Type', 'Subscription Amount', 'Commission Amount', 'Reference'].join(','));
+
+                          (ghaStaffPayments || []).forEach(function(gha) {
+                            (gha.commission_rows || []).forEach(function(row) {
+                              rows.push([
+                                gha.gha_code,
+                                '"' + (row.agent_email || '').replace(/"/g, '""') + '"',
+                                (row.payment_reference || '').includes('unlimited') ? 'Unlimited' : 'Subscription',
+                                parseFloat(row.subscription_amount || 0).toFixed(2),
+                                parseFloat(row.commission_amount || 0).toFixed(2),
+                                '"' + (row.payment_reference || '').replace(/"/g, '""') + '"',
+                              ].join(','));
+                            });
+                          });
+
+                          (saStaffPayments || []).forEach(function(sa) {
+                            (sa.commission_rows || []).forEach(function(row) {
+                              rows.push([
+                                sa.sa_code,
+                                '"' + (row.agent_id || '').replace(/"/g, '""') + '"',
+                                (row.payment_reference || '').includes('unlimited') ? 'Unlimited' : 'Subscription',
+                                parseFloat(row.subscription_amount || 0).toFixed(2),
+                                parseFloat(row.commission_amount || 0).toFixed(2),
+                                '"' + (row.payment_reference || '').replace(/"/g, '""') + '"',
+                              ].join(','));
+                            });
+                          });
+
+                          // Generate and download CSV
+                          var csvContent = rows.join('\n');
+                          var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          var url = URL.createObjectURL(blob);
+                          var link = document.createElement('a');
+                          link.href = url;
+                          link.download = 'GetHome_Staff_Payments_' + staffPaymentsMonth + '.csv';
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                          URL.revokeObjectURL(url);
+
+                          console.log('Staff payments CSV downloaded - month:', staffPaymentsMonth, '| GHAs:', (ghaStaffPayments||[]).length, '| SAs:', (saStaffPayments||[]).length);
+                        } catch(err) {
+                          alert('Download error: ' + err.message);
+                        }
+                      }} style={{ padding: '9px 14px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        ⬇ Download CSV
+                      </button>
                     </div>
                   </div>
 
