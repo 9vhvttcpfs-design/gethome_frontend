@@ -1,0 +1,60 @@
+workflows:
+  ios-workflow:
+    name: GetHome iOS
+    max_build_duration: 120
+    integrations:
+      app_store_connect: GetHome_ASC
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.gethome.app
+      vars:
+        PROJECT_DIR: ".--"
+        BUNDLE_ID: com.gethome.app
+        XCODE_SCHEME: App
+        XCODE_WORKSPACE: ios/App/App.xcworkspace
+      node: 20.18.0
+      xcode: 15.4
+      cocoapods: default
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $CM_BUILD_DIR/$PROJECT_DIR/node_modules
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npm ci
+      - name: Build Vite web app
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npm run build
+      - name: Capacitor sync
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR/ios/App"
+          pod install
+      - name: Set bundle version
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR/ios/App"
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null || echo "0")
+          agvtool new-version -all $(($LATEST_BUILD + 1))
+      - name: Build IPA
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --archive-xcargs "SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES"
+    artifacts:
+      - $CM_BUILD_DIR/$PROJECT_DIR/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
