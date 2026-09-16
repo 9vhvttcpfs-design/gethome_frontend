@@ -37,7 +37,7 @@ const AGENT_TIERS = {
 // local format (e.g. 0901234567) which is missing the 234 country code —
 // this normalizes that before it's used to build a wa.me link.
 var formatWhatsAppNumber = function(number) {
-  if (!number) return '2349139649368'; // GetHome default
+  if (!number) return '2349130649368'; // GetHome default
   // Strip all non-digits
   var digits = String(number).replace(/\D/g, '');
   // If starts with 0 replace with 234 (Nigerian local format)
@@ -1784,7 +1784,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         feeBreakdown?.sa_whatsapp ||   // SA linked to this property's agent
         property?.sa_whatsapp ||        // SA from property object
         globalSettings?.payment_whatsapp || // fallback to GetHome number
-        '2349139649368'
+        '2349130649368'
       );
       var saName = feeBreakdown?.sa_name || 'your SA';
       var paymentAmount = feeBreakdown?.grand_total || grandTotal;
@@ -2159,7 +2159,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                 property.sa_whatsapp ||
                 property.agent_sa_whatsapp ||
                 globalSettings.payment_whatsapp ||
-                '2349139649368'
+                '2349130649368'
               );
               var enquiryMsg = encodeURIComponent(
                 'Hello, I have an enquiry about a property I found on GetHome.\n\n' +
@@ -2277,7 +2277,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                   feeBreakdown?.sa_whatsapp ||   // SA linked to this property's agent
                   property?.sa_whatsapp ||        // SA from property object
                   globalSettings?.payment_whatsapp || // fallback to GetHome number
-                  '2349139649368'
+                  '2349130649368'
                 );
                 var saName = feeBreakdown?.sa_name || 'your SA';
                 var paymentAmount = feeBreakdown?.grand_total || grandTotal;
@@ -2491,7 +2491,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       customer_email: email,
                       customer_name: name,
                       customer_phone: phone,
-                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
+                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349130649368',
                     }),
                   });
                   var data = await res.json();
@@ -2514,7 +2514,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       property_title: inspectionBooking.property?.title,
                       property_location: inspectionBooking.property?.location,
                       property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
-                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349139649368',
+                      sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349130649368',
                       sa_name: inspectionBooking.sa_name || '',
                       fee: inspectionBooking.fee,
                       fee_payment_amount: inspectionBooking.fee,
@@ -16407,7 +16407,7 @@ function AppContent() {
           property_title: 'Your selected property',
           property_location: '',
           property_price: 0,
-          sa_whatsapp: '2349139649368',
+          sa_whatsapp: '2349130649368',
           sa_name: 'GetHome Team',
           fee: 0,
           fee_payment_amount: 0,
@@ -16490,7 +16490,7 @@ function AppContent() {
           property_title: pd.property_title || 'Your selected property',
           property_location: pd.property_location || '',
           property_price: pd.property_price || 0,
-          sa_whatsapp: pd.sa_whatsapp || '2349139649368',
+          sa_whatsapp: pd.sa_whatsapp || '2349130649368',
           sa_name: pd.sa_name || 'GetHome Team',
           fee: pd.amount || 0,
           fee_payment_amount: pd.amount || 0,
@@ -16520,7 +16520,7 @@ function AppContent() {
       var saWhatsApp = formatWhatsAppNumber(
         i.sa_whatsapp ||                     // SA carried through from the fee breakdown
         globalSettings?.payment_whatsapp ||  // fallback to GetHome number
-        '2349139649368'
+        '2349130649368'
       );
       var saName = i.sa_name || 'your SA';
       var successMsg = encodeURIComponent(
@@ -16603,7 +16603,7 @@ function AppContent() {
     var saWhatsApp = formatWhatsAppNumber(
       insp.sa_whatsapp ||                  // SA linked to this property's agent
       globalSettings?.payment_whatsapp ||  // fallback to GetHome number
-      '2349139649368'
+      '2349130649368'
     );
     var saName = insp.sa_name || 'your SA';
     var successMsg = encodeURIComponent(
