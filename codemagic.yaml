@@ -3,7 +3,7 @@ workflows:
     name: GetHome iOS
     max_build_duration: 120
     integrations:
-      app_store_connect: GetHome_ASC
+      app_store_connect: Codemagic Integration
     environment:
       ios_signing:
         distribution_type: app_store
