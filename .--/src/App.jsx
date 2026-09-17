@@ -1609,13 +1609,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
     </div>
   );
 }
-function CleaningQuoteForm() {
+function CleaningQuoteForm({ globalSettings }) {
   const [cleaningType, setCleaningType] = useState('Indoor');
   const [fumigation, setFumigation]     = useState(false);
   const [extraDetails, setExtraDetails] = useState('');
   const handleSend = () => {
     const msg = encodeURIComponent(`Hello GetHome, I would like a *custom cleaning quote*.\n\n*Service Type:* ${cleaningType} Cleaning\n*Fumigation:* ${fumigation ? 'Yes' : 'No'}\n*Details:* ${extraDetails.trim() || 'None'}\n\nPlease send me a quote.`);
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
+    window.open(`https://wa.me/${formatWhatsAppNumber(globalSettings?.payment_whatsapp)}?text=${msg}`, '_blank');
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1626,7 +1626,7 @@ function CleaningQuoteForm() {
     </div>
   );
 }
-function MovingQuoteForm() {
+function MovingQuoteForm({ globalSettings }) {
   const [from, setFrom] = useState('');
   const [to, setTo]     = useState('');
   const [hasAppliances, setHasAppliances] = useState(false);
@@ -1636,7 +1636,7 @@ function MovingQuoteForm() {
     if (!from.trim() || !to.trim()) { alert('Please fill in both locations.'); return; }
     const inventory = [hasAppliances && 'Large Appliances', hasLuggage && 'Luggage and Packed Boxes'].filter(Boolean).join(', ') || 'Not specified';
     const msg = encodeURIComponent(`Hello GetHome, I need a *moving/haulage quote*.\n\n*From:* ${from}\n*To:* ${to}\n*Items:* ${inventory}\n*Extra Info:* ${extraInfo.trim() || 'None'}\n\nPlease send me a quote.`);
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`, '_blank');
+    window.open(`https://wa.me/${formatWhatsAppNumber(globalSettings?.payment_whatsapp)}?text=${msg}`, '_blank');
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -17716,7 +17716,7 @@ function AppContent() {
                       <h3 style={{ color: '#0a2240', fontSize: isMobile ? '0.95rem' : '1.05rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.3px' }}>{svc.title}</h3>
                     </div>
                     <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 20px 0', lineHeight: '1.6', fontFamily: "'Inter', sans-serif" }}>{svc.desc}</p>
-                    <svc.Form />
+                    <svc.Form globalSettings={globalSettings} />
                   </div>
                 );
               })}
@@ -17917,7 +17917,7 @@ function AppContent() {
               <p style={{ fontSize: isMobile ? '0.78rem' : '0.82rem', lineHeight: '1.75', color: 'rgba(255,255,255,0.48)', margin: '0 0 18px 0', maxWidth: '300px', fontFamily: "'Inter', sans-serif" }}>Verified real estate marketplace across Africa. Every payment through GetHome is held in escrow until you verify and approve.</p>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {[
-                  { label: 'WhatsApp', href: `https://wa.me/2349130649368`, bg: '#25D366' },
+                  { label: 'WhatsApp', href: 'https://wa.me/' + formatWhatsAppNumber(globalSettings?.payment_whatsapp), bg: '#25D366' },
                   { label: 'Instagram', href: 'https://www.instagram.com/gethome.realestate?igsh=MWxoams3MWpxbXJ1MQ==', bg: '#E1306C' },
                   { label: 'Facebook', href: 'https://www.facebook.com/share/1ADV2PyMMe/', bg: '#1877F2' }
                 ].map(function(s){ return <a key={s.label} href={s.href} target="_blank" rel="noopener noreferrer" className="gh-social-btn" style={{ display: 'inline-block', padding: '5px 13px', borderRadius: '8px', backgroundColor: s.bg, color: '#fff', fontSize: '0.72rem', fontWeight: '700', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>{s.label}</a>; })}
@@ -17929,7 +17929,7 @@ function AppContent() {
               <button onClick={function(){ setShowStaffLogin(true); }} className="gh-footer-link" style={{ display: 'block', background: 'none', border: 'none', color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', cursor: 'pointer', textAlign: 'left', padding: '4px 0', marginBottom: '2px', fontFamily: "'Inter', sans-serif" }}>Staff Login</button>
               <p
                 onClick={function() {
-                  window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
+                  window.open('https://wa.me/' + formatWhatsAppNumber(globalSettings?.payment_whatsapp) + '?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
                 }}
                 style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.80rem', cursor: 'pointer', margin: '4px 0' }}
                 onMouseEnter={function(e) { e.target.style.color = '#27ae60'; }}
@@ -17945,7 +17945,7 @@ function AppContent() {
             <div>
               <h4 style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.75rem', fontWeight: '700', margin: '0 0 14px 0', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Inter', sans-serif" }}>Contact</h4>
               <a href="mailto:gethome.realest@gmail.com" className="gh-footer-contact" style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', margin: '0 0 8px 0', display: 'block', textDecoration: 'none', fontFamily: "'Inter', sans-serif" }}>gethome.realest@gmail.com</a>
-              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noopener noreferrer" className="gh-footer-contact" style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', textDecoration: 'none', display: 'block', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>+2349130649368</a>
+              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noopener noreferrer" className="gh-footer-contact" style={{ color: 'rgba(255,255,255,0.52)', fontSize: '0.80rem', textDecoration: 'none', display: 'block', marginBottom: '8px', fontFamily: "'Inter', sans-serif" }}>{'+' + (globalSettings?.payment_whatsapp || '2349130649368')}</a>
               <div style={{ marginTop: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', padding: '6px 12px' }}>
                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
                 <span style={{ color: '#4ade80', fontSize: '0.72rem', fontWeight: '600', fontFamily: "'Inter', sans-serif" }}>All services online</span>
@@ -18066,7 +18066,7 @@ function AppContent() {
               Interested in joining our team?{' '}
               <span
                 onClick={function() {
-                  window.open('https://wa.me/2349130649368?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
+                  window.open('https://wa.me/' + formatWhatsAppNumber(globalSettings?.payment_whatsapp) + '?text=' + encodeURIComponent('Hello GetHome, I am interested in working with your team. Please send me more information.'), '_blank');
                 }}
                 style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}>
                 Work With Us
