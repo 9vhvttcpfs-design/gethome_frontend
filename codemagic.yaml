@@ -46,7 +46,7 @@ workflows:
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --archive-xcargs "SKIP_INSTALL=NO BUILD_LIBRARY_FOR_DISTRIBUTION=YES"
+            --archive-xcargs "SKIP_INSTALL=NO"
     artifacts:
       - $CM_BUILD_DIR/$PROJECT_DIR/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
