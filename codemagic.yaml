@@ -40,13 +40,6 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
           xcode-project use-profiles
-      - name: Patch export method for Xcode 16.3 (app-store is deprecated)
-        script: |
-          /usr/libexec/PlistBuddy -c "Set :method app-store-connect" "$HOME/export_options.plist"
-          plutil -convert xml1 "$HOME/export_options.plist"
-          plutil -lint "$HOME/export_options.plist"
-          echo "Patched export options plist:"
-          cat "$HOME/export_options.plist"
       - name: Build IPA
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
