@@ -7,10 +7,10 @@ workflows:
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.gethome.app
+        bundle_identifier: online.trygethome.app
       vars:
         PROJECT_DIR: ".--"
-        BUNDLE_ID: com.gethome.app
+        BUNDLE_ID: online.trygethome.app
         XCODE_SCHEME: App
         XCODE_WORKSPACE: ios/App/App.xcodeproj/project.xcworkspace
       node: 20.18.0

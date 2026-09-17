@@ -1,6 +1,6 @@
 {
-  "appId": "com.gethome.app",
-  "appName": "GetHome",
+  "appId": "online.trygethome.app",
+  "appName": "GetHome Realestate",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

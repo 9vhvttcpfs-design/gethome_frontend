@@ -329,6 +329,153 @@ function DeleteAccountPage() {
     </div>
   );
 }
+// Route: /privacy
+function PrivacyPolicyPage() {
+  return (
+    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Inter, sans-serif', color: '#374151', lineHeight: 1.8 }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0a2240', marginBottom: '8px', letterSpacing: '-0.02em' }}>
+        Get<span style={{ color: '#27ae60' }}>Home</span>
+      </div>
+      <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Privacy Policy</h1>
+      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 32px 0' }}>Last updated: September 2026</p>
+
+      {[
+        {
+          title: '1. Information We Collect',
+          body: 'We collect information you provide when creating an account, listing a property, booking an inspection, or making a payment. This includes your name, email address, phone number, location, and payment details. We also collect usage data such as pages visited and actions taken within the app.'
+        },
+        {
+          title: '2. How We Use Your Information',
+          body: 'We use your information to provide and improve our services, process payments, connect agents with customers, send inspection updates and notifications, verify agent identities, and comply with legal obligations. We do not sell your personal data to third parties.'
+        },
+        {
+          title: '3. Payment Information',
+          body: 'All payments are processed securely through Flutterwave. GetHome does not store your card details. Escrow payments are held securely until both parties confirm the transaction is complete.'
+        },
+        {
+          title: '4. Information Sharing',
+          body: 'We share your information only as necessary to provide our services — for example, sharing your contact details with a verified agent when you book an inspection, or with our payment processor to complete a transaction. We do not share your data with advertisers.'
+        },
+        {
+          title: '5. Data Security',
+          body: 'We implement industry-standard security measures to protect your personal information. All data is encrypted in transit and at rest. Access to personal data is restricted to authorised GetHome staff only.'
+        },
+        {
+          title: '6. Data Retention',
+          body: 'We retain your personal data for as long as your account is active or as needed to provide services. You may request deletion of your account and associated data at any time through the app settings or by contacting us.'
+        },
+        {
+          title: '7. Your Rights',
+          body: 'You have the right to access, correct, or delete your personal information at any time. You may also request a copy of your data or withdraw consent for data processing. To exercise these rights contact us at privacy@trygethome.online.'
+        },
+        {
+          title: '8. Cookies',
+          body: 'GetHome uses essential cookies to keep you logged in and remember your preferences. We do not use tracking or advertising cookies.'
+        },
+        {
+          title: '9. Children\'s Privacy',
+          body: 'GetHome is not intended for users under the age of 18. We do not knowingly collect personal information from minors. If we become aware that a minor has provided us with personal data we will delete it immediately.'
+        },
+        {
+          title: '10. Changes to This Policy',
+          body: 'We may update this Privacy Policy from time to time. We will notify you of significant changes via email or in-app notification. Continued use of GetHome after changes constitutes acceptance of the updated policy.'
+        },
+        {
+          title: '11. Contact Us',
+          body: 'If you have questions about this Privacy Policy or how we handle your data, contact us at privacy@trygethome.online or through our support page at trygethome.online/support.'
+        },
+      ].map(function(section) {
+        return (
+          <div key={section.title} style={{ marginBottom: '24px' }}>
+            <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>{section.title}</h2>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: '#374151' }}>{section.body}</p>
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+        <p style={{ margin: '0 0 4px 0', fontSize: '0.78rem', color: '#94a3b8' }}>GetHome Realestate</p>
+        <a href='mailto:privacy@trygethome.online' style={{ color: '#0a2240', fontSize: '0.78rem' }}>privacy@trygethome.online</a>
+      </div>
+    </div>
+  );
+}
+// Route: /support
+function SupportPage() {
+  return (
+    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0a2240', marginBottom: '8px', letterSpacing: '-0.02em' }}>
+        Get<span style={{ color: '#27ae60' }}>Home</span>
+      </div>
+      <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Support</h1>
+      <p style={{ color: '#64748b', fontSize: '0.88rem', margin: '0 0 32px 0' }}>
+        We're here to help. Reach out through any of the channels below.
+      </p>
+
+      {[
+        {
+          icon: '✉',
+          title: 'Email Support',
+          body: 'support@trygethome.online',
+          sub: 'We respond within 24 hours',
+          href: 'mailto:support@trygethome.online',
+        },
+        {
+          icon: '💬',
+          title: 'WhatsApp Support',
+          body: 'Chat with us on WhatsApp',
+          sub: 'Available Monday to Saturday, 8am–6pm',
+          href: 'https://wa.me/2349130649368',
+        },
+        {
+          icon: '🌐',
+          title: 'Website',
+          body: 'trygethome.online',
+          sub: 'Browse properties and learn more',
+          href: 'https://trygethome.online',
+        },
+      ].map(function(item) {
+        return (
+          <a key={item.title} href={item.href} target='_blank' rel='noopener noreferrer'
+            style={{ display: 'block', backgroundColor: '#fff', borderRadius: '14px', padding: '18px 20px', marginBottom: '12px', border: '1px solid #e2e8f0', textDecoration: 'none', boxShadow: '0 2px 6px rgba(10,34,64,0.04)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <span style={{ fontSize: '1.4rem' }}>{item.icon}</span>
+              <div>
+                <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>{item.title}</p>
+                <p style={{ margin: '0 0 2px 0', color: '#27ae60', fontWeight: '600', fontSize: '0.84rem' }}>{item.body}</p>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.74rem' }}>{item.sub}</p>
+              </div>
+            </div>
+          </a>
+        );
+      })}
+
+      <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '20px', marginTop: '24px', border: '1px solid #e2e8f0' }}>
+        <p style={{ margin: '0 0 12px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>Frequently Asked Questions</p>
+        {[
+          { q: 'How do I book a property inspection?', a: 'Search for a property, tap on it, and select Book Inspection. Pay the inspection fee securely and our team will contact you to schedule.' },
+          { q: 'How do I become a verified agent?', a: 'Register as an agent, submit your NIN and CAC documents, and our team will verify your account within 48 hours.' },
+          { q: 'How does the escrow payment work?', a: 'When you make a deposit, funds are held securely by GetHome until both you and the agent confirm the transaction. Your money is protected throughout.' },
+          { q: 'How do I delete my account?', a: 'Go to Profile → Settings → scroll to the bottom → tap Delete My Account. All your data will be permanently removed.' },
+          { q: 'I made a payment but it\'s not showing — what do I do?', a: 'Contact us immediately at support@trygethome.online with your payment reference number. We resolve payment issues within 2 hours.' },
+        ].map(function(faq, i) {
+          return (
+            <div key={i} style={{ marginBottom: '14px', paddingBottom: '14px', borderBottom: i < 4 ? '1px solid #e2e8f0' : 'none' }}>
+              <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>Q: {faq.q}</p>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '0.80rem', lineHeight: 1.6 }}>A: {faq.a}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: '32px', textAlign: 'center' }}>
+        <p style={{ margin: 0, fontSize: '0.76rem', color: '#94a3b8' }}>
+          GetHome Realestate · <a href='/privacy' style={{ color: '#0a2240' }}>Privacy Policy</a> · <a href='/delete-account' style={{ color: '#0a2240' }}>Delete Account</a>
+        </p>
+      </div>
+    </div>
+  );
+}
 var LEGAL_CONTENT = {
   terms: { title: "Terms and Conditions", version: "1.0", sections: [
     { heading: "1. Acceptance", body: "By using GetHome you accept these Terms." },
@@ -16793,6 +16940,8 @@ function AppContent() {
   };
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (window.location.pathname === '/delete-account' || window.location.pathname === '/account/delete') return <DeleteAccountPage />;
+  if (window.location.pathname === '/privacy') return <PrivacyPolicyPage />;
+  if (window.location.pathname === '/support') return <SupportPage />;
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (inspectionSuccessPage) {
@@ -18124,7 +18273,7 @@ function AppContent() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '22px', display: 'flex', justifyContent: isMobile ? 'center' : 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
             <p style={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.32)', margin: 0, fontFamily: "'Inter', sans-serif" }}>&copy; {new Date().getFullYear()} GetHome. All rights reserved.</p>
             <div style={{ display: 'flex', gap: '20px' }}>
-              {[{ label: 'About Us', type: 'about' }, { label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ setFooterModal(link.type); }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
+              {[{ label: 'About Us', type: 'about' }, { label: 'Privacy Policy', type: 'privacy' }, { label: 'Terms of Service', type: 'terms' }, { label: 'Agent Agreement', type: 'agent' }].map(function(link){ return <span key={link.label} onClick={function(){ if (link.type === 'privacy') { window.location.href = '/privacy'; } else { setFooterModal(link.type); } }} className="gh-footer-legal" style={{ fontSize: '0.73rem', color: 'rgba(255,255,255,0.42)', cursor: 'pointer', textDecoration: 'underline', fontFamily: "'Inter', sans-serif" }}>{link.label}</span>; })}
             </div>
           </div>
         </div>
