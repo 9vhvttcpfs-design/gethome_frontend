@@ -40,13 +40,19 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
           xcode-project use-profiles
+      - name: Patch export method for Xcode 16.3 (app-store is deprecated)
+        script: |
+          /usr/libexec/PlistBuddy -c "Set :method app-store-connect" "$HOME/export_options.plist"
+          echo "Patched export options plist:"
+          cat "$HOME/export_options.plist"
       - name: Build IPA
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --archive-xcargs "SKIP_INSTALL=NO"
+            --archive-xcargs "SKIP_INSTALL=NO" \
+            --export-options-plist "$HOME/export_options.plist"
     artifacts:
       - $CM_BUILD_DIR/$PROJECT_DIR/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
