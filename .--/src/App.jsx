@@ -291,6 +291,44 @@ function ErrorScreen({ onRetry }) {
     </div>
   );
 }
+// Route: /delete-account
+// Shows instructions for account deletion - required by Apple
+function DeleteAccountPage() {
+  return (
+    <div style={{ maxWidth: '480px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0a2240', marginBottom: '24px', letterSpacing: '-0.02em' }}>
+        Get<span style={{ color: '#27ae60' }}>Home</span>
+      </div>
+      <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 8px 0' }}>
+        Delete Your Account
+      </h1>
+      <p style={{ color: '#64748b', fontSize: '0.90rem', margin: '0 0 24px 0', lineHeight: 1.6 }}>
+        You can permanently delete your GetHome account and all associated data at any time.
+      </p>
+      <div style={{ backgroundColor: '#f8fafc', borderRadius: '12px', padding: '20px', marginBottom: '20px', border: '1px solid #e2e8f0' }}>
+        <p style={{ margin: '0 0 12px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>How to delete your account:</p>
+        {['Log in to your GetHome account', 'Go to Profile → Settings', 'Scroll to the bottom and tap "Delete My Account"', 'Type DELETE to confirm', 'Your account and data will be permanently removed'].map(function(step, i) {
+          return (
+            <div key={i} style={{ display: 'flex', gap: '12px', marginBottom: '8px', alignItems: 'flex-start' }}>
+              <span style={{ backgroundColor: '#0a2240', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: '800', flexShrink: 0, marginTop: '1px' }}>{i + 1}</span>
+              <p style={{ margin: 0, color: '#374151', fontSize: '0.84rem', lineHeight: 1.5 }}>{step}</p>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ backgroundColor: '#fff7ed', borderRadius: '10px', padding: '14px 16px', marginBottom: '20px', border: '1px solid #fed7aa' }}>
+        <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#c2410c', fontSize: '0.82rem' }}>⚠ What gets deleted:</p>
+        <p style={{ margin: 0, color: '#64748b', fontSize: '0.78rem', lineHeight: 1.6 }}>
+          Your profile, listings, subscription, and personal data are permanently removed. Active inspections and deposits may be affected. This action cannot be reversed.
+        </p>
+      </div>
+      <p style={{ color: '#94a3b8', fontSize: '0.76rem', textAlign: 'center' }}>
+        Need help? Contact us at{' '}
+        <a href='mailto:support@trygethome.online' style={{ color: '#0a2240' }}>support@trygethome.online</a>
+      </p>
+    </div>
+  );
+}
 var LEGAL_CONTENT = {
   terms: { title: "Terms and Conditions", version: "1.0", sections: [
     { heading: "1. Acceptance", body: "By using GetHome you accept these Terms." },
@@ -3037,6 +3075,9 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   const [bankSaveMsg, setBankSaveMsg]               = useState('');
   const [bankErrorMsg, setBankErrorMsg]             = useState('');
   const [bankSaving, setBankSaving]                 = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount]   = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText]   = useState('');
+  const [deletingAccount, setDeletingAccount]       = useState(false);
   const [soldListings, setSoldListings]             = useState([]);
   const [soldListingsLoading, setSoldListingsLoading] = useState(false);
   const [uploadSuccess, setUploadSuccess]           = useState(false);
@@ -3927,6 +3968,69 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
               })}
             </div>
           )}
+        </div>
+
+        <div style={{ ...cardStyle, padding: isMobile ? '18px 16px' : '28px', marginTop: '20px' }}>
+          {/* Account Deletion - Apple App Store requirement */}
+          <div>
+            <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#ef4444', fontSize: '0.90rem' }}>
+              Danger Zone
+            </p>
+            <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+              Permanently delete your account and all associated data. This action cannot be undone.
+            </p>
+            {!showDeleteAccount ? (
+              <button onClick={function() { setShowDeleteAccount(true); }}
+                style={{ padding: '10px 20px', backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '10px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
+                Delete My Account
+              </button>
+            ) : (
+              <div style={{ backgroundColor: '#fff5f5', borderRadius: '12px', padding: '16px', border: '1.5px solid #fecaca' }}>
+                <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#ef4444', fontSize: '0.84rem' }}>
+                  Are you sure? This cannot be undone.
+                </p>
+                <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                  Type <strong>DELETE</strong> to confirm
+                </p>
+                <input
+                  type='text'
+                  placeholder='Type DELETE to confirm'
+                  value={deleteConfirmText}
+                  onChange={function(e) { setDeleteConfirmText(e.target.value); }}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #fecaca', fontSize: '16px', marginBottom: '12px', boxSizing: 'border-box' }} />
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button onClick={function() { setShowDeleteAccount(false); setDeleteConfirmText(''); }}
+                    style={{ flex: 1, padding: '10px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', color: '#64748b' }}>
+                    Cancel
+                  </button>
+                  <button
+                    disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+                    onClick={async function() {
+                      if (deleteConfirmText !== 'DELETE') return;
+                      setDeletingAccount(true);
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var res = await fetch(API_URL + '/api/customer/delete-account', {
+                          method: 'POST',
+                          headers: { Authorization: 'Bearer ' + token },
+                        });
+                        var data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Failed');
+                        localStorage.clear();
+                        alert('Your account has been permanently deleted.');
+                        window.location.href = '/';
+                      } catch(err) {
+                        alert('Error: ' + err.message);
+                        setDeletingAccount(false);
+                      }
+                    }}
+                    style={{ flex: 1, padding: '10px', backgroundColor: deleteConfirmText === 'DELETE' ? '#ef4444' : '#94a3b8', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.84rem', color: '#fff', cursor: deleteConfirmText === 'DELETE' ? 'pointer' : 'not-allowed' }}>
+                    {deletingAccount ? 'Deleting...' : 'Permanently Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         </>
       )}
@@ -15962,6 +16066,9 @@ function AppContent() {
   }, []);
   const [showAccountModal, setShowAccountModal]         = useState(false);
   const [customerAccountTab, setCustomerAccountTab]     = useState('profile');
+  const [showDeleteAccount, setShowDeleteAccount]       = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText]       = useState('');
+  const [deletingAccount, setDeletingAccount]           = useState(false);
   const [customerInspections, setCustomerInspections]   = useState([]);
   const [customerInspLoading, setCustomerInspLoading]   = useState(false);
   const fetchingCustomerInspRef = useRef(false);
@@ -16685,6 +16792,7 @@ function AppContent() {
     return count + ' listing' + (count !== 1 ? 's' : '') + ' available';
   };
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
+  if (window.location.pathname === '/delete-account' || window.location.pathname === '/account/delete') return <DeleteAccountPage />;
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (inspectionSuccessPage) {
@@ -16911,6 +17019,67 @@ function AppContent() {
                 <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                   <p style={{ margin: '0 0 2px 0', fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</p>
                   <p style={{ margin: 0, fontSize: '0.88rem', color: '#0a2240', fontWeight: '700' }}>{user.phone || '—'}</p>
+                </div>
+
+                {/* Account Deletion - Apple App Store requirement */}
+                <div style={{ marginTop: '32px', borderTop: '1px solid #fee2e2', paddingTop: '20px' }}>
+                  <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#ef4444', fontSize: '0.90rem' }}>
+                    Danger Zone
+                  </p>
+                  <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                    Permanently delete your account and all associated data. This action cannot be undone.
+                  </p>
+                  {!showDeleteAccount ? (
+                    <button onClick={function() { setShowDeleteAccount(true); }}
+                      style={{ padding: '10px 20px', backgroundColor: 'transparent', border: '1.5px solid #ef4444', color: '#ef4444', borderRadius: '10px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
+                      Delete My Account
+                    </button>
+                  ) : (
+                    <div style={{ backgroundColor: '#fff5f5', borderRadius: '12px', padding: '16px', border: '1.5px solid #fecaca' }}>
+                      <p style={{ margin: '0 0 8px 0', fontWeight: '700', color: '#ef4444', fontSize: '0.84rem' }}>
+                        Are you sure? This cannot be undone.
+                      </p>
+                      <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.76rem' }}>
+                        Type <strong>DELETE</strong> to confirm
+                      </p>
+                      <input
+                        type='text'
+                        placeholder='Type DELETE to confirm'
+                        value={deleteConfirmText}
+                        onChange={function(e) { setDeleteConfirmText(e.target.value); }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #fecaca', fontSize: '16px', marginBottom: '12px', boxSizing: 'border-box' }} />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={function() { setShowDeleteAccount(false); setDeleteConfirmText(''); }}
+                          style={{ flex: 1, padding: '10px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '8px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer', color: '#64748b' }}>
+                          Cancel
+                        </button>
+                        <button
+                          disabled={deleteConfirmText !== 'DELETE' || deletingAccount}
+                          onClick={async function() {
+                            if (deleteConfirmText !== 'DELETE') return;
+                            setDeletingAccount(true);
+                            try {
+                              var token = localStorage.getItem('gh_token');
+                              var res = await fetch(API_URL + '/api/customer/delete-account', {
+                                method: 'POST',
+                                headers: { Authorization: 'Bearer ' + token },
+                              });
+                              var data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Failed');
+                              localStorage.clear();
+                              alert('Your account has been permanently deleted.');
+                              window.location.href = '/';
+                            } catch(err) {
+                              alert('Error: ' + err.message);
+                              setDeletingAccount(false);
+                            }
+                          }}
+                          style={{ flex: 1, padding: '10px', backgroundColor: deleteConfirmText === 'DELETE' ? '#ef4444' : '#94a3b8', border: 'none', borderRadius: '8px', fontWeight: '800', fontSize: '0.84rem', color: '#fff', cursor: deleteConfirmText === 'DELETE' ? 'pointer' : 'not-allowed' }}>
+                          {deletingAccount ? 'Deleting...' : 'Permanently Delete'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -17702,7 +17871,7 @@ function AppContent() {
           <section>
             <div style={{ marginBottom: '26px' }}>
               <h2 style={{ color: '#0a2240', fontSize: isMobile ? '1.1rem' : '1.5rem', fontWeight: '700', margin: '0 0 6px 0', fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Our Services</h2>
-              <p style={{ color: '#64748b', fontSize: '0.84rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Professional move-in services — get a custom quote via WhatsApp</p>
+              <p style={{ color: '#64748b', fontSize: '0.84rem', margin: 0, fontFamily: "'Inter', sans-serif" }}>Professional move-in services, get a custom quote via WhatsApp</p>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '16px' : '24px' }}>
               {[
