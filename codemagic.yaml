@@ -40,17 +40,38 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
           xcode-project use-profiles
-      - name: Build IPA
+      - name: Archive
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
-            --archive-xcargs "SKIP_INSTALL=NO"
+            --archive-flags "-destination 'generic/platform=iOS'"
+
+      - name: Inspect archive and export IPA
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          ARCHIVE_PATH="build/ios/xcarchive/App.xcarchive"
+
+          echo "=== Archive Info.plist ==="
+          /usr/libexec/PlistBuddy -c "Print" "$ARCHIVE_PATH/Info.plist"
+
+          echo "=== Archive contents ==="
+          find "$ARCHIVE_PATH/Products/Applications" -maxdepth 2 -print
+
+          echo "=== App Info.plist ==="
+          /usr/libexec/PlistBuddy -c "Print" \
+            "$ARCHIVE_PATH/Products/Applications/App.app/Info.plist"
+
+          echo "=== Starting export ==="
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --skip-archive
     artifacts:
-      - $CM_BUILD_DIR/$PROJECT_DIR/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+      - /tmp/xcodebuild_logs/**
+      - build/ios/xcarchive/**
+      - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
         auth: integration
