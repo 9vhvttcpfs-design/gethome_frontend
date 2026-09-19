@@ -1,4 +1,40 @@
 workflows:
+  android-workflow:
+    name: GetHome Android
+    max_build_duration: 60
+    environment:
+      android_signing:
+        - gethome-keystore
+      vars:
+        PROJECT_DIR: ".--"
+        PACKAGE_NAME: ng.gethome.app
+      node: 22.13.0
+    cache:
+      cache_paths:
+        - $CM_BUILD_DIR/$PROJECT_DIR/node_modules
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npm ci
+      - name: Build Vite web app
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npm run build
+      - name: Capacitor sync
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR"
+          npx cap sync android
+      - name: Build Android release bundle and APK
+        script: |
+          cd "$CM_BUILD_DIR/$PROJECT_DIR/android"
+          chmod +x ./gradlew
+          ./gradlew bundleRelease assembleRelease
+    artifacts:
+      - $CM_BUILD_DIR/$PROJECT_DIR/android/app/build/outputs/**/*.aab
+      - $CM_BUILD_DIR/$PROJECT_DIR/android/app/build/outputs/**/*.apk
+      - $CM_BUILD_DIR/$PROJECT_DIR/android/app/build/outputs/**/mapping.txt
+
   ios-workflow:
     name: GetHome iOS
     max_build_duration: 120
