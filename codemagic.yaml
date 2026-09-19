@@ -4,10 +4,10 @@ workflows:
     max_build_duration: 60
     environment:
       android_signing:
-        - gethome-keystore
+        - online.gethome
       vars:
         PROJECT_DIR: ".--"
-        PACKAGE_NAME: ng.gethome.app
+        PACKAGE_NAME: online.trygethome.app
       node: 22.13.0
     cache:
       cache_paths:

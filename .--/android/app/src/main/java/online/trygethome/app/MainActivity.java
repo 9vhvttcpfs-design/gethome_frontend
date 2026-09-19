@@ -1,4 +1,4 @@
-package ng.gethome.app;
+package online.trygethome.app;
 
 import com.getcapacitor.BridgeActivity;
 
