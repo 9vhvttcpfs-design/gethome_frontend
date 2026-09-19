@@ -9,6 +9,7 @@ workflows:
         PROJECT_DIR: ".--"
         PACKAGE_NAME: online.trygethome.app
       node: 22.13.0
+      java: 21
     cache:
       cache_paths:
         - $CM_BUILD_DIR/$PROJECT_DIR/node_modules
