@@ -9555,6 +9555,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       : msg.message_type === 'payment_received' ? { label: 'PAYMENT', bg: '#fef3c7', color: '#92400e' }
                       : msg.message_type === 'agent_assigned' ? { label: 'ASSIGNED ✅', bg: '#f0fff4', color: '#166534' }
                       : msg.message_type === 'agent_rejected' ? { label: 'REJECTED ✕', bg: '#fff7ed', color: '#c2410c' }
+                      : (msg.message_type === 'content_report' || msg.message_type === 'property_reported') ? { label: 'REPORTED ⚠', bg: '#fef2f2', color: '#b91c1c' }
+                      : msg.message_type === 'account_deleted' ? { label: 'ACCOUNT DELETED', bg: '#f1f5f9', color: '#475569' }
                       : null;
                     return (
                       <div key={msg.id}
@@ -9607,6 +9609,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0', label: 'Agent Assigned ✅' }
                     : m.message_type === 'agent_rejected'
                     ? { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', label: 'Agent Rejected ✕' }
+                    : (m.message_type === 'content_report' || m.message_type === 'property_reported')
+                    ? { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'Content Report ⚠' }
+                    : m.message_type === 'account_deleted'
+                    ? { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0', label: 'Account Deleted' }
                     : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
                   return (
                     <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', padding: '20px 24px' }}>
@@ -18521,6 +18527,72 @@ function AppContent() {
   );
 }
 function App() {
+  // Telegram Mini App initialization
+  useEffect(function() {
+    if (!window.Telegram?.WebApp) return;
+
+    var tg = window.Telegram.WebApp;
+
+    // Tell Telegram the app is ready
+    tg.ready();
+
+    // Auto-authenticate Telegram users
+    if (tg.initData) {
+      fetch(API_URL + '/api/auth/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.user) {
+          console.log('Telegram user authenticated:', data.user.first_name);
+          window.__tgUser = data.user;
+          // Pre-fill data for the registration form
+          window.__tgAutoFill = {
+            name: (data.user.first_name + ' ' + (data.user.last_name || '')).trim(),
+            username: data.user.username || '',
+          };
+        }
+      })
+      .catch(function(e) { console.error('Telegram auth error:', e.message); });
+    }
+
+    // Expand to full screen
+    tg.expand();
+
+    // Match app theme to Telegram theme
+    if (tg.colorScheme === 'dark') {
+      document.body.style.backgroundColor = '#1a1a2e';
+    }
+
+    // Get Telegram user data
+    var tgUser = tg.initDataUnsafe?.user;
+    if (tgUser) {
+      console.log('Telegram user:', tgUser.id, tgUser.first_name);
+      // Auto-fill name on registration if coming from Telegram
+      window.__tgUser = tgUser;
+    }
+
+    // Show back button when not on home screen
+    function updateBackButton() {
+      if (window.history.length > 1) {
+        tg.BackButton.show();
+      } else {
+        tg.BackButton.hide();
+      }
+    }
+
+    tg.BackButton.onClick(function() {
+      window.history.back();
+      setTimeout(updateBackButton, 100);
+    });
+
+    updateBackButton();
+    window.addEventListener('popstate', updateBackButton);
+
+  }, []);
+
   return (
     <CountryProvider>
       <AppContent />
