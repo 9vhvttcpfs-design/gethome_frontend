@@ -400,6 +400,42 @@ function PrivacyPolicyPage() {
     </div>
   );
 }
+// Route: /terms
+function TermsOfUsePage() {
+  return (
+    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Inter, sans-serif', color: '#374151', lineHeight: 1.8 }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0a2240', marginBottom: '8px' }}>
+        Get<span style={{ color: '#27ae60' }}>Home</span>
+      </div>
+      <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Terms of Use</h1>
+      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 32px 0' }}>Last updated: September 2026</p>
+
+      {[
+        { title: '1. Acceptance of Terms', body: 'By creating an account on GetHome Realestate, you agree to these Terms of Use. If you do not agree, do not use the app.' },
+        { title: '2. Content Standards', body: 'All property listings must be accurate, truthful, and legally compliant. Fraudulent, misleading, or inappropriate listings are strictly prohibited and will result in immediate account removal. GetHome has zero tolerance for objectionable content or abusive behaviour.' },
+        { title: '3. User Conduct', body: 'You agree not to post false, misleading, or fraudulent property listings; harass, threaten, or abuse other users; use the platform for any illegal purpose; or attempt to circumvent our verification or payment systems.' },
+        { title: '4. Content Moderation', body: 'GetHome reviews all reported content within 24 hours. Content found to violate these terms will be removed immediately and the responsible user\'s account will be suspended or permanently banned. Users can report objectionable listings using the Report button on any listing.' },
+        { title: '5. Blocking Users', body: 'Users may block agents whose content they find objectionable. Blocking notifies GetHome to review the agent\'s content and take action within 24 hours.' },
+        { title: '6. Agent Verification', body: 'All agents must submit valid government-issued ID before listing properties. Nigerian agents submit NIN (National Identification Number). Business registration documents are recommended. GetHome reserves the right to revoke agent status at any time for violations of these terms.' },
+        { title: '7. Payments', body: 'All payments are processed securely through Flutterwave or Paystack. Inspection fees and deposits are non-refundable except where GetHome determines a fraudulent listing was involved.' },
+        { title: '8. Termination', body: 'GetHome may suspend or terminate your account at any time for violations of these terms. You may delete your account at any time via Profile → Settings → Delete My Account.' },
+        { title: '9. Contact', body: 'To report abuse or content violations contact support@trygethome.online. We respond to all reports within 24 hours.' },
+      ].map(function(section) {
+        return (
+          <div key={section.title} style={{ marginBottom: '24px' }}>
+            <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>{section.title}</h2>
+            <p style={{ margin: 0, fontSize: '0.88rem' }}>{section.body}</p>
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+        <a href='/privacy' style={{ color: '#0a2240', fontSize: '0.78rem', marginRight: '16px' }}>Privacy Policy</a>
+        <a href='/support' style={{ color: '#0a2240', fontSize: '0.78rem' }}>Support</a>
+      </div>
+    </div>
+  );
+}
 // Route: /support
 function SupportPage() {
   return (
@@ -990,6 +1026,10 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
       setError('Password must be at least 6 characters');
       return;
     }
+    if (!termsAccepted) {
+      setError('Please agree to the Terms of Use to continue.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -1147,6 +1187,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
   if (mode === 'customer') {
     return (
       <div className="gh-auth-form-inner">
+        {showTermsModal && <LegalModal type="terms" forceAccept onClose={function(){ setShowTermsModal(false); }} onAccept={function(){ setTermsAccepted(true); setShowTermsModal(false); }} />}
         <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 4px 0' }}>
           Create Your Account
         </h3>
@@ -1213,18 +1254,27 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             </select>
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', margin: '12px 0' }}>
+            <input type='checkbox' id='terms-agree' checked={termsAccepted}
+              onChange={function(e) { setTermsAccepted(e.target.checked); }}
+              style={{ marginTop: '3px', flexShrink: 0 }} />
+            <label htmlFor='terms-agree' style={{ fontSize: '0.78rem', color: '#374151', lineHeight: 1.5 }}>
+              I agree to the <span onClick={function(e) { e.preventDefault(); setShowTermsModal(true); }} style={{ color: '#0a2240', fontWeight: '700', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Use</span> and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
+            </label>
+          </div>
+
           {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
 
           <button
             onClick={handleCustomerSignup}
-            disabled={loading}
-            style={{ width: '100%', padding: '13px', backgroundColor: loading ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.92rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            disabled={loading || !termsAccepted}
+            style={{ width: '100%', padding: '13px', backgroundColor: (loading || !termsAccepted) ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.92rem', cursor: (loading || !termsAccepted) ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>
 
           <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
             Already have an account?{' '}
-            <span onClick={function() { setMode('login'); setError(''); }} style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer' }}>Login</span>
+            <span onClick={function() { setMode('login'); setError(''); setTermsAccepted(false); }} style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer' }}>Login</span>
           </p>
         </div>
       </div>
@@ -1774,12 +1824,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
               <span onClick={function(e){ e.stopPropagation(); setShowTermsModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Terms</span>
               {' '}and{' '}
               <span onClick={function(e){ e.stopPropagation(); setShowPrivacyModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
+              {' '}and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
             </span>
           </label>
         )}
 
-        <button type="submit" disabled={loading}
-          style={{ padding: '14px', backgroundColor: loading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: loading ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
+        <button type="submit" disabled={loading || (isSignUp && !termsAccepted)}
+          style={{ padding: '14px', backgroundColor: (loading || (isSignUp && !termsAccepted)) ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: (loading || (isSignUp && !termsAccepted)) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: (loading || (isSignUp && !termsAccepted)) ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
           {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Agent Account'}
         </button>
       </form>
@@ -1873,6 +1924,23 @@ function PropertyCard({ house, onSelect }) {
         {house.is_sold && (
           <div style={{ position: 'absolute', bottom: '7px', left: '7px', backgroundColor: '#ef4444', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontSize: '0.60rem', fontWeight: 800, letterSpacing: '0.5px' }}>SOLD</div>
         )}
+        {/* Bottom-right so it doesn't collide with the VERIFIED badge (top-right) or SOLD (bottom-left) */}
+        <button onClick={async function(e) {
+          e.stopPropagation();
+          var reason = window.prompt('Reason for reporting this listing:\n(e.g. fraudulent, inappropriate, incorrect information)');
+          if (!reason) return;
+          try {
+            var token = localStorage.getItem('gh_token');
+            await fetch(API_URL + '/api/properties/' + house.id + '/report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+              body: JSON.stringify({ reason, property_id: house.id }),
+            });
+            alert('Thank you for your report. Our team will review this listing within 24 hours.');
+          } catch(e) { alert('Report submitted'); }
+        }} style={{ position: 'absolute', bottom: '8px', right: '8px', backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.70rem', cursor: 'pointer', zIndex: 10 }}>
+          ⚑ Report
+        </button>
       </div>
       <div style={{ padding: isMobile ? '9px 10px 10px' : '12px 14px 14px' }}>
         <h3 style={{ margin: '0 0 2px 0', color: '#0a2240', fontSize: isMobile ? '0.69rem' : '0.88rem', fontWeight: '700', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{house.title}</h3>
@@ -1885,7 +1953,7 @@ function PropertyCard({ house, onSelect }) {
     </div>
   );
 }
-function PricingModal({ property, onClose, user, onUserChange, globalSettings = {} }) {
+function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { fmtCurrency, fmtListingPrice, activeCountry } = useCountry();
   const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
@@ -2333,6 +2401,29 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       </span>
                     )}
                   </div>
+                  {(property.agent_id || property.created_by) && (
+                    <button onClick={async function() {
+                      var token = localStorage.getItem('gh_token');
+                      if (!user || !token) { alert('Please log in to block agents.'); return; }
+                      if (!window.confirm('Block this agent? You will no longer see their listings.')) return;
+                      var agentId = property.agent_id || property.created_by;
+                      try {
+                        var res = await fetch(API_URL + '/api/agents/' + agentId + '/block', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        });
+                        if (!res.ok) {
+                          var errData = await res.json().catch(function() { return {}; });
+                          alert(errData.error || 'Could not block this agent. Please try again.');
+                          return;
+                        }
+                        alert('Agent blocked. Their listings will no longer appear in your search results.');
+                        if (onBlockAgent) onBlockAgent(agentId);
+                      } catch(e) { alert('Could not block this agent. Please check your connection and try again.'); }
+                    }} style={{ fontSize: '0.72rem', color: '#ef4444', backgroundColor: 'transparent', border: '1px solid #fecaca', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', marginTop: '6px' }}>
+                      🚫 Block Agent
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -16159,6 +16250,19 @@ function AppContent() {
   const [showNavAuth, setShowNavAuth]           = useState(false);
   const [authInitialMode, setAuthInitialMode]   = useState(null);
   const [properties, setProperties]             = useState([]);
+  const [blockedAgents, setBlockedAgents]       = useState([]);
+  // Fetch blocked agents on login; clear on logout so the next user on this device doesn't inherit them
+  useEffect(function() {
+    if (!user) { setBlockedAgents([]); return; }
+    var token = localStorage.getItem('gh_token');
+    if (!token) return;
+    fetch(API_URL + '/api/user/blocked-agents', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { setBlockedAgents(data.blocked || []); })
+    .catch(function() {});
+  }, [user]);
   const [isLoading, setIsLoading]               = useState(true);
   const [isError, setIsError]                   = useState(false);
   const [agentTier, setAgentTier]               = useState('free');
@@ -16636,6 +16740,8 @@ function AppContent() {
     }
   };
   const countryProperties = (properties || []).filter(function(p) {
+    // Filter out blocked agents
+    if (blockedAgents.includes(p.agent_id) || blockedAgents.includes(p.created_by)) return false;
     const pCountry    = (p.country || '').toLowerCase().trim();
     const activeName  = activeCountry.name.toLowerCase();
     const activeCode  = activeCountry.code.toLowerCase();
@@ -16941,6 +17047,7 @@ function AppContent() {
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (window.location.pathname === '/delete-account' || window.location.pathname === '/account/delete') return <DeleteAccountPage />;
   if (window.location.pathname === '/privacy') return <PrivacyPolicyPage />;
+  if (window.location.pathname === '/terms') return <TermsOfUsePage />;
   if (window.location.pathname === '/support') return <SupportPage />;
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
@@ -17114,7 +17221,7 @@ function AppContent() {
         .gh-footer-contact:hover { color: rgba(255,255,255,0.9) !important; }
         .gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
       `}</style>
-      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} globalSettings={globalSettings} />}
+      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} onBlockAgent={function(agentId){ setBlockedAgents(function(prev) { return prev.includes(agentId) ? prev : [...prev, agentId]; }); setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} globalSettings={globalSettings} />}
       {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={footerModal === 'about' ? undefined : function(){ setFooterModal(null); }} />}
       {showRatingModal && ratingGhaId && (
         <RateGHAModal
