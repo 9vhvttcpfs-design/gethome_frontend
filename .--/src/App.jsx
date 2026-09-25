@@ -1894,11 +1894,28 @@ function MovingQuoteForm({ globalSettings }) {
 function PropertyCard({ house, onSelect }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
+  var mediaHeight = isMobile ? '112px' : '160px';
+  var firstImage = (house.image_url && house.image_url.trim()) || (Array.isArray(house.image_urls) && house.image_urls.find(function(u) { return u && u.trim(); })) || null;
+  var showVideoThumb = !firstImage && !!(house.video_url && house.video_url.trim());
   return (
     <div onClick={onSelect} className='gh-prop-card gh-card' style={{ ...cardStyle, position: 'relative', overflow: 'hidden', cursor: 'pointer', borderRadius: '14px' }}>
       <div style={{ position: 'relative' }}>
-        <img src={house.image_url} alt={house.title} loading="lazy" style={{ width: '100%', height: isMobile ? '112px' : '160px', objectFit: 'cover', display: 'block' }}
-          onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+        {showVideoThumb ? (
+          <div style={{ position: 'relative', width: '100%', height: mediaHeight, backgroundColor: '#0a2240' }}>
+            {/* #t=0.1 makes iOS/Android WebViews paint the first frame instead of a blank box */}
+            <video src={house.video_url + '#t=0.1'} muted playsInline preload="metadata"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '1rem', marginLeft: '3px', color: '#0a2240' }}>▶</span>
+              </div>
+            </div>
+            <div style={{ position: 'absolute', bottom: '7px', right: '7px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: '6px', padding: '2px 7px', fontSize: '0.64rem', fontWeight: '700' }}>VIDEO</div>
+          </div>
+        ) : (
+          <img src={firstImage || 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'} alt={house.title} loading="lazy" style={{ width: '100%', height: mediaHeight, objectFit: 'cover', display: 'block' }}
+            onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+        )}
         {house.property_type && house.property_type !== 'apartment' && (
           <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', borderRadius: '6px', padding: '3px 8px', fontSize: '0.68rem', fontWeight: '700', backdropFilter: 'blur(4px)' }}>
             {(PROPERTY_TYPES.find(function(t) { return t.value === house.property_type; }) || {}).icon || ''} {(house.property_type || '').toUpperCase()}
