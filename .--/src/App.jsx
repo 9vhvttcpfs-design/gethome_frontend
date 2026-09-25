@@ -9631,6 +9631,61 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
                       <p style={{ margin: '0 0 18px 0', color: '#334155', fontSize: '0.88rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{m.message}</p>
 
+                      {m.message_type === 'property_reported' && m.meta && (function() {
+                        var meta = {};
+                        try { meta = typeof m.meta === 'string' ? JSON.parse(m.meta) : m.meta; } catch(e) {}
+                        if (!meta || !meta.property_id) return null;
+                        var metaCountry = SUPPORTED_COUNTRIES.find(function(c) { return c.code === meta.property_country || c.name === meta.property_country; });
+                        return (
+                          <div style={{ backgroundColor: '#fff5f5', borderRadius: '10px', padding: '12px', marginBottom: '18px', border: '1px solid #fecaca' }}>
+                            {meta.property_image && (
+                              <img src={meta.property_image} alt={meta.property_title}
+                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
+                            )}
+                            <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                              🏠 {meta.property_title || 'Unknown Property'}
+                            </p>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', color: '#64748b' }}>
+                              📍 {meta.property_location || 'N/A'} · {formatLocalPrice(meta.property_price || 0, metaCountry ? metaCountry.name : 'Nigeria')}
+                            </p>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: '#ef4444', fontWeight: '600' }}>
+                              ⚠ Reason: {meta.reason}
+                            </p>
+                            <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>👤 {meta.agent_name}</p>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.72rem', color: '#64748b' }}>✉ {meta.agent_email}</p>
+                              <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>📞 {meta.agent_phone}</p>
+                              {meta.sa_label && <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#64748b' }}>🧑‍💼 SA: {meta.sa_label}</p>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {meta.sa_whatsapp && (
+                                <a href={'https://wa.me/' + meta.sa_whatsapp + '?text=' + encodeURIComponent('Hello, a property listed by your agent ' + (meta.agent_name || '') + ' on GetHome has been reported. Property: ' + meta.property_title + '. Reason: ' + meta.reason + '. Please follow up within 24 hours.')}
+                                  target='_blank' rel='noopener noreferrer'
+                                  style={{ flex: 1, display: 'block', textAlign: 'center', padding: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
+                                  💬 Contact SA on WhatsApp
+                                </a>
+                              )}
+                              <button onClick={async function() {
+                                if (!window.confirm('Remove this property listing? The agent will be notified.')) return;
+                                try {
+                                  var token = localStorage.getItem('gh_token');
+                                  var removeRes = await fetch(API_URL + '/api/admin/properties/' + meta.property_id + '/remove', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ reason: meta.reason }),
+                                  });
+                                  var removeData = await removeRes.json().catch(function() { return {}; });
+                                  if (removeRes.ok) alert('Property removed. The agent has been notified.');
+                                  else alert('Could not remove property: ' + (removeData.error || 'HTTP ' + removeRes.status));
+                                } catch(e) { alert('Error: ' + e.message); }
+                              }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+                                🗑 Remove Listing
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                         {m.message_type === 'inspection_note' && m.related_inspection_id && (
                           <button onClick={function(){ switchTab('inspections'); }}
