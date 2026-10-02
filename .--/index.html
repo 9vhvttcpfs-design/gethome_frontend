@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no' />
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover' />
 
     <!-- Theme & PWA -->
     <meta name="theme-color" content="#0a2240" />
@@ -60,7 +60,6 @@
       html { scroll-behavior: smooth; text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
       body {
         margin: 0;
-        padding: 0;
         overflow-x: hidden;
         background-color: #f1f5f9;
         -webkit-font-smoothing: antialiased;
@@ -130,7 +129,7 @@
       :focus-visible { outline: 2px solid #27ae60; outline-offset: 2px; }
 
       /* Prevent content flash */
-      #root { min-height: 100vh; }
+      #root { min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
     </style>
 
     <!-- Organization structured data -->

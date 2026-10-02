@@ -270,7 +270,7 @@ function LoadingScreen() {
   const [dots, setDots] = useState('.');
   useEffect(function(){ var t = setInterval(function(){ setDots(function(d){ return d.length >= 3 ? '.' : d + '.'; }); }, 600); return function(){ clearInterval(t); }; }, []);
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '28px', padding: '20px' }}>
+    <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '28px', padding: '20px' }}>
       <div style={{ textAlign: 'center' }}>
         <h1 style={{ fontSize: '2.6rem', fontWeight: '800', color: '#0a2240', margin: '0 0 10px 0', letterSpacing: '-1.5px', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif" }}>Get<span style={{ color: '#22c55e' }}>Home</span></h1>
         <p style={{ color: '#94a3b8', fontSize: '0.86rem', margin: '0 0 4px 0' }}>Loading verified listings{dots}</p>
@@ -283,7 +283,7 @@ function LoadingScreen() {
 }
 function ErrorScreen({ onRetry }) {
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
+    <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
       <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertCircle size={24} color="#ef4444" /></div>
       <h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Unable to Connect</h2>
       <p style={{ color: '#64748b', textAlign: 'center', margin: 0, maxWidth: '300px', fontSize: '0.88rem', lineHeight: '1.6' }}>Could not load listings. Check your connection and try again.</p>
@@ -3835,7 +3835,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       {uploadSuccess && (
         <div style={{
           position: 'fixed',
-          top: '20px',
+          top: 'calc(20px + var(--sat))',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 999999,
@@ -6184,7 +6184,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; }`}</style>
 
       {/* ── Stats bar ── */}
@@ -11408,7 +11408,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   ];
 
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes newAssignFlash { 0%,100%{border-color:#27ae60;box-shadow:0 0 0 3px rgba(39,174,96,0.20)} 50%{border-color:transparent;box-shadow:none} } .new-assignment-card { animation: newAssignFlash 1s ease-in-out infinite; }`}</style>
 
       {/* Header */}
@@ -11436,7 +11436,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? 'calc(60px + var(--sat))' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 {/* Dropdown header */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                   <span style={{ fontWeight: 700, color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Notifications</span>
@@ -13604,7 +13604,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   };
 
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.5)} } .live-dot { animation: livePulse 1.5s ease-in-out infinite; }`}</style>
 
       {/* Header */}
@@ -13638,7 +13638,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? 'calc(60px + var(--sat))' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
                   {saDisplayNotifications.length > 0 && (
@@ -17175,7 +17175,7 @@ function AppContent() {
       'Please confirm my payment. Thank you.'
     );
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
+      <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
           <p style={{ margin: '0', fontWeight: '900', color: '#0a2240', fontSize: '1.4rem' }}>GetHome</p>
           <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>Transparent. Verified. Trusted.</p>
@@ -17261,7 +17261,7 @@ function AppContent() {
   if (isLoading) return <LoadingScreen />;
   if (isError) return <ErrorScreen onRetry={fetchData} />;
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -17611,7 +17611,7 @@ function AppContent() {
           </div>
         </div>
       )}
-      <nav style={{ backgroundColor: '#0a2240', position: 'sticky', top: 0, zIndex: 999, boxShadow: '0 2px 16px rgba(10,34,64,0.25)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <nav style={{ backgroundColor: '#0a2240', position: 'sticky', top: 'var(--sat)', zIndex: 999, boxShadow: '0 2px 16px rgba(10,34,64,0.25)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         {/* ── Top bar ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '0 4%' : '0 5%', height: isMobile ? '56px' : '66px' }}>
           {/* Logo */}

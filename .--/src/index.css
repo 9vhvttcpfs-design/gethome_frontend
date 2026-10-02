@@ -72,6 +72,12 @@
   --z-nav:     999;
   --z-modal:   1000;
   --z-overlay: 9999;
+
+  /* Safe area insets (iPhone status bar / home indicator) - 0 where unsupported */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
 }
 
 /* ── Base Reset ───────────────────────────────────────── */
@@ -98,6 +104,25 @@ body {
   overflow-x: hidden;
   line-height: 1.55;
   min-height: 100%;
+  padding: var(--sat) var(--sar) var(--sab) var(--sal);
+}
+
+/* Solid strip behind the iPhone status bar so scrolled content never shows through it.
+   The native app's status bar text follows the system theme (dark text in light mode,
+   white in dark mode); the installed PWA always uses white text (black-translucent). */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--sat);
+  background-color: var(--color-bg);
+  z-index: 998; /* just under the sticky nav, below modals */
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark), (display-mode: standalone) {
+  body::before { background-color: var(--color-navy); }
 }
 
 /* ── Typography ───────────────────────────────────────── */
@@ -171,8 +196,8 @@ ul, ol { list-style: none; }
 
 /* ── Root container ───────────────────────────────────── */
 #root {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: calc(100vh - var(--sat) - var(--sab));
+  min-height: calc(100dvh - var(--sat) - var(--sab));
   display: flex;
   flex-direction: column;
 }
