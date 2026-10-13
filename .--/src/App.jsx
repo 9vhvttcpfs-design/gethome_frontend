@@ -18691,7 +18691,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
           {/* Header */}
           <div style={{ backgroundColor: '#0a2240', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🤖</div>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}><img src="/logo.png" alt="GetHome" style={{ width: '26px', height: '26px', objectFit: 'contain' }} /></div>
               <div>
                 <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.88rem' }}>{aiName}</p>
                 <p style={{ margin: 0, fontSize: '0.70rem', color: '#27ae60', fontWeight: '600' }}>● Online</p>
@@ -18713,7 +18713,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
               return (
                 <div key={msg.id}>
                   <div style={{ display: 'flex', justifyContent: isAi ? 'flex-start' : 'flex-end', marginBottom: '8px' }}>
-                    {isAi && <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', marginRight: '6px', flexShrink: 0, marginTop: '2px' }}>🤖</div>}
+                    {isAi && <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', marginRight: '6px', flexShrink: 0, marginTop: '2px' }}><img src="/logo.png" alt="GetHome" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /></div>}
                     <div style={{ maxWidth: '78%', padding: '10px 12px', borderRadius: isAi ? '4px 14px 14px 14px' : '14px 4px 14px 14px', backgroundColor: isAi ? '#fff' : '#0a2240', color: isAi ? '#374151' : '#fff', fontSize: '0.82rem', lineHeight: 1.5, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: isAi ? '1px solid #e2e8f0' : 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {msg.text}
                     </div>
@@ -18775,7 +18775,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
             {/* Typing indicator */}
             {loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>🤖</div>
+                <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#fff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}><img src="/logo.png" alt="GetHome" style={{ width: '18px', height: '18px', objectFit: 'contain' }} /></div>
                 <div style={{ backgroundColor: '#fff', padding: '10px 14px', borderRadius: '4px 14px 14px 14px', border: '1px solid #e2e8f0' }}>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                     {[0,1,2].map(function(i) {
@@ -18814,8 +18814,8 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
       {/* Toggle button */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <button onClick={function() { setIsOpen(function(o) { return !o; }); }}
-          style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#0a2240', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(10,34,64,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', position: 'relative' }}>
-          {isOpen ? '✕' : '🤖'}
+          style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#fff', color: '#0a2240', border: '1px solid #e2e8f0', cursor: 'pointer', boxShadow: '0 4px 16px rgba(10,34,64,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', position: 'relative' }}>
+           {isOpen ? '✕' : (<img src="/logo.png" alt="GetHome" style={{ width: '34px', height: '34px', objectFit: 'contain' }} />)}
           {!isOpen && unread > 0 && (
             <div style={{ position: 'absolute', top: '-2px', right: '-2px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#27ae60', color: '#fff', fontSize: '0.62rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {unread}
