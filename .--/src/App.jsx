@@ -2302,16 +2302,16 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                     {showAgentPhoto && (
                       <div onClick={function() { setShowAgentPhoto(false); }}
                         style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                        <button onClick={function() { setShowAgentPhoto(false); }}
+                          style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', right: '16px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999 }}>
+                          ✕
+                        </button>
                         <div onClick={function(e) { e.stopPropagation(); }} style={{ position: 'relative', maxWidth: '380px', width: '100%' }}>
                           <img src={property.agent_photo_url} alt='Agent'
                             style={{ width: '100%', borderRadius: '16px', objectFit: 'cover' }} />
                           <p style={{ margin: '12px 0 0 0', color: '#fff', textAlign: 'center', fontWeight: '700', fontSize: '0.90rem' }}>
                             {property.agent_display_name || 'Verified Agent'}
                           </p>
-                          <button onClick={function() { setShowAgentPhoto(false); }}
-                            style={{ position: 'absolute', top: '-12px', right: '-12px', backgroundColor: '#fff', border: 'none', borderRadius: '50%', width: '32px', height: '32px', fontWeight: '900', cursor: 'pointer', fontSize: '1rem' }}>
-                            ✕
-                          </button>
                         </div>
                       </div>
                     )}
@@ -2530,7 +2530,7 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
         <div onClick={function() { setLightboxOpen(false); }}
           style={{ position: 'fixed', inset: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.96)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <button onClick={function() { setLightboxOpen(false); }}
-            style={{ position: 'absolute', top: '16px', right: '20px', backgroundColor: 'transparent', border: 'none', color: '#fff', fontSize: '2rem', cursor: 'pointer', lineHeight: 1 }}>&#x2715;</button>
+            style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', right: '16px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, zIndex: 99999 }}>&#x2715;</button>
           <img src={allMedia[mediaIndex]} alt="Full view" loading="lazy"
             onClick={function(e) { e.stopPropagation(); }}
             style={{ maxWidth: '95vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: '8px' }} />
