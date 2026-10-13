@@ -71,8 +71,27 @@ workflows:
       - name: Set bundle version
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR/ios/App"
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$BUNDLE_ID" 2>/dev/null || echo "0")
-          agvtool new-version -all $(($LATEST_BUILD + 1))
+          # The ASC commands need the numeric Apple app ID, not the bundle ID
+          APP_ID=$(app-store-connect apps list \
+            --bundle-id-identifier "$BUNDLE_ID" --strict-match-identifier --json \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["id"])') || APP_ID=""
+          echo "Apple app ID: ${APP_ID:-<not found>}"
+
+          LATEST_BUILD=0
+          if [ -n "$APP_ID" ]; then
+            LATEST_BUILD=$(app-store-connect get-latest-build-number "$APP_ID" || echo "0")
+          fi
+          LATEST_BUILD=${LATEST_BUILD:-0}
+          echo "Latest uploaded build number: $LATEST_BUILD"
+
+          # Never go below Codemagic's own build counter, in case the lookup fails
+          NEW_BUILD=$(( LATEST_BUILD + 1 ))
+          if [ "${BUILD_NUMBER:-0}" -gt "$NEW_BUILD" ]; then NEW_BUILD=$BUILD_NUMBER; fi
+          echo "Using build number: $NEW_BUILD"
+
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*;/CURRENT_PROJECT_VERSION = $NEW_BUILD;/g" App.xcodeproj/project.pbxproj
+          grep -q "CURRENT_PROJECT_VERSION = $NEW_BUILD;" App.xcodeproj/project.pbxproj \
+            || { echo "Failed to set build number"; exit 1; }
       - name: Set up code signing settings on Xcode project
         script: |
           cd "$CM_BUILD_DIR/$PROJECT_DIR"

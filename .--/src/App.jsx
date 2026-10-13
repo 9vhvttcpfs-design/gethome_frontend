@@ -270,7 +270,7 @@ function LoadingScreen() {
   const [dots, setDots] = useState('.');
   useEffect(function(){ var t = setInterval(function(){ setDots(function(d){ return d.length >= 3 ? '.' : d + '.'; }); }, 600); return function(){ clearInterval(t); }; }, []);
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '28px', padding: '20px' }}>
+    <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '28px', padding: '20px' }}>
       <div style={{ textAlign: 'center' }}>
         <h1 style={{ fontSize: '2.6rem', fontWeight: '800', color: '#0a2240', margin: '0 0 10px 0', letterSpacing: '-1.5px', fontFamily: "'Plus Jakarta Sans', 'Segoe UI', sans-serif" }}>Get<span style={{ color: '#22c55e' }}>Home</span></h1>
         <p style={{ color: '#94a3b8', fontSize: '0.86rem', margin: '0 0 4px 0' }}>Loading verified listings{dots}</p>
@@ -283,7 +283,7 @@ function LoadingScreen() {
 }
 function ErrorScreen({ onRetry }) {
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
+    <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f0f4f8', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: "'Inter', 'Segoe UI', sans-serif", gap: '20px', padding: '20px' }}>
       <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertCircle size={24} color="#ef4444" /></div>
       <h2 style={{ color: '#0a2240', fontSize: '1.3rem', fontWeight: '700', margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.5px' }}>Unable to Connect</h2>
       <p style={{ color: '#64748b', textAlign: 'center', margin: 0, maxWidth: '300px', fontSize: '0.88rem', lineHeight: '1.6' }}>Could not load listings. Check your connection and try again.</p>
@@ -396,6 +396,42 @@ function PrivacyPolicyPage() {
       <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
         <p style={{ margin: '0 0 4px 0', fontSize: '0.78rem', color: '#94a3b8' }}>GetHome Realestate</p>
         <a href='mailto:privacy@trygethome.online' style={{ color: '#0a2240', fontSize: '0.78rem' }}>privacy@trygethome.online</a>
+      </div>
+    </div>
+  );
+}
+// Route: /terms
+function TermsOfUsePage() {
+  return (
+    <div style={{ maxWidth: '680px', margin: '0 auto', padding: '40px 20px', fontFamily: 'Inter, sans-serif', color: '#374151', lineHeight: 1.8 }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: '800', color: '#0a2240', marginBottom: '8px' }}>
+        Get<span style={{ color: '#27ae60' }}>Home</span>
+      </div>
+      <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Terms of Use</h1>
+      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 32px 0' }}>Last updated: September 2026</p>
+
+      {[
+        { title: '1. Acceptance of Terms', body: 'By creating an account on GetHome Realestate, you agree to these Terms of Use. If you do not agree, do not use the app.' },
+        { title: '2. Content Standards', body: 'All property listings must be accurate, truthful, and legally compliant. Fraudulent, misleading, or inappropriate listings are strictly prohibited and will result in immediate account removal. GetHome has zero tolerance for objectionable content or abusive behaviour.' },
+        { title: '3. User Conduct', body: 'You agree not to post false, misleading, or fraudulent property listings; harass, threaten, or abuse other users; use the platform for any illegal purpose; or attempt to circumvent our verification or payment systems.' },
+        { title: '4. Content Moderation', body: 'GetHome reviews all reported content within 24 hours. Content found to violate these terms will be removed immediately and the responsible user\'s account will be suspended or permanently banned. Users can report objectionable listings using the Report button on any listing.' },
+        { title: '5. Blocking Users', body: 'Users may block agents whose content they find objectionable. Blocking notifies GetHome to review the agent\'s content and take action within 24 hours.' },
+        { title: '6. Agent Verification', body: 'All agents must submit valid government-issued ID before listing properties. Nigerian agents submit NIN (National Identification Number). Business registration documents are recommended. GetHome reserves the right to revoke agent status at any time for violations of these terms.' },
+        { title: '7. Payments', body: 'All payments are processed securely through Flutterwave or Paystack. Inspection fees and deposits are non-refundable except where GetHome determines a fraudulent listing was involved.' },
+        { title: '8. Termination', body: 'GetHome may suspend or terminate your account at any time for violations of these terms. You may delete your account at any time via Profile → Settings → Delete My Account.' },
+        { title: '9. Contact', body: 'To report abuse or content violations contact support@trygethome.online. We respond to all reports within 24 hours.' },
+      ].map(function(section) {
+        return (
+          <div key={section.title} style={{ marginBottom: '24px' }}>
+            <h2 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>{section.title}</h2>
+            <p style={{ margin: 0, fontSize: '0.88rem' }}>{section.body}</p>
+          </div>
+        );
+      })}
+
+      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+        <a href='/privacy' style={{ color: '#0a2240', fontSize: '0.78rem', marginRight: '16px' }}>Privacy Policy</a>
+        <a href='/support' style={{ color: '#0a2240', fontSize: '0.78rem' }}>Support</a>
       </div>
     </div>
   );
@@ -990,6 +1026,10 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
       setError('Password must be at least 6 characters');
       return;
     }
+    if (!termsAccepted) {
+      setError('Please agree to the Terms of Use to continue.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -1147,6 +1187,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
   if (mode === 'customer') {
     return (
       <div className="gh-auth-form-inner">
+        {showTermsModal && <LegalModal type="terms" forceAccept onClose={function(){ setShowTermsModal(false); }} onAccept={function(){ setTermsAccepted(true); setShowTermsModal(false); }} />}
         <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 4px 0' }}>
           Create Your Account
         </h3>
@@ -1213,18 +1254,27 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             </select>
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', margin: '12px 0' }}>
+            <input type='checkbox' id='terms-agree' checked={termsAccepted}
+              onChange={function(e) { setTermsAccepted(e.target.checked); }}
+              style={{ marginTop: '3px', flexShrink: 0 }} />
+            <label htmlFor='terms-agree' style={{ fontSize: '0.78rem', color: '#374151', lineHeight: 1.5 }}>
+              I agree to the <span onClick={function(e) { e.preventDefault(); setShowTermsModal(true); }} style={{ color: '#0a2240', fontWeight: '700', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Use</span> and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
+            </label>
+          </div>
+
           {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
 
           <button
             onClick={handleCustomerSignup}
-            disabled={loading}
-            style={{ width: '100%', padding: '13px', backgroundColor: loading ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.92rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            disabled={loading || !termsAccepted}
+            style={{ width: '100%', padding: '13px', backgroundColor: (loading || !termsAccepted) ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.92rem', cursor: (loading || !termsAccepted) ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Creating Account...' : 'Create Account'}
           </button>
 
           <p style={{ textAlign: 'center', fontSize: '0.78rem', color: '#64748b', margin: 0 }}>
             Already have an account?{' '}
-            <span onClick={function() { setMode('login'); setError(''); }} style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer' }}>Login</span>
+            <span onClick={function() { setMode('login'); setError(''); setTermsAccepted(false); }} style={{ color: '#27ae60', fontWeight: '700', cursor: 'pointer' }}>Login</span>
           </p>
         </div>
       </div>
@@ -1774,12 +1824,13 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
               <span onClick={function(e){ e.stopPropagation(); setShowTermsModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Terms</span>
               {' '}and{' '}
               <span onClick={function(e){ e.stopPropagation(); setShowPrivacyModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
+              {' '}and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
             </span>
           </label>
         )}
 
-        <button type="submit" disabled={loading}
-          style={{ padding: '14px', backgroundColor: loading ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: loading ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
+        <button type="submit" disabled={loading || (isSignUp && !termsAccepted)}
+          style={{ padding: '14px', backgroundColor: (loading || (isSignUp && !termsAccepted)) ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: '700', fontSize: '0.93rem', cursor: (loading || (isSignUp && !termsAccepted)) ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", boxShadow: (loading || (isSignUp && !termsAccepted)) ? 'none' : '0 4px 14px rgba(34,197,94,0.28)', transition: 'all 0.18s' }}>
           {loading ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Agent Account'}
         </button>
       </form>
@@ -1843,11 +1894,28 @@ function MovingQuoteForm({ globalSettings }) {
 function PropertyCard({ house, onSelect }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { activeCountry } = useCountry();
+  var mediaHeight = isMobile ? '112px' : '160px';
+  var firstImage = (house.image_url && house.image_url.trim()) || (Array.isArray(house.image_urls) && house.image_urls.find(function(u) { return u && u.trim(); })) || null;
+  var showVideoThumb = !firstImage && !!(house.video_url && house.video_url.trim());
   return (
     <div onClick={onSelect} className='gh-prop-card gh-card' style={{ ...cardStyle, position: 'relative', overflow: 'hidden', cursor: 'pointer', borderRadius: '14px' }}>
       <div style={{ position: 'relative' }}>
-        <img src={house.image_url} alt={house.title} loading="lazy" style={{ width: '100%', height: isMobile ? '112px' : '160px', objectFit: 'cover', display: 'block' }}
-          onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+        {showVideoThumb ? (
+          <div style={{ position: 'relative', width: '100%', height: mediaHeight, backgroundColor: '#0a2240' }}>
+            {/* #t=0.1 makes iOS/Android WebViews paint the first frame instead of a blank box */}
+            <video src={house.video_url + '#t=0.1'} muted playsInline preload="metadata"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '1rem', marginLeft: '3px', color: '#0a2240' }}>▶</span>
+              </div>
+            </div>
+            <div style={{ position: 'absolute', bottom: '7px', right: '7px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff', borderRadius: '6px', padding: '2px 7px', fontSize: '0.64rem', fontWeight: '700' }}>VIDEO</div>
+          </div>
+        ) : (
+          <img src={firstImage || 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'} alt={house.title} loading="lazy" style={{ width: '100%', height: mediaHeight, objectFit: 'cover', display: 'block' }}
+            onError={e => { e.target.onerror = null; e.target.src = 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80'; }} />
+        )}
         {house.property_type && house.property_type !== 'apartment' && (
           <div style={{ position: 'absolute', top: '7px', left: '7px', backgroundColor: 'rgba(10,34,64,0.85)', color: '#fff', borderRadius: '6px', padding: '3px 8px', fontSize: '0.68rem', fontWeight: '700', backdropFilter: 'blur(4px)' }}>
             {(PROPERTY_TYPES.find(function(t) { return t.value === house.property_type; }) || {}).icon || ''} {(house.property_type || '').toUpperCase()}
@@ -1873,6 +1941,23 @@ function PropertyCard({ house, onSelect }) {
         {house.is_sold && (
           <div style={{ position: 'absolute', bottom: '7px', left: '7px', backgroundColor: '#ef4444', color: '#fff', padding: '3px 10px', borderRadius: '20px', fontSize: '0.60rem', fontWeight: 800, letterSpacing: '0.5px' }}>SOLD</div>
         )}
+        {/* Bottom-right so it doesn't collide with the VERIFIED badge (top-right) or SOLD (bottom-left) */}
+        <button onClick={async function(e) {
+          e.stopPropagation();
+          var reason = window.prompt('Reason for reporting this listing:\n(e.g. fraudulent, inappropriate, incorrect information)');
+          if (!reason) return;
+          try {
+            var token = localStorage.getItem('gh_token');
+            await fetch(API_URL + '/api/properties/' + house.id + '/report', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || '') },
+              body: JSON.stringify({ reason, property_id: house.id }),
+            });
+            alert('Thank you for your report. Our team will review this listing within 24 hours.');
+          } catch(e) { alert('Report submitted'); }
+        }} style={{ position: 'absolute', bottom: '8px', right: '8px', backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.70rem', cursor: 'pointer', zIndex: 10 }}>
+          ⚑ Report
+        </button>
       </div>
       <div style={{ padding: isMobile ? '9px 10px 10px' : '12px 14px 14px' }}>
         <h3 style={{ margin: '0 0 2px 0', color: '#0a2240', fontSize: isMobile ? '0.69rem' : '0.88rem', fontWeight: '700', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{house.title}</h3>
@@ -1885,7 +1970,7 @@ function PropertyCard({ house, onSelect }) {
     </div>
   );
 }
-function PricingModal({ property, onClose, user, onUserChange, globalSettings = {} }) {
+function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { fmtCurrency, fmtListingPrice, activeCountry } = useCountry();
   const currentConfig = LOCAL_FEE_CONFIGS[activeCountry.name] || LOCAL_FEE_CONFIGS['Nigeria'];
@@ -2333,6 +2418,29 @@ function PricingModal({ property, onClose, user, onUserChange, globalSettings = 
                       </span>
                     )}
                   </div>
+                  {(property.agent_id || property.created_by) && (
+                    <button onClick={async function() {
+                      var token = localStorage.getItem('gh_token');
+                      if (!user || !token) { alert('Please log in to block agents.'); return; }
+                      if (!window.confirm('Block this agent? You will no longer see their listings.')) return;
+                      var agentId = property.agent_id || property.created_by;
+                      try {
+                        var res = await fetch(API_URL + '/api/agents/' + agentId + '/block', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                        });
+                        if (!res.ok) {
+                          var errData = await res.json().catch(function() { return {}; });
+                          alert(errData.error || 'Could not block this agent. Please try again.');
+                          return;
+                        }
+                        alert('Agent blocked. Their listings will no longer appear in your search results.');
+                        if (onBlockAgent) onBlockAgent(agentId);
+                      } catch(e) { alert('Could not block this agent. Please check your connection and try again.'); }
+                    }} style={{ fontSize: '0.72rem', color: '#ef4444', backgroundColor: 'transparent', border: '1px solid #fecaca', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', marginTop: '6px' }}>
+                      🚫 Block Agent
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -3727,7 +3835,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       {uploadSuccess && (
         <div style={{
           position: 'fixed',
-          top: '20px',
+          top: 'calc(20px + var(--sat))',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 999999,
@@ -6076,7 +6184,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter','Segoe UI',system-ui,sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } ::-webkit-scrollbar { width: 5px; height: 5px; } ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; }`}</style>
 
       {/* ── Stats bar ── */}
@@ -9447,6 +9555,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       : msg.message_type === 'payment_received' ? { label: 'PAYMENT', bg: '#fef3c7', color: '#92400e' }
                       : msg.message_type === 'agent_assigned' ? { label: 'ASSIGNED ✅', bg: '#f0fff4', color: '#166534' }
                       : msg.message_type === 'agent_rejected' ? { label: 'REJECTED ✕', bg: '#fff7ed', color: '#c2410c' }
+                      : (msg.message_type === 'content_report' || msg.message_type === 'property_reported') ? { label: 'REPORTED ⚠', bg: '#fef2f2', color: '#b91c1c' }
+                      : msg.message_type === 'account_deleted' ? { label: 'ACCOUNT DELETED', bg: '#f1f5f9', color: '#475569' }
                       : null;
                     return (
                       <div key={msg.id}
@@ -9499,6 +9609,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     ? { bg: '#f0fff4', color: '#166534', border: '#bbf7d0', label: 'Agent Assigned ✅' }
                     : m.message_type === 'agent_rejected'
                     ? { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa', label: 'Agent Rejected ✕' }
+                    : (m.message_type === 'content_report' || m.message_type === 'property_reported')
+                    ? { bg: '#fef2f2', color: '#b91c1c', border: '#fecaca', label: 'Content Report ⚠' }
+                    : m.message_type === 'account_deleted'
+                    ? { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0', label: 'Account Deleted' }
                     : { bg: '#f1f5f9', color: '#64748b', border: '#e2e8f0', label: 'General' };
                   return (
                     <div style={{ backgroundColor: '#fff', borderRadius: '14px', border: '1.5px solid #e2e8f0', padding: '20px 24px' }}>
@@ -9516,6 +9630,61 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       <h3 style={{ margin: '0 0 8px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800' }}>{m.subject || '(no subject)'}</h3>
                       <span style={{ display: 'inline-block', fontSize: '0.66rem', padding: '2px 10px', borderRadius: '20px', fontWeight: '800', backgroundColor: typeBadge.bg, color: typeBadge.color, border: '1px solid ' + typeBadge.border, marginBottom: '14px' }}>{typeBadge.label}</span>
                       <p style={{ margin: '0 0 18px 0', color: '#334155', fontSize: '0.88rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{m.message}</p>
+
+                      {m.message_type === 'property_reported' && m.meta && (function() {
+                        var meta = {};
+                        try { meta = typeof m.meta === 'string' ? JSON.parse(m.meta) : m.meta; } catch(e) {}
+                        if (!meta || !meta.property_id) return null;
+                        var metaCountry = SUPPORTED_COUNTRIES.find(function(c) { return c.code === meta.property_country || c.name === meta.property_country; });
+                        return (
+                          <div style={{ backgroundColor: '#fff5f5', borderRadius: '10px', padding: '12px', marginBottom: '18px', border: '1px solid #fecaca' }}>
+                            {meta.property_image && (
+                              <img src={meta.property_image} alt={meta.property_title}
+                                style={{ width: '100%', height: '140px', objectFit: 'cover', borderRadius: '8px', marginBottom: '8px' }} />
+                            )}
+                            <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>
+                              🏠 {meta.property_title || 'Unknown Property'}
+                            </p>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', color: '#64748b' }}>
+                              📍 {meta.property_location || 'N/A'} · {formatLocalPrice(meta.property_price || 0, metaCountry ? metaCountry.name : 'Nigeria')}
+                            </p>
+                            <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: '#ef4444', fontWeight: '600' }}>
+                              ⚠ Reason: {meta.reason}
+                            </p>
+                            <div style={{ backgroundColor: '#fff', borderRadius: '8px', padding: '8px 10px', marginBottom: '8px', border: '1px solid #e2e8f0' }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>👤 {meta.agent_name}</p>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '0.72rem', color: '#64748b' }}>✉ {meta.agent_email}</p>
+                              <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>📞 {meta.agent_phone}</p>
+                              {meta.sa_label && <p style={{ margin: '2px 0 0 0', fontSize: '0.72rem', color: '#64748b' }}>🧑‍💼 SA: {meta.sa_label}</p>}
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {meta.sa_whatsapp && (
+                                <a href={'https://wa.me/' + meta.sa_whatsapp + '?text=' + encodeURIComponent('Hello, a property listed by your agent ' + (meta.agent_name || '') + ' on GetHome has been reported. Property: ' + meta.property_title + '. Reason: ' + meta.reason + '. Please follow up within 24 hours.')}
+                                  target='_blank' rel='noopener noreferrer'
+                                  style={{ flex: 1, display: 'block', textAlign: 'center', padding: '8px', backgroundColor: '#25D366', color: '#fff', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', textDecoration: 'none' }}>
+                                  💬 Contact SA on WhatsApp
+                                </a>
+                              )}
+                              <button onClick={async function() {
+                                if (!window.confirm('Remove this property listing? The agent will be notified.')) return;
+                                try {
+                                  var token = localStorage.getItem('gh_token');
+                                  var removeRes = await fetch(API_URL + '/api/admin/properties/' + meta.property_id + '/remove', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                    body: JSON.stringify({ reason: meta.reason }),
+                                  });
+                                  var removeData = await removeRes.json().catch(function() { return {}; });
+                                  if (removeRes.ok) alert('Property removed. The agent has been notified.');
+                                  else alert('Could not remove property: ' + (removeData.error || 'HTTP ' + removeRes.status));
+                                } catch(e) { alert('Error: ' + e.message); }
+                              }} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer' }}>
+                                🗑 Remove Listing
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                         {m.message_type === 'inspection_note' && m.related_inspection_id && (
@@ -11239,7 +11408,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   ];
 
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus, textarea:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes newAssignFlash { 0%,100%{border-color:#27ae60;box-shadow:0 0 0 3px rgba(39,174,96,0.20)} 50%{border-color:transparent;box-shadow:none} } .new-assignment-card { animation: newAssignFlash 1s ease-in-out infinite; }`}</style>
 
       {/* Header */}
@@ -11267,7 +11436,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? 'calc(60px + var(--sat))' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 {/* Dropdown header */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
                   <span style={{ fontWeight: 700, color: '#0a2240', fontSize: '0.88rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Notifications</span>
@@ -13435,7 +13604,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   };
 
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: '100vh' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))' }}>
       <style>{`* { box-sizing: border-box; } body { font-family: 'Inter', sans-serif !important; background: #f0f4f8 !important; } input:focus, select:focus { outline: none !important; border-color: #22c55e !important; box-shadow: 0 0 0 3px rgba(34,197,94,0.12) !important; } @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(1.5)} } .live-dot { animation: livePulse 1.5s ease-in-out infinite; }`}</style>
 
       {/* Header */}
@@ -13469,7 +13638,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
             </button>
 
             {showNotifDropdown && (
-              <div style={{ position: 'fixed', top: isMobile ? '60px' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
+              <div style={{ position: 'fixed', top: isMobile ? 'calc(60px + var(--sat))' : '68px', right: isMobile ? '8px' : '20px', width: isMobile ? 'calc(100vw - 16px)' : '320px', maxWidth: '420px', backgroundColor: '#fff', borderRadius: '14px', boxShadow: '0 8px 32px rgba(10,34,64,0.18)', zIndex: 9999, maxHeight: isMobile ? '70vh' : '380px', overflowY: 'auto', border: '1px solid #e2e8f0' }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>Inspection Requests</span>
                   {saDisplayNotifications.length > 0 && (
@@ -16159,6 +16328,19 @@ function AppContent() {
   const [showNavAuth, setShowNavAuth]           = useState(false);
   const [authInitialMode, setAuthInitialMode]   = useState(null);
   const [properties, setProperties]             = useState([]);
+  const [blockedAgents, setBlockedAgents]       = useState([]);
+  // Fetch blocked agents on login; clear on logout so the next user on this device doesn't inherit them
+  useEffect(function() {
+    if (!user) { setBlockedAgents([]); return; }
+    var token = localStorage.getItem('gh_token');
+    if (!token) return;
+    fetch(API_URL + '/api/user/blocked-agents', {
+      headers: { Authorization: 'Bearer ' + token }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { setBlockedAgents(data.blocked || []); })
+    .catch(function() {});
+  }, [user]);
   const [isLoading, setIsLoading]               = useState(true);
   const [isError, setIsError]                   = useState(false);
   const [agentTier, setAgentTier]               = useState('free');
@@ -16636,6 +16818,8 @@ function AppContent() {
     }
   };
   const countryProperties = (properties || []).filter(function(p) {
+    // Filter out blocked agents
+    if (blockedAgents.includes(p.agent_id) || blockedAgents.includes(p.created_by)) return false;
     const pCountry    = (p.country || '').toLowerCase().trim();
     const activeName  = activeCountry.name.toLowerCase();
     const activeCode  = activeCountry.code.toLowerCase();
@@ -16941,6 +17125,7 @@ function AppContent() {
   const navBtnStyle = function(tab) { return { padding: isMobile ? '6px 11px' : '7px 14px', borderRadius: '9px', border: 'none', backgroundColor: currentTab === tab ? '#22c55e' : 'rgba(255,255,255,0.08)', color: currentTab === tab ? '#fff' : 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: isMobile ? '0.73rem' : '0.83rem', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.18s', fontFamily: "'Inter', sans-serif", boxShadow: currentTab === tab ? '0 3px 12px rgba(34,197,94,0.3)' : 'none' }; };
   if (window.location.pathname === '/delete-account' || window.location.pathname === '/account/delete') return <DeleteAccountPage />;
   if (window.location.pathname === '/privacy') return <PrivacyPolicyPage />;
+  if (window.location.pathname === '/terms') return <TermsOfUsePage />;
   if (window.location.pathname === '/support') return <SupportPage />;
   if (staffUser && staffUser.role === 'SA') return <SADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
   if (staffUser && staffUser.role === 'GHA') return <GHADashboard staffUser={staffUser} onLogout={function(){ localStorage.removeItem('gh_staff_user'); localStorage.removeItem('gh_staff_token'); setStaffUser(null); }} />;
@@ -16990,7 +17175,7 @@ function AppContent() {
       'Please confirm my payment. Thank you.'
     );
     return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
+      <div style={{ minHeight: 'calc(100vh - var(--sat) - var(--sab))', backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif" }}>
         <div style={{ marginBottom: '24px', textAlign: 'center' }}>
           <p style={{ margin: '0', fontWeight: '900', color: '#0a2240', fontSize: '1.4rem' }}>GetHome</p>
           <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.78rem' }}>Transparent. Verified. Trusted.</p>
@@ -17076,7 +17261,7 @@ function AppContent() {
   if (isLoading) return <LoadingScreen />;
   if (isError) return <ErrorScreen onRetry={fetchData} />;
   return (
-    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif", color: '#0f172a', backgroundColor: '#f0f4f8', minHeight: 'calc(100vh - var(--sat) - var(--sab))', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
@@ -17114,7 +17299,7 @@ function AppContent() {
         .gh-footer-contact:hover { color: rgba(255,255,255,0.9) !important; }
         .gh-footer-legal:hover { color: rgba(255,255,255,0.9) !important; }
       `}</style>
-      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} globalSettings={globalSettings} />}
+      {selectedProperty && <PricingModal property={selectedProperty} onClose={function(){ setSelectedProperty(null); }} onBlockAgent={function(agentId){ setBlockedAgents(function(prev) { return prev.includes(agentId) ? prev : [...prev, agentId]; }); setSelectedProperty(null); }} user={user} onUserChange={function(u){ setUser(u); localStorage.setItem('gh_user', JSON.stringify(u)); }} globalSettings={globalSettings} />}
       {footerModal && <LegalModal type={footerModal} onClose={function(){ setFooterModal(null); }} onAccept={footerModal === 'about' ? undefined : function(){ setFooterModal(null); }} />}
       {showRatingModal && ratingGhaId && (
         <RateGHAModal
@@ -17426,7 +17611,7 @@ function AppContent() {
           </div>
         </div>
       )}
-      <nav style={{ backgroundColor: '#0a2240', position: 'sticky', top: 0, zIndex: 999, boxShadow: '0 2px 16px rgba(10,34,64,0.25)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <nav style={{ backgroundColor: '#0a2240', position: 'sticky', top: 'var(--sat)', zIndex: 999, boxShadow: '0 2px 16px rgba(10,34,64,0.25)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         {/* ── Top bar ── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isMobile ? '0 4%' : '0 5%', height: isMobile ? '56px' : '66px' }}>
           {/* Logo */}
@@ -18397,6 +18582,72 @@ function AppContent() {
   );
 }
 function App() {
+  // Telegram Mini App initialization
+  useEffect(function() {
+    if (!window.Telegram?.WebApp) return;
+
+    var tg = window.Telegram.WebApp;
+
+    // Tell Telegram the app is ready
+    tg.ready();
+
+    // Auto-authenticate Telegram users
+    if (tg.initData) {
+      fetch(API_URL + '/api/auth/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: tg.initData }),
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && data.user) {
+          console.log('Telegram user authenticated:', data.user.first_name);
+          window.__tgUser = data.user;
+          // Pre-fill data for the registration form
+          window.__tgAutoFill = {
+            name: (data.user.first_name + ' ' + (data.user.last_name || '')).trim(),
+            username: data.user.username || '',
+          };
+        }
+      })
+      .catch(function(e) { console.error('Telegram auth error:', e.message); });
+    }
+
+    // Expand to full screen
+    tg.expand();
+
+    // Match app theme to Telegram theme
+    if (tg.colorScheme === 'dark') {
+      document.body.style.backgroundColor = '#1a1a2e';
+    }
+
+    // Get Telegram user data
+    var tgUser = tg.initDataUnsafe?.user;
+    if (tgUser) {
+      console.log('Telegram user:', tgUser.id, tgUser.first_name);
+      // Auto-fill name on registration if coming from Telegram
+      window.__tgUser = tgUser;
+    }
+
+    // Show back button when not on home screen
+    function updateBackButton() {
+      if (window.history.length > 1) {
+        tg.BackButton.show();
+      } else {
+        tg.BackButton.hide();
+      }
+    }
+
+    tg.BackButton.onClick(function() {
+      window.history.back();
+      setTimeout(updateBackButton, 100);
+    });
+
+    updateBackButton();
+    window.addEventListener('popstate', updateBackButton);
+
+  }, []);
+
   return (
     <CountryProvider>
       <AppContent />
