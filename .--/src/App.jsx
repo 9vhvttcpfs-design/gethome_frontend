@@ -18578,9 +18578,256 @@ function AppContent() {
           </div>
         </div>
       )}
+      <GetHomeAIWidget globalSettings={globalSettings} user={user} />
     </div>
   );
 }
+
+// ============================================================
+// GETHOME AI AGENT CHAT WIDGET
+// ============================================================
+
+function GetHomeAIWidget({ globalSettings, user }) {
+  var AI_API_URL = import.meta.env.VITE_API_URL || 'https://gethome-backend-7ocr.onrender.com';
+
+  var [isOpen, setIsOpen] = useState(false);
+  var [messages, setMessages] = useState([]);
+  var [input, setInput] = useState('');
+  var [loading, setLoading] = useState(false);
+  var [sessionId] = useState(function() {
+    var existing = sessionStorage.getItem('gh_ai_session');
+    if (existing) return existing;
+    var id = 'ai_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('gh_ai_session', id);
+    return id;
+  });
+  var [unread, setUnread] = useState(0);
+  var messagesEndRef = useRef(null);
+
+  var welcomeMessage = globalSettings?.ai_welcome_message || 'Hi 👋 I\'m the GetHome AI Agent. I can help you find a property, answer questions, or arrange an inspection. What are you looking for?';
+  var aiName = globalSettings?.ai_name || 'GetHome AI';
+  var aiEnabled = globalSettings?.ai_enabled !== 'false' && globalSettings?.ai_enabled !== false;
+
+  useEffect(function() {
+    if (isOpen && messages.length === 0) {
+      setMessages([{ id: 'welcome', sender: 'ai', text: welcomeMessage, time: new Date() }]);
+    }
+    if (isOpen) setUnread(0);
+  }, [isOpen]);
+
+  useEffect(function() {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  // Don't render if AI disabled (after hooks, to keep hook order stable)
+  if (!aiEnabled) return null;
+
+  async function sendMessage(overrideText) {
+    var text = (typeof overrideText === 'string' ? overrideText : input).trim();
+    if (!text || loading) return;
+    setInput('');
+
+    var userMsg = { id: Date.now(), sender: 'user', text: text, time: new Date() };
+    setMessages(function(prev) { return [...prev, userMsg]; });
+    setLoading(true);
+
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(AI_API_URL + '/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: 'Bearer ' + token } : {}),
+        },
+        body: JSON.stringify({
+          message: text,
+          session_id: sessionId,
+          user_id: user?.id || null,
+        }),
+      });
+      var data = await res.json();
+
+      var aiMsg = { id: Date.now() + 1, sender: 'ai', text: data.reply, time: new Date(), properties: data.properties || [], is_alternative: data.is_alternative, wants_human: data.wants_human };
+      setMessages(function(prev) { return [...prev, aiMsg]; });
+      if (!isOpen) setUnread(function(n) { return n + 1; });
+
+      if (data.wants_human) {
+        setTimeout(function() {
+          setMessages(function(prev) { return [...prev, { id: Date.now() + 2, sender: 'ai', text: globalSettings?.ai_escalation_message || 'I\'ve passed your request to a GetHome representative. They\'ll follow up with you shortly.', time: new Date() }]; });
+        }, 1000);
+      }
+    } catch(e) {
+      setMessages(function(prev) { return [...prev, { id: Date.now() + 1, sender: 'ai', text: 'GetHome AI is temporarily unavailable. You can still browse properties or contact an agent directly.', time: new Date() }]; });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  var quickActions = [
+    { label: '🏠 Find a Property', text: 'I want to find a property' },
+    { label: '🏡 Rent a Property', text: 'I am looking to rent a property' },
+    { label: '💰 Buy a Property', text: 'I want to buy a property' },
+    { label: '🏖 Find a Shortlet', text: 'I need a shortlet' },
+    { label: '📅 Book an Inspection', text: 'I want to book an inspection' },
+    { label: '👤 Talk to an Agent', text: 'I want to speak to a human agent' },
+  ];
+
+  return (
+    <div style={{ position: 'fixed', bottom: 'calc(20px + var(--sab, 0px))', right: '20px', zIndex: 999999, fontFamily: "'Inter', sans-serif" }}>
+
+      {/* Chat window */}
+      {isOpen && (
+        <div style={{ width: '340px', maxWidth: 'calc(100vw - 32px)', height: '520px', maxHeight: 'calc(100vh - 110px)', backgroundColor: '#fff', borderRadius: '18px', boxShadow: '0 8px 40px rgba(10,34,64,0.18)', display: 'flex', flexDirection: 'column', overflow: 'hidden', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
+
+          {/* Header */}
+          <div style={{ backgroundColor: '#0a2240', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#27ae60', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>🤖</div>
+              <div>
+                <p style={{ margin: 0, fontWeight: '800', color: '#fff', fontSize: '0.88rem' }}>{aiName}</p>
+                <p style={{ margin: 0, fontSize: '0.70rem', color: '#27ae60', fontWeight: '600' }}>● Online</p>
+              </div>
+            </div>
+            <button onClick={function() { setIsOpen(false); }} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.2rem', cursor: 'pointer', padding: '4px', opacity: 0.8 }}>✕</button>
+          </div>
+
+          {user && user.role === 'agent' && (user.subscription_tier || user.tier) !== 'agency' && (
+            <div style={{ background: '#fef3c7', borderBottom: '1px solid #fde68a', padding: '8px 14px', fontSize: '0.74rem', color: '#92400e', textAlign: 'center' }}>
+              ⭐ Upgrade to Agency plan for unlimited AI access
+            </div>
+          )}
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px', backgroundColor: '#f8fafc' }}>
+            {messages.map(function(msg) {
+              var isAi = msg.sender === 'ai';
+              return (
+                <div key={msg.id}>
+                  <div style={{ display: 'flex', justifyContent: isAi ? 'flex-start' : 'flex-end', marginBottom: '8px' }}>
+                    {isAi && <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', marginRight: '6px', flexShrink: 0, marginTop: '2px' }}>🤖</div>}
+                    <div style={{ maxWidth: '78%', padding: '10px 12px', borderRadius: isAi ? '4px 14px 14px 14px' : '14px 4px 14px 14px', backgroundColor: isAi ? '#fff' : '#0a2240', color: isAi ? '#374151' : '#fff', fontSize: '0.82rem', lineHeight: 1.5, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: isAi ? '1px solid #e2e8f0' : 'none', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {msg.text}
+                    </div>
+                  </div>
+
+                  {/* Property cards in chat */}
+                  {isAi && msg.properties && msg.properties.length > 0 && (
+                    <div style={{ marginLeft: '32px', marginBottom: '8px' }}>
+                      {msg.is_alternative && (
+                        <p style={{ fontSize: '0.70rem', color: '#94a3b8', margin: '0 0 6px 0', fontStyle: 'italic' }}>Showing nearest alternatives:</p>
+                      )}
+                      {msg.properties.map(function(p) {
+                        return (
+                          <div key={p.id} style={{ backgroundColor: '#fff', borderRadius: '10px', border: '1px solid #e2e8f0', marginBottom: '6px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                            {p.images?.[0] && (
+                              <img src={p.images[0]} alt={p.title} style={{ width: '100%', height: '90px', objectFit: 'cover' }} />
+                            )}
+                            <div style={{ padding: '8px 10px' }}>
+                              <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.78rem' }}>{p.title}</p>
+                              <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.70rem' }}>📍 {p.location} {p.bedrooms ? '· ' + p.bedrooms + ' bed' : ''}</p>
+                              <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>₦{parseFloat(p.rent || p.price || 0).toLocaleString()}</p>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button onClick={function() { window.location.href = '/?property=' + p.id; }} style={{ flex: 1, padding: '5px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
+                                  View Property
+                                </button>
+                                <button onClick={function() {
+                                  setInput('I want to inspect ' + p.title + ' (ID: ' + p.id + ')');
+                                }} style={{ flex: 1, padding: '5px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
+                                  Request Inspection
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Quick actions — show only at start */}
+            {messages.length <= 1 && (
+              <div style={{ marginTop: '8px' }}>
+                <p style={{ fontSize: '0.70rem', color: '#94a3b8', margin: '0 0 6px 0' }}>Quick actions:</p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {quickActions.map(function(a) {
+                    return (
+                      <button key={a.label} onClick={function() { sendMessage(a.text); }}
+                        style={{ padding: '5px 10px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '20px', fontSize: '0.70rem', color: '#0a2240', cursor: 'pointer', fontWeight: '600' }}>
+                        {a.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Typing indicator */}
+            {loading && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <div style={{ width: '26px', height: '26px', borderRadius: '50%', backgroundColor: '#0a2240', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>🤖</div>
+                <div style={{ backgroundColor: '#fff', padding: '10px 14px', borderRadius: '4px 14px 14px 14px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    {[0,1,2].map(function(i) {
+                      return <div key={i} style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#94a3b8', animation: 'pulse 1.2s infinite', animationDelay: i * 0.2 + 's' }} />;
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div style={{ padding: '10px 12px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fff', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+            <textarea
+              value={input}
+              onChange={function(e) { setInput(e.target.value); }}
+              onKeyDown={handleKey}
+              placeholder='Type your message...'
+              rows={1}
+              style={{ flex: 1, padding: '8px 12px', borderRadius: '20px', border: '1.5px solid #e2e8f0', fontSize: '16px', resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4, maxHeight: '80px', overflowY: 'auto' }}
+            />
+            <button onClick={function() { sendMessage(); }} disabled={loading || !input.trim()}
+              style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: input.trim() && !loading ? '#0a2240' : '#e2e8f0', color: input.trim() && !loading ? '#fff' : '#94a3b8', border: 'none', cursor: input.trim() && !loading ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '1rem' }}>
+              ➤
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: '6px', textAlign: 'center', borderTop: '1px solid #f1f5f9' }}>
+            <p style={{ margin: 0, fontSize: '0.62rem', color: '#94a3b8' }}>Powered by <span style={{ color: '#0a2240', fontWeight: '700' }}>GetHome AI</span></p>
+          </div>
+        </div>
+      )}
+
+      {/* Toggle button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={function() { setIsOpen(function(o) { return !o; }); }}
+          style={{ width: '56px', height: '56px', borderRadius: '50%', backgroundColor: '#0a2240', color: '#fff', border: 'none', cursor: 'pointer', boxShadow: '0 4px 16px rgba(10,34,64,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', position: 'relative' }}>
+          {isOpen ? '✕' : '🤖'}
+          {!isOpen && unread > 0 && (
+            <div style={{ position: 'absolute', top: '-2px', right: '-2px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#27ae60', color: '#fff', fontSize: '0.62rem', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {unread}
+            </div>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// END GETHOME AI AGENT CHAT WIDGET
+// ============================================================
+
 function App() {
   // Telegram Mini App initialization
   useEffect(function() {
