@@ -18578,7 +18578,10 @@ function AppContent() {
           </div>
         </div>
       )}
-      <GetHomeAIWidget globalSettings={globalSettings} user={user} />
+      <GetHomeAIWidget globalSettings={globalSettings} user={user} onViewProperty={function(p) {
+        var match = (properties || []).find(function(x) { return String(x.id) === String(p.id); });
+        setSelectedProperty(match || p);
+      }} />
     </div>
   );
 }
@@ -18587,7 +18590,7 @@ function AppContent() {
 // GETHOME AI AGENT CHAT WIDGET
 // ============================================================
 
-function GetHomeAIWidget({ globalSettings, user }) {
+function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
   var AI_API_URL = import.meta.env.VITE_API_URL || 'https://gethome-backend-7ocr.onrender.com';
 
   var [isOpen, setIsOpen] = useState(false);
@@ -18733,7 +18736,7 @@ function GetHomeAIWidget({ globalSettings, user }) {
                               <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.70rem' }}>📍 {p.location} {p.bedrooms ? '· ' + p.bedrooms + ' bed' : ''}</p>
                               <p style={{ margin: '0 0 6px 0', fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>₦{parseFloat(p.rent || p.price || 0).toLocaleString()}</p>
                               <div style={{ display: 'flex', gap: '6px' }}>
-                                <button onClick={function() { window.location.href = '/?property=' + p.id; }} style={{ flex: 1, padding: '5px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
+                                <button onClick={function() { setIsOpen(false); if (onViewProperty) onViewProperty(p); }} style={{ flex: 1, padding: '5px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.68rem', fontWeight: '700', cursor: 'pointer' }}>
                                   View Property
                                 </button>
                                 <button onClick={function() {
