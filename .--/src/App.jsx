@@ -1043,6 +1043,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             full_name: customerName.trim(),
             phone: customerPhone.trim() || null,
             intent: customerIntent,
+            referred_by_gha: sessionStorage.getItem('gh_ref') || undefined,
           }
         }
       });
@@ -1055,6 +1056,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
       }
 
       if (!authData?.user?.id) throw new Error('Account creation failed. Please try again.');
+      sessionStorage.removeItem('gh_ref');
 
       // Update profile with full details
       await supabase.from('profiles').upsert([{
@@ -4953,6 +4955,17 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [listingsSubTab, setListingsSubTab]             = useState('all');
   const [commissionListings, setCommissionListings]     = useState({ listings: [], totals: {} });
   const [commissionLoading, setCommissionLoading]       = useState(false);
+  const [ghaReferrals, setGhaReferrals]                 = useState([]);
+  const fetchGhaReferrals = async function() {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/gha-referrals', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      var data = await res.json();
+      setGhaReferrals(data.referrals || []);
+    } catch(e) { console.error('Referrals fetch error:', e.message); }
+  };
   const fetchCommissionListings = async function() {
     setCommissionLoading(true);
     try {
@@ -6164,7 +6177,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   var navItems = [
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],
-    ['sa-management','SA Management'],['gha-management','GHA Management'],['earnings','Earnings'],
+    ['sa-management','SA Management'],['gha-management','GHA Management'],['gha-referrals','Referrals'],['earnings','Earnings'],
     ['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],['settings','Settings'],
   ];
   function switchTab(t) {
@@ -6174,6 +6187,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'deposits') fetchDeposits();
     if (t === 'sa-management') { if (allSAs.length === 0) fetchAllSAs(); fetchSALocations(); }
     if (t === 'gha-management') { if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); fetchAllRatings(); }
+    if (t === 'gha-referrals') fetchGhaReferrals();
     if (t === 'earnings') fetchEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
     if (t === 'inspection-fees') fetchInspectionFees();
@@ -8154,6 +8168,28 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {adminTab === 'gha-referrals' && (
+              <div>
+                <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>GHA Referrals</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 0.7fr 0.7fr', gap: '0 10px', padding: '8px 14px', background: '#f8fafc', borderRadius: '8px', marginBottom: '6px' }}>
+                  {['GHA Code','Name','Today','This Month','Total'].map(function(h) { return (
+                    <span key={h} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</span>
+                  ); })}
+                </div>
+                {ghaReferrals.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '0.84rem' }}>No referrals yet</div>
+                ) : ghaReferrals.map(function(r) { return (
+                  <div key={r.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 0.7fr 0.7fr', gap: '0 10px', padding: '10px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '4px', alignItems: 'center' }}>
+                    <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_code}</span>
+                    <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_name}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.today}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.this_month}</span>
+                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.total}</span>
+                  </div>
+                ); })}
               </div>
             )}
 
@@ -11606,6 +11642,25 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                     )}
                   </div>
                 </div>
+
+                {/* Referral link */}
+                {(function() {
+                  var refCode = ghaProfile?.gha_code || staffUser?.gha_code || staffUser?.code;
+                  if (!refCode) return null;
+                  var refUrl = 'https://trygethome.online?ref=' + refCode;
+                  return (
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 16px', margin: '16px 0' }}>
+                      <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: '700', marginBottom: '6px' }}>📣 Your Referral Link</div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.80rem', color: '#0a2240', fontFamily: 'monospace', background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', flex: 1, wordBreak: 'break-all' }}>{refUrl}</span>
+                        <button onClick={function() { navigator.clipboard.writeText(refUrl); }}
+                          style={{ padding: '6px 12px', background: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Stat cards */}
                 <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : undefined, flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
@@ -16255,6 +16310,12 @@ function AppContent() {
   ];
   var footerLoanUrl = isGhana ? LOAN_PARTNER_URL_GH : LOAN_PARTNER_URL;
   usePaystackSDK();
+  // Capture GHA referral code from URL
+  useEffect(function() {
+    var params = new URLSearchParams(window.location.search);
+    var ref = params.get('ref');
+    if (ref) sessionStorage.setItem('gh_ref', ref);
+  }, []);
   // App-wide settings loaded from the backend (ads toggle, GetHome bank details, loan link, etc.)
   const [globalSettings, setGlobalSettings]     = useState({});
   const adsEnabled = globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true;
