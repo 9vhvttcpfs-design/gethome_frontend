@@ -4921,6 +4921,57 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
 // ADMIN DASHBOARD
 // =========================================================
 const TARGET_ADMIN_EMAIL = 'medibrhm07@gmail.com';
+function GhaReferralCard({ r }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', marginBottom: '8px', overflow: 'hidden' }}>
+      {/* Header — always visible, acts as dropdown toggle */}
+      <div onClick={function() { setOpen(function(o) { return !o; }); }}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', background: '#f8fafc', cursor: 'pointer' }}>
+        <div>
+          <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.86rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.gha_code}</span>
+          <span style={{ color: '#64748b', fontSize: '0.78rem', marginLeft: '8px' }}>{r.gha_name}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ background: '#dcfce7', color: '#166534', fontWeight: '800', fontSize: '0.78rem', padding: '3px 10px', borderRadius: '20px' }}>
+            {(r.agents_total || 0) + (r.customers_total || 0)} total
+          </span>
+          <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>{open ? '▲' : '▼'}</span>
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {open && (
+        <div style={{ padding: '12px 14px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {[
+            { title: 'Agents',    titleColor: '#1e40af', bg: '#eff6ff', vals: [['Today', r.agents_today],    ['This Month', r.agents_month],    ['Total', r.agents_total]] },
+            { title: 'Customers', titleColor: '#166534', bg: '#f0fdf4', vals: [['Today', r.customers_today], ['This Month', r.customers_month], ['Total', r.customers_total]] },
+          ].map(function(g) {
+            return (
+              <div key={g.title}>
+                <div style={{ fontSize: '0.72rem', fontWeight: '700', color: g.titleColor, textTransform: 'uppercase', marginBottom: '6px' }}>{g.title}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                  {g.vals.map(function(v) {
+                    return (
+                      <div key={v[0]} style={{ background: g.bg, borderRadius: '8px', padding: '8px 10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.68rem', color: '#64748b', marginBottom: '2px' }}>{v[0]}</div>
+                        <div style={{ fontWeight: '800', color: g.titleColor, fontSize: '1rem' }}>{v[1] || 0}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          {r.gha_phone && (
+            <div style={{ fontSize: '0.76rem', color: '#64748b' }}>📞 {r.gha_phone}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   const [verifiedPendingAgents, setVerifiedPendingAgents] = useState([]);
@@ -4956,6 +5007,14 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [commissionListings, setCommissionListings]     = useState({ listings: [], totals: {} });
   const [commissionLoading, setCommissionLoading]       = useState(false);
   const [ghaReferrals, setGhaReferrals]                 = useState([]);
+  const [refDateFrom, setRefDateFrom]                   = useState('');
+  const [refDateTo, setRefDateTo]                       = useState('');
+  const [refSearch, setRefSearch]                       = useState('');
+  const filteredReferrals = ghaReferrals.filter(function(r) {
+    if (refSearch && !(r.gha_code || '').toLowerCase().includes(refSearch.toLowerCase()) &&
+        !(r.gha_name || '').toLowerCase().includes(refSearch.toLowerCase())) return false;
+    return true;
+  });
   const fetchGhaReferrals = async function() {
     try {
       var token = localStorage.getItem('gh_token');
@@ -8172,27 +8231,43 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             )}
 
             {adminTab === 'gha-referrals' && (
-              <div>
-                <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>GHA Referrals</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.3fr repeat(6, 0.6fr)', gap: '0 10px', padding: '8px 14px', background: '#f8fafc', borderRadius: '8px', marginBottom: '6px' }}>
-                  {['GHA Code','Name','Agents Today','Agents Month','Agents Total','Cust. Today','Cust. Month','Cust. Total'].map(function(h) { return (
-                    <span key={h} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</span>
-                  ); })}
-                </div>
-                {ghaReferrals.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '0.84rem' }}>No referrals yet</div>
-                ) : ghaReferrals.map(function(r) { return (
-                  <div key={r.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.3fr repeat(6, 0.6fr)', gap: '0 10px', padding: '10px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '4px', alignItems: 'center' }}>
-                    <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_code}</span>
-                    <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_name}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.agents_today || 0}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.agents_this_month || 0}</span>
-                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.agents_total || 0}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.customers_today || 0}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.customers_this_month || 0}</span>
-                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.customers_total || 0}</span>
+              <div style={{ padding: '16px' }}>
+                <div style={{ fontWeight: '800', color: '#0a2240', fontSize: '1rem', marginBottom: '14px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Referrals</div>
+
+                {/* Filters */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                  <input
+                    placeholder="Search GHA code or name..."
+                    value={refSearch}
+                    onChange={function(e) { setRefSearch(e.target.value); }}
+                    style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.84rem', color: '#0a2240', outline: 'none', fontFamily: 'inherit' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '4px' }}>From</div>
+                      <input type="date" value={refDateFrom} onChange={function(e) { setRefDateFrom(e.target.value); }}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '4px' }}>To</div>
+                      <input type="date" value={refDateTo} onChange={function(e) { setRefDateTo(e.target.value); }}
+                        style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                    </div>
                   </div>
-                ); })}
+                  {(refSearch || refDateFrom || refDateTo) && (
+                    <button onClick={function() { setRefSearch(''); setRefDateFrom(''); setRefDateTo(''); }}
+                      style={{ alignSelf: 'flex-start', padding: '6px 14px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.78rem', color: '#64748b', cursor: 'pointer' }}>
+                      Clear filters
+                    </button>
+                  )}
+                </div>
+
+                {/* Cards — one per GHA, collapsible */}
+                {filteredReferrals.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '0.84rem' }}>No referrals found</div>
+                ) : filteredReferrals.map(function(r) {
+                  return <GhaReferralCard key={r.gha_code} r={r} />;
+                })}
               </div>
             )}
 
