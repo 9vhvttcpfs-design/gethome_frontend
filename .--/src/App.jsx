@@ -5010,6 +5010,9 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [refDateFrom, setRefDateFrom]                   = useState('');
   const [refDateTo, setRefDateTo]                       = useState('');
   const [refSearch, setRefSearch]                       = useState('');
+  useEffect(function() {
+    if (adminTab === 'gha-referrals') fetchGhaReferrals();
+  }, [refDateFrom, refDateTo]);
   const filteredReferrals = ghaReferrals.filter(function(r) {
     if (refSearch && !(r.gha_code || '').toLowerCase().includes(refSearch.toLowerCase()) &&
         !(r.gha_name || '').toLowerCase().includes(refSearch.toLowerCase())) return false;
@@ -5018,7 +5021,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const fetchGhaReferrals = async function() {
     try {
       var token = localStorage.getItem('gh_token');
-      var res = await fetch(API_URL + '/api/admin/gha-referrals', {
+      var qs = new URLSearchParams();
+      if (refDateFrom) qs.set('from', refDateFrom);
+      if (refDateTo) qs.set('to', refDateTo);
+      var res = await fetch(API_URL + '/api/admin/gha-referrals' + (qs.toString() ? '?' + qs.toString() : ''), {
         headers: { Authorization: 'Bearer ' + token }
       });
       var data = await res.json();
