@@ -8259,6 +8259,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                       <input type="date" value={refDateTo} onChange={function(e) { setRefDateTo(e.target.value); }}
                         style={{ width: '100%', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                     </div>
+                    <button onClick={fetchGhaReferrals}
+                      style={{ padding: '8px 16px', background: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer', alignSelf: 'flex-end' }}>
+                      Apply
+                    </button>
                   </div>
                   {(refSearch || refDateFrom || refDateTo) && (
                     <button onClick={function() { setRefSearch(''); setRefDateFrom(''); setRefDateTo(''); }}
