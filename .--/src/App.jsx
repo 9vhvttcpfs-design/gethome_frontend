@@ -8174,20 +8174,23 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             {adminTab === 'gha-referrals' && (
               <div>
                 <h3 style={{ color: '#0a2240', fontSize: '0.95rem', fontWeight: '800', margin: '0 0 12px 0' }}>GHA Referrals</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 0.7fr 0.7fr', gap: '0 10px', padding: '8px 14px', background: '#f8fafc', borderRadius: '8px', marginBottom: '6px' }}>
-                  {['GHA Code','Name','Today','This Month','Total'].map(function(h) { return (
+                <div style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.3fr repeat(6, 0.6fr)', gap: '0 10px', padding: '8px 14px', background: '#f8fafc', borderRadius: '8px', marginBottom: '6px' }}>
+                  {['GHA Code','Name','Agents Today','Agents Month','Agents Total','Cust. Today','Cust. Month','Cust. Total'].map(function(h) { return (
                     <span key={h} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>{h}</span>
                   ); })}
                 </div>
                 {ghaReferrals.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '0.84rem' }}>No referrals yet</div>
                 ) : ghaReferrals.map(function(r) { return (
-                  <div key={r.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.4fr 0.7fr 0.7fr 0.7fr', gap: '0 10px', padding: '10px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '4px', alignItems: 'center' }}>
+                  <div key={r.gha_code} style={{ display: 'grid', gridTemplateColumns: '0.8fr 1.3fr repeat(6, 0.6fr)', gap: '0 10px', padding: '10px 14px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '4px', alignItems: 'center' }}>
                     <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_code}</span>
                     <span style={{ color: '#0a2240', fontSize: '0.80rem' }}>{r.gha_name}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.today}</span>
-                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.this_month}</span>
-                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.total}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.agents_today || 0}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.agents_this_month || 0}</span>
+                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.agents_total || 0}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.customers_today || 0}</span>
+                    <span style={{ fontWeight: '700', color: '#0a2240', fontSize: '0.80rem' }}>{r.customers_this_month || 0}</span>
+                    <span style={{ fontWeight: '800', color: '#27ae60', fontSize: '0.80rem' }}>{r.customers_total || 0}</span>
                   </div>
                 ); })}
               </div>
@@ -10941,6 +10944,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
 
   const [staffUser, setStaffUser]                   = useState(initialStaffUser);
   const [ghaProfile, setGhaProfile]                 = useState(staffUser || {});
+  const [copySuccess, setCopySuccess]               = useState(false);
   const [ghaBankName, setGhaBankName]               = useState(staffUser?.bank_name || '');
   const [ghaBankAccount, setGhaBankAccount]         = useState(staffUser?.account_number || '');
   const [ghaBankAccountName, setGhaBankAccountName] = useState(staffUser?.account_name || '');
@@ -11653,9 +11657,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       <div style={{ fontSize: '0.78rem', color: '#166534', fontWeight: '700', marginBottom: '6px' }}>📣 Your Referral Link</div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <span style={{ fontSize: '0.80rem', color: '#0a2240', fontFamily: 'monospace', background: '#fff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', flex: 1, wordBreak: 'break-all' }}>{refUrl}</span>
-                        <button onClick={function() { navigator.clipboard.writeText(refUrl); }}
-                          style={{ padding: '6px 12px', background: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          Copy
+                        <button onClick={function() { navigator.clipboard.writeText(refUrl); setCopySuccess(true); setTimeout(function() { setCopySuccess(false); }, 2000); }}
+                          style={{ padding: '6px 12px', background: copySuccess ? '#27ae60' : '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          {copySuccess ? '✓ Copied!' : 'Copy'}
                         </button>
                       </div>
                     </div>
