@@ -11054,9 +11054,9 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [inspLoading, setInspLoading]               = useState(false);
   const [ghaOverview, setGhaOverview]                = useState({});
   const [overviewLoading, setOverviewLoading]       = useState(false);
-  // GHA commission rate comes from ghaOverview returned by /api/gha/overview,
-  // falling back to the global setting so it still renders before overview loads.
-  var currentGhaRate = parseFloat(ghaOverview.commission_rate || (window.__gethomeSettings || {}).gha_commission_rate || 5);
+  // GHA commission rate shown is the global rate set by admin,
+  // falling back to the overview rate before settings load.
+  var currentGhaRate = parseFloat((window.__gethomeSettings || {}).gha_commission_rate || ghaOverview.commission_rate || 5);
   const [ghaEarningsOverview, setGhaEarningsOverview] = useState({ total_commission: 0, is_paid: false });
   const [ghaRatings, setGhaRatings]                 = useState(null);
   const [ghaRatingsLoading, setGhaRatingsLoading]   = useState(false);
@@ -11839,7 +11839,6 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                           <p style={{ margin: 0, fontWeight: '900', color: pendingCommission > 0 ? '#27ae60' : '#94a3b8', fontSize: '1.3rem', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                             {'₦' + parseFloat(pendingCommission).toLocaleString()}
                           </p>
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>Commission rate: {currentGhaRate}%</span>
                           {pendingCommission === 0 && (
                             <p style={{ margin: '4px 0 0 0', fontSize: '0.72rem', color: '#27ae60', fontWeight: '700' }}>✓ All commissions paid</p>
                           )}
@@ -13147,9 +13146,9 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [earningsLoading, setEarningsLoading]       = useState(false);
   const [saEarningsData, setSaEarningsData]         = useState(null);
   const [saOverview, setSaOverview]                 = useState({});
-  // SA commission rate comes from saOverview returned by /api/sa/overview,
-  // falling back to the global setting so it still renders before overview loads.
-  var currentSaRate = parseFloat(saOverview.commission_rate || (window.__gethomeSettings || {}).sa_commission_rate || 5);
+  // SA commission rate shown is the global rate set by admin,
+  // falling back to the overview rate before settings load.
+  var currentSaRate = parseFloat((window.__gethomeSettings || {}).sa_commission_rate || saOverview.commission_rate || 5);
   const [saCoveredCities, setSaCoveredCities]       = useState([]);
   // Listings tab state
   const [saListings, setSaListings]                 = useState([]);
