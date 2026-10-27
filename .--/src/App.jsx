@@ -7770,7 +7770,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       var res = await fetch(API_URL + '/api/admin/sa-add-location', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                        body: JSON.stringify({ sa_id: sa.id, city: cityToAdd }),
+                                        body: JSON.stringify({ sa_id: sa.id, city: cityToAdd, state: newLocationState }),
                                       });
                                       var data = await res.json();
                                       if (res.ok) {
@@ -9005,7 +9005,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
                           <div style={{ minWidth: '860px' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em' }}>
-                              <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span>
+                              <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM</span><span>SA COMM</span>
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               {ghaSummary.map(function(g) {
@@ -13062,6 +13062,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
   const [agentSearchResult, setAgentSearchResult] = useState(null);
   const [agentSearchLoading, setAgentSearchLoading] = useState(false);
   const [agentSearchMsg, setAgentSearchMsg]     = useState('');
+  const [agentSuggestions, setAgentSuggestions] = useState([]);
+  const agentSuggestTimer = useRef(null);
   const [assigningToGha, setAssigningToGha]     = useState(false);
   const [inspections, setInspections]           = useState([]);
   const [inspectionCounts, setInspectionCounts] = useState({ pending: 0, done: 0, confirmed: 0, cancelled: 0 });
@@ -14183,12 +14185,40 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                            <input type="email" value={agentSearchEmail}
-                              onChange={function(e){ setAgentSearchEmail(e.target.value); setAgentSearchResult(null); setAgentSearchMsg(''); }}
-                              placeholder="Enter registered agent email"
-                              style={{ flex: 1, padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
+                            <div style={{ flex: 1, position: 'relative' }}>
+                            <input type="text" value={agentSearchEmail} autoComplete="off"
+                              onChange={function(e){
+                                var val = e.target.value;
+                                setAgentSearchEmail(val); setAgentSearchResult(null); setAgentSearchMsg('');
+                                clearTimeout(agentSuggestTimer.current);
+                                if (val.trim().length < 2) { setAgentSuggestions([]); return; }
+                                agentSuggestTimer.current = setTimeout(async function() {
+                                  try {
+                                    var r = await fetch(API_URL + '/api/sa/search-agent-suggestions?q=' + encodeURIComponent(val.trim()), { headers: { Authorization: 'Bearer ' + token } });
+                                    var d = await r.json();
+                                    setAgentSuggestions(r.ok && d.agents ? d.agents : []);
+                                  } catch(err) { setAgentSuggestions([]); }
+                                }, 300);
+                              }}
+                              placeholder="Type agent email or name"
+                              style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }} />
+                            {agentSuggestions.length > 0 && !agentSearchResult && (
+                              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: '4px', backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 6px 18px rgba(0,0,0,0.10)', maxHeight: '240px', overflowY: 'auto' }}>
+                                {agentSuggestions.map(function(a) {
+                                  return (
+                                    <div key={a.id} onClick={function() { setAgentSearchEmail(a.email); setAgentSuggestions([]); }}
+                                      style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}>
+                                      <p style={{ margin: 0, fontWeight: '700', fontSize: '0.80rem', color: '#0a2240', fontFamily: "'Inter', sans-serif" }}>{a.full_name || a.email}</p>
+                                      <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>{a.email}{a.city ? ' · ' + a.city : ''}{a.gha_code ? ' · ' + a.gha_code : ''}</p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            </div>
                             <button onClick={async function() {
                               if (!agentSearchEmail.trim()) return;
+                              setAgentSuggestions([]);
                               setAgentSearchLoading(true);
                               setAgentSearchResult(null);
                               setAgentSearchMsg('');
@@ -15320,7 +15350,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                     <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
                       <div style={{ minWidth: '860px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.3fr 0.8fr 1fr 1fr 1fr 1fr 1fr', gap: '0 10px', padding: '7px 14px', backgroundColor: '#f8fafc', borderRadius: '8px', marginBottom: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#94a3b8', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>
-                          <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM (5%)</span><span>SA COMM (5%)</span><span>INSPECTIONS</span>
+                          <span>GHA CODE</span><span>GHA NAME</span><span>AGENTS</span><span>ACTIVE SUBS</span><span>REVENUE</span><span>GHA COMM</span><span>SA COMM</span><span>INSPECTIONS</span>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           {ghaSummary.map(function(g) {
