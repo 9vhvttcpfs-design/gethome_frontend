@@ -2351,6 +2351,8 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
   // Payment-first inspection booking: a paid inspection fee must clear
   // before WhatsApp opens, so the customer's contact details and payment
   // are collected in a modal instead of jumping straight to WhatsApp.
+  // Flat GHA accompaniment fee (admin setting). Prefer the freshly fetched fee-breakdown.
+  const inspGhaFee = parseFloat(feeBreakdown?.gha_accompany_fee) || parseFloat(globalSettings?.gha_accompany_fee) || parseFloat(typeof window !== 'undefined' ? window.__gethomeSettings?.gha_accompany_fee : 0) || 0;
   const handleBookInspection = async function(prop) {
     var targetProperty = prop || property;
 
@@ -2363,8 +2365,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
 
     console.log('Book inspection - property:', targetProperty?.id, '| title:', targetProperty?.title, '| inspection_fee:', targetProperty?.inspection_fee, '| thisFee:', thisFee);
 
-    var offerGhaFee = parseFloat(globalSettings?.gha_accompany_fee) || 0;
-    if (thisFee > 0 || offerGhaFee > 0) {
+    if (thisFee > 0 || (inspGhaAccompany && inspGhaFee > 0)) {
       var resolved = await resolveSaWhatsapp(targetProperty);
       setInspectionBooking({
         property: targetProperty,
@@ -2443,7 +2444,6 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
   const handleProxyInspection = () => { if (!requireAuth('proxy')) return; triggerProxyInspection(user); };
   const isPaid = paymentStatus === 'success';
   // Inspection total = agent-set fee + (optional) admin GHA accompany fee
-  const inspGhaFee = parseFloat(globalSettings?.gha_accompany_fee) || 0;
   const inspGhaApplied = inspGhaAccompany && inspGhaFee > 0;
   const inspModalTotal = (parseFloat(inspectionBooking?.fee) || 0) + (inspGhaApplied ? inspGhaFee : 0);
   const imageList = (property.image_urls && Array.isArray(property.image_urls) && property.image_urls.filter(function(u){ return u && u.trim(); }).length > 0)
@@ -2684,9 +2684,19 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                 </div>);
               })}
             </div>
+            {inspectionMode === 'whatsapp' && inspGhaFee > 0 && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid ' + (inspGhaAccompany ? '#27ae60' : '#e2e8f0'), backgroundColor: inspGhaAccompany ? '#f0fff4' : '#fff', marginBottom: '12px', cursor: 'pointer' }}>
+                <input type='checkbox' checked={inspGhaAccompany} onChange={function(e) { setInspGhaAccompany(e.target.checked); }}
+                  style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#27ae60', flexShrink: 0 }} />
+                <span>
+                  <span style={{ display: 'block', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>Let a GetHome agent (GHA) accompany me (+₦{inspGhaFee.toLocaleString()})</span>
+                  <span style={{ display: 'block', color: '#64748b', fontSize: '0.74rem', marginTop: '2px' }}>A verified GHA goes with you to the inspection to assist and keep you safe.</span>
+                </span>
+              </label>
+            )}
             {inspectionMode === 'whatsapp' ? <button onClick={function() { handleBookInspection(property); }} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
-                {inspectionFeeAmount > 0
-                  ? 'Book Inspection (₦' + inspectionFeeAmount.toLocaleString() + ')'
+                {(inspectionFeeAmount + (inspGhaAccompany && inspGhaFee > 0 ? inspGhaFee : 0)) > 0
+                  ? 'Book Inspection (₦' + (inspectionFeeAmount + (inspGhaAccompany && inspGhaFee > 0 ? inspGhaFee : 0)).toLocaleString() + ')'
                   : 'Book FREE WhatsApp Inspection'}
               </button>
               : <button onClick={handleProxyInspection} style={{ width: '100%', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Pay and Book Proxy Inspection</button>}
@@ -3898,6 +3908,24 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     } catch (err) { setErrorMsg(err.message); }
     finally { setDeletingId(null); }
   };
+  const [markingSoldId, setMarkingSoldId] = useState(null);
+  const handleMarkSold = async (property) => {
+    if (!window.confirm('Mark "' + property.title + '" as sold? It will be removed from public listings.')) return;
+    setMarkingSoldId(property.id);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const res = await fetch(API_URL + '/api/properties/' + property.id + '/mark-sold', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (sess?.session?.access_token || '') },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to mark as sold');
+      setSuccessMsg('"' + property.title + '" marked as sold.');
+      onListingUpdated && onListingUpdated({ ...property, is_sold: true, sold_price: data.property?.sold_price });
+    } catch (err) { setErrorMsg('Mark sold failed: ' + err.message); }
+    finally { setMarkingSoldId(null); }
+  };
   const handleToggleFeatured = async (propertyId, currentStatus) => {
     try {
       const { error } = await supabase
@@ -5066,6 +5094,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</p>
                   <p style={{ margin: '2px 0 4px 0', color: '#94a3b8', fontSize: '0.74rem' }}>{p.location} &bull; {fmtListingPrice(p.price)}</p>
                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {p.is_sold && <span style={{ fontSize: '0.62rem', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', padding: '2px 7px', borderRadius: '10px', fontWeight: '800' }}>SOLD</span>}
                     {p.is_featured && <span style={{ fontSize: '0.62rem', backgroundColor: '#fef3c7', color: '#92400e', padding: '2px 7px', borderRadius: '10px', fontWeight: '700' }}>FEATURED</span>}
                     {p.video_url && <span style={{ fontSize: '0.62rem', backgroundColor: '#eff6ff', color: '#1e40af', padding: '2px 7px', borderRadius: '6px', fontWeight: '700' }}>VIDEO</span>}
                     {isBeingEdited && <span style={{ fontSize: '0.62rem', backgroundColor: '#dbeafe', color: '#1e40af', padding: '2px 7px', borderRadius: '6px', fontWeight: '700' }}>EDITING NOW</span>}
@@ -5079,6 +5108,15 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
                   >
                     {isBeingEdited ? 'Editing...' : 'Edit'}
                   </button>
+                  {!p.is_sold && (
+                    <button
+                      onClick={function(){ handleMarkSold(p); }}
+                      disabled={isBeingDeleted || markingSoldId === p.id}
+                      style={{ padding: '7px 14px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', borderRadius: '8px', fontSize: '0.76rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      {markingSoldId === p.id ? 'Saving...' : 'Mark Sold'}
+                    </button>
+                  )}
                   {isAdmin && (
                     <button
                       onClick={function(){ handleToggleFeatured(p.id, p.is_featured); }}
@@ -13572,6 +13610,25 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         return APPROVED_STATUSES.includes(a.status);
       });
 
+      // Sending an agent to a GHA auto-approves them (status 'approved'), so the
+      // status alone no longer identifies agents waiting on their GHA. Also list
+      // this SA's agents that have a GHA assigned but not yet verified by that GHA.
+      try {
+        var myRes = await fetch(API_URL + '/api/sa/my-agents', { headers: { Authorization: 'Bearer ' + token } });
+        if (myRes.ok) {
+          var myAgents = await myRes.json();
+          var seenGha = {};
+          ghaInspectionList.forEach(function(a) { seenGha[a.id] = true; });
+          (Array.isArray(myAgents) ? myAgents : []).forEach(function(a) {
+            if (seenGha[a.id]) return;
+            if (!a.gha_id || a.gha_verified === true || a.already_assigned_other_sa) return;
+            if (a.status !== 'approved' && a.status !== 'pending_gha_inspection') return;
+            seenGha[a.id] = true;
+            ghaInspectionList.push(a);
+          });
+        }
+      } catch (e) { console.error('Sent-to-GHA list error:', e.message); }
+
       setPendingAgents(pendingList);
       setGhaInspectionAgents(ghaInspectionList);
       setApprovedAgents(approvedList);
@@ -15718,7 +15775,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 </span>
                               ) : (
                                 <span style={{ backgroundColor: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa', borderRadius: '20px', padding: '3px 10px', fontSize: '0.72rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                  <AlertCircle size={12} /> Awaiting GHA Verification
+                                  <AlertCircle size={12} /> Awaiting Verification
                                 </span>
                               )}
                               {!l.gha_verified && (
@@ -15805,19 +15862,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                           </div>
                         </div>
 
-                        <div style={{ marginTop: '10px', padding: '10px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <p style={{ margin: '0 0 2px 0', fontSize: '0.70rem', color: '#94a3b8', fontWeight: '600', textTransform: 'uppercase' }}>Inspection Fee</p>
-                              <p style={{ margin: 0, fontWeight: '800', color: l.inspection_fee > 0 ? '#0a2240' : '#94a3b8', fontSize: '0.90rem' }}>
-                                {l.inspection_fee > 0 ? '₦' + parseFloat(l.inspection_fee).toLocaleString() : 'Not set'}
-                              </p>
-                            </div>
-                            <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>Set by listing agent</span>
-                          </div>
-
-                          
-                        </div>
+                        
                       </div>
                     );
                   })}
