@@ -2003,6 +2003,122 @@ function PropertyCard({ house, onSelect }) {
     </div>
   );
 }
+// =========================================================
+// LISTING VERIFICATION (GHA / SA)
+// Staff upload photos/videos as proof; admin reviews and confirms. A confirmed
+// verification earns the staff member a fee that admin pays immediately.
+// =========================================================
+function VerificationSubmit({ property, onSubmitted }) {
+  const [open, setOpen] = useState(false);
+  const [files, setFiles] = useState([]);
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const status = property.verification_status;
+
+  if (status === 'pending') {
+    return (
+      <span style={{ fontSize: '0.72rem', padding: '6px 12px', borderRadius: '8px', backgroundColor: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', fontWeight: '700', textAlign: 'center' }}>
+        ⏳ Pending admin review
+      </span>
+    );
+  }
+
+  const submit = async function() {
+    if (files.length < 4) { setErr('Add at least 4 photos or videos (you selected ' + files.length + ')'); return; }
+    setBusy(true); setErr('');
+    try {
+      var fd = new FormData();
+      fd.append('property_id', property.id);
+      fd.append('notes', notes);
+      files.forEach(function(f) { fd.append('media', f); });
+      var res = await fetch(API_URL + '/api/staff/submit-verification', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + localStorage.getItem('gh_staff_token') },
+        body: fd,
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit');
+      setOpen(false); setFiles([]); setNotes('');
+      if (onSubmitted) onSubmitted(data);
+    } catch (e) { setErr(e.message); }
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <button onClick={function() { setOpen(true); setErr(''); }}
+        style={{ padding: '8px 14px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        {status === 'rejected' ? 'Resubmit Verification' : 'Submit Verification'}
+      </button>
+      {open && (
+        <div onClick={function() { if (!busy) setOpen(false); }}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(10,34,64,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div onClick={function(e) { e.stopPropagation(); }}
+            style={{ backgroundColor: '#fff', borderRadius: '16px', padding: '22px', maxWidth: '440px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ margin: '0 0 4px 0', color: '#0a2240', fontSize: '1rem', fontWeight: '800' }}>Verify Listing</h3>
+            <p style={{ margin: '0 0 12px 0', color: '#64748b', fontSize: '0.78rem' }}>{property.title} — {property.location}</p>
+            <p style={{ margin: '0 0 10px 0', color: '#374151', fontSize: '0.78rem' }}>
+              Upload at least 4 photos or videos taken at the property as proof. Admin reviews them and, once confirmed, the listing is marked verified and you earn the verification fee.
+            </p>
+            <input type="file" multiple accept="image/*,video/*"
+              onChange={function(e) { setFiles(Array.from(e.target.files || []).slice(0, 8)); setErr(''); }}
+              style={{ width: '100%', marginBottom: '8px', fontSize: '0.8rem' }} />
+            {files.length > 0 && <p style={{ margin: '0 0 8px 0', fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>{files.length} file{files.length !== 1 ? 's' : ''} selected (min 4, max 8, 50MB each)</p>}
+            <textarea placeholder="Notes for admin (optional)" value={notes} onChange={function(e) { setNotes(e.target.value); }} rows={3}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box', marginBottom: '8px', fontFamily: 'inherit' }} />
+            {err && <p style={{ margin: '0 0 8px 0', color: '#b91c1c', fontSize: '0.78rem', fontWeight: '600' }}>{err}</p>}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={submit} disabled={busy}
+                style={{ flex: 1, padding: '11px', backgroundColor: busy ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.84rem', cursor: busy ? 'not-allowed' : 'pointer' }}>
+                {busy ? 'Uploading…' : 'Send to Admin'}
+              </button>
+              <button onClick={function() { setOpen(false); }} disabled={busy}
+                style={{ padding: '11px 16px', backgroundColor: '#fff', color: '#64748b', border: '1.5px solid #e2e8f0', borderRadius: '10px', fontWeight: '700', fontSize: '0.84rem', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// Staff-facing summary of verification earnings and statuses.
+function VerificationEarnings() {
+  const [info, setInfo] = useState(null);
+  useEffect(function() {
+    fetch(API_URL + '/api/staff/my-verifications', { headers: { Authorization: 'Bearer ' + localStorage.getItem('gh_staff_token') } })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d) setInfo(d); })
+      .catch(function() {});
+  }, []);
+  if (!info) return null;
+  var money = function(n) { return '₦' + (Number(n) || 0).toLocaleString(); };
+  var statusColor = { pending: '#92400e', confirmed: '#166534', rejected: '#b91c1c' };
+  return (
+    <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8edf5', padding: '18px 20px', marginBottom: '20px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
+      <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em' }}>LISTING VERIFICATION EARNINGS</p>
+      <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', marginBottom: '10px' }}>
+        <div><p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#0a2240' }}>{info.confirmed_count}</p><p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>Confirmed</p></div>
+        <div><p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#27ae60' }}>{money(info.total_paid)}</p><p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>Paid</p></div>
+        <div><p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#f59e0b' }}>{money(info.total_unpaid)}</p><p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>Awaiting payment</p></div>
+      </div>
+      {(info.verifications || []).slice(0, 5).map(function(v) {
+        return (
+          <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '6px 0', borderTop: '1px solid #f1f5f9', fontSize: '0.76rem' }}>
+            <span style={{ color: '#374151' }}>{v.properties?.title || 'Listing #' + v.property_id}</span>
+            <span style={{ fontWeight: '700', color: statusColor[v.status] || '#64748b', whiteSpace: 'nowrap' }}>
+              {v.status === 'confirmed' ? (v.payment_status === 'paid' ? 'Paid ' : 'Confirmed ') + money(v.fee_amount) : v.status === 'rejected' ? 'Rejected' : 'Pending'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, globalSettings = {} }) {
   var isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
   var { fmtCurrency, fmtListingPrice, activeCountry } = useCountry();
@@ -2025,6 +2141,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
   const [showInspectionModal, setShowInspectionModal] = useState(false);
   const [inspectionBooking, setInspectionBooking]     = useState(null);
   const [inspCustomerName, setInspCustomerName]       = useState('');
+  const [inspGhaAccompany, setInspGhaAccompany]       = useState(false);
   const [inspCustomerEmail, setInspCustomerEmail]     = useState('');
   const [inspCustomerPhone, setInspCustomerPhone]     = useState('');
   const [inspBookingLoading, setInspBookingLoading]   = useState(false);
@@ -2039,6 +2156,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
   const closeInspectionModal = function() {
     setShowInspectionModal(false);
     setInspectionBooking(null);
+    setInspGhaAccompany(false);
     setInspCustomerName('');
     setInspCustomerEmail('');
     setInspCustomerPhone('');
@@ -2245,7 +2363,8 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
 
     console.log('Book inspection - property:', targetProperty?.id, '| title:', targetProperty?.title, '| inspection_fee:', targetProperty?.inspection_fee, '| thisFee:', thisFee);
 
-    if (thisFee > 0) {
+    var offerGhaFee = parseFloat(globalSettings?.gha_accompany_fee) || 0;
+    if (thisFee > 0 || offerGhaFee > 0) {
       var resolved = await resolveSaWhatsapp(targetProperty);
       setInspectionBooking({
         property: targetProperty,
@@ -2323,6 +2442,10 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
   };
   const handleProxyInspection = () => { if (!requireAuth('proxy')) return; triggerProxyInspection(user); };
   const isPaid = paymentStatus === 'success';
+  // Inspection total = agent-set fee + (optional) admin GHA accompany fee
+  const inspGhaFee = parseFloat(globalSettings?.gha_accompany_fee) || 0;
+  const inspGhaApplied = inspGhaAccompany && inspGhaFee > 0;
+  const inspModalTotal = (parseFloat(inspectionBooking?.fee) || 0) + (inspGhaApplied ? inspGhaFee : 0);
   const imageList = (property.image_urls && Array.isArray(property.image_urls) && property.image_urls.filter(function(u){ return u && u.trim(); }).length > 0)
     ? property.image_urls.filter(function(u){ return u && u.trim(); })
     : (property.image_url ? [property.image_url] : []);
@@ -2756,15 +2879,43 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
               </p>
             </div>
 
-            {inspectionBooking.fee > 0 && (
+            {(inspectionBooking.fee > 0 || inspGhaFee > 0) && (
               <div style={{ backgroundColor: '#fef3c7', borderRadius: '10px', padding: '10px 14px', marginBottom: '16px', border: '1px solid #fde68a' }}>
-                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: '#92400e', fontSize: '0.84rem' }}>
-                  Inspection Fee: ₦{parseFloat(inspectionBooking.fee).toLocaleString()}
-                </p>
-                <p style={{ margin: 0, color: '#78350f', fontSize: '0.74rem' }}>
-                  Payment required before inspection is scheduled
-                </p>
+                {inspectionBooking.fee > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#92400e', marginBottom: '4px' }}>
+                    <span>Inspection fee</span>
+                    <span style={{ fontWeight: '700' }}>₦{parseFloat(inspectionBooking.fee).toLocaleString()}</span>
+                  </div>
+                )}
+                {inspGhaApplied && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#92400e', marginBottom: '4px' }}>
+                    <span>GHA accompaniment fee</span>
+                    <span style={{ fontWeight: '700' }}>₦{inspGhaFee.toLocaleString()}</span>
+                  </div>
+                )}
+                {inspModalTotal > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem', color: '#78350f', fontWeight: '800', borderTop: '1px solid #fde68a', paddingTop: '6px', marginTop: '4px' }}>
+                    <span>Total</span>
+                    <span>₦{inspModalTotal.toLocaleString()}</span>
+                  </div>
+                )}
+                {inspModalTotal > 0 && (
+                  <p style={{ margin: '6px 0 0 0', color: '#78350f', fontSize: '0.74rem' }}>
+                    Payment required before inspection is scheduled
+                  </p>
+                )}
               </div>
+            )}
+
+            {inspGhaFee > 0 && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid ' + (inspGhaAccompany ? '#27ae60' : '#e2e8f0'), backgroundColor: inspGhaAccompany ? '#f0fff4' : '#fff', marginBottom: '16px', cursor: 'pointer' }}>
+                <input type='checkbox' checked={inspGhaAccompany} onChange={function(e) { setInspGhaAccompany(e.target.checked); }}
+                  style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#27ae60', flexShrink: 0 }} />
+                <span>
+                  <span style={{ display: 'block', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>Let a GetHome agent (GHA) accompany me (+₦{inspGhaFee.toLocaleString()})</span>
+                  <span style={{ display: 'block', color: '#64748b', fontSize: '0.74rem', marginTop: '2px' }}>A verified GHA will go with you to the inspection to assist and keep you safe.</span>
+                </span>
+              </label>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
@@ -2797,7 +2948,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
               </div>
             </div>
 
-            {inspectionBooking.fee > 0 ? (
+            {inspModalTotal > 0 ? (
               <button onClick={async function() {
                 var name = inspCustomerName.trim();
                 var email = inspCustomerEmail.trim();
@@ -2817,6 +2968,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                       customer_email: email,
                       customer_name: name,
                       customer_phone: phone,
+                      gha_accompanied: inspGhaApplied,
                       sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349130649368',
                     }),
                   });
@@ -2842,14 +2994,15 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                       property_price: parseFloat(inspectionBooking.property?.rent || inspectionBooking.property?.price || 0),
                       sa_whatsapp: inspectionBooking.sa_whatsapp || globalSettings.payment_whatsapp || '2349130649368',
                       sa_name: inspectionBooking.sa_name || '',
-                      fee: inspectionBooking.fee,
-                      fee_payment_amount: inspectionBooking.fee,
-                      inspection_fee: inspectionBooking.fee,
+                      fee: data.fee || inspModalTotal,
+                      fee_payment_amount: data.fee || inspModalTotal,
+                      inspection_fee: data.fee || inspModalTotal,
+                      gha_accompanied: inspGhaApplied,
                       timestamp: Date.now(),
                     });
                     try { localStorage.setItem('gh_pending_inspection', inspData); } catch(e) {}
                     try { sessionStorage.setItem('gh_pending_inspection', inspData); } catch(e) {}
-                    console.log('Stored inspection data - fee:', inspectionBooking.fee);
+                    console.log('Stored inspection data - fee:', data.fee || inspModalTotal);
 
                     closeInspectionModal();
                     window.location.href = checkoutUrl;
@@ -2866,7 +3019,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                 }
               }} disabled={inspBookingLoading}
                 style={{ width: '100%', padding: '13px', backgroundColor: inspBookingLoading ? '#94a3b8' : '#27ae60', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.90rem', cursor: inspBookingLoading ? 'not-allowed' : 'pointer' }}>
-                {inspBookingLoading ? 'Processing...' : '💳 Pay ₦' + parseFloat(inspectionBooking.fee).toLocaleString() + ' to Book Inspection'}
+                {inspBookingLoading ? 'Processing...' : '💳 Pay ₦' + inspModalTotal.toLocaleString() + ' to Book Inspection'}
               </button>
             ) : (
               <button onClick={function() {
@@ -3443,7 +3596,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
     }
   }, [agentProfile.city]);
   const DRAFT_KEY = 'gh_upload_draft_' + (user?.id || 'guest');
-  const EMPTY_FORM = { title: '', description: '', property_type: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
+  const EMPTY_FORM = { title: '', description: '', property_type: '', location: '', country: activeCountry.code, price: '', priceRaw: '', priceMult: 1000000, bedrooms: '', bathrooms: '', image_url: '', purpose: 'rent', rent: '', rentRaw: '', rentMult: 1000000, agency_fee: '', agency_feeRaw: '', agency_feeMult: 1000000, agreement_fee: '', agreement_feeRaw: '', agreement_feeMult: 1000000, caution_fee: '', caution_feeRaw: '', caution_feeMult: 1000000, service_charge: '', service_chargeRaw: '', service_chargeMult: 1000000, inspection_fee: '', costPerNight: '', costPerNightRaw: '', costPerNightMult: 1000000, imageFiles: [], imagePreviews: [], imageUrls: [], video_url: null, videoFile: null };
   const [form, setForm]                           = useState(function() {
     try {
       var saved = sessionStorage.getItem(DRAFT_KEY);
@@ -3543,7 +3696,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
   const enterEditMode = (property) => {
     setEditingProperty(property);
     var resolved = resolveStateCity(property.location);
-    setForm({ title: property.title || '', property_type: property.property_type || '', location: resolved.city, country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
+    setForm({ title: property.title || '', property_type: property.property_type || '', location: resolved.city, country: property.country || activeCountry.code, price: property.price || '', image_url: property.image_url || '', purpose: property.purpose || 'rent', rent: property.rent || '', agency_fee: property.agency_fee || '', agreement_fee: property.agreement_fee || '', caution_fee: property.caution_fee || '', service_charge: property.service_charge || '', inspection_fee: property.inspection_fee || '', imageFiles: [], imagePreviews: [], imageUrls: [] });
     setUploadLocationState(resolved.state);
     setCustomCity(resolved.city === 'Other' ? (property.location || '') : '');
     setFeaturedPaid(property.is_featured || false);
@@ -3670,7 +3823,7 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
       if (form.purpose === 'sale') purposeLabel = ' (For SALE)';
       else if (form.purpose === 'shortlet') purposeLabel = ' (Shortlet)';
       else purposeLabel = ' (For RENT)';
-      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: (form.location === 'Other' ? customCity : form.location).trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid,
+      const payload = { title: form.title.trim() + purposeLabel, description: form.description || '', property_description: form.description || '', property_type: form.property_type || '', bedrooms: form.bedrooms || '', bathrooms: form.bathrooms || '', location: (form.location === 'Other' ? customCity : form.location).trim(), country: selectedCountryName || 'Nigeria', currency: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', currency_symbol: selectedCountryName === 'Ghana' ? 'GH₵' : '₦', currency_code: selectedCountryName === 'Ghana' ? 'GHS' : 'NGN', price: parseFloat(form.price) || 0, image_url: imageUrl || '', image_urls: imageUrls || [], video_url: videoUrl || null, purpose: form.purpose, rent: parseFloat(form.rent) || 0, agency_fee: parseFloat(form.agency_fee) || 0, agreement_fee: parseFloat(form.agreement_fee) || 0, caution_fee: parseFloat(form.caution_fee) || 0, service_charge: parseFloat(form.service_charge) || 0, cost_per_night: parseFloat(form.costPerNight) || 0, inspection_fee: Math.max(0, parseFloat(form.inspection_fee) || 0), cleaning_fee: parseFloat(form.cleaningFee) || 0, created_by: sessionUserId, agent_id: sessionUserId, is_featured: featuredPaid,
         commission_applicable: commissionRequired && commissionAgreed,
         commission_rate: commissionRequired && commissionAgreed ? 2.5 : 0,
         commission_agreed_at: commissionRequired && commissionAgreed ? new Date().toISOString() : null,
@@ -4506,6 +4659,17 @@ function AgentUploadPortal({ user, isApproved, allProperties, activePromo, onLis
             ) : null}
           </div>
           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+            <p style={{ margin: '0 0 4px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>Inspection Fee <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.76rem' }}>(optional)</span></p>
+            <p style={{ margin: '0 0 10px 0', fontSize: '0.74rem', color: '#64748b' }}>The amount a customer pays to inspect this property. Leave empty or 0 for free inspections.</p>
+            <input type="number" min="0" placeholder={'e.g., 5000 (' + activeCountry.currencySymbol + ')'}
+              style={{ ...is2 }}
+              value={form.inspection_fee === undefined || form.inspection_fee === null ? '' : form.inspection_fee}
+              onChange={function(e) { var v = e.target.value; setForm(function(prev) { return Object.assign({}, prev, { inspection_fee: v }); }); clearMessages(); }} />
+            {form.inspection_fee ? (
+              <p style={{ margin: '5px 0 0 0', fontSize: '0.74rem', color: '#27ae60', fontWeight: '600' }}>= {fmtCurrency(form.inspection_fee)}</p>
+            ) : null}
+          </div>
+          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
             <p style={{ margin: '0 0 12px 0', fontWeight: '700', color: '#0a2240', fontSize: '0.86rem' }}>Fee Breakdown <span style={{ color: '#94a3b8', fontWeight: '400', fontSize: '0.76rem' }}>(shown to customers)</span></p>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
               {[
@@ -5258,11 +5422,43 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [agencyPlanPrice, setAgencyPlanPrice]           = useState('35000');
   const [unlimitedPlanEnabled, setUnlimitedPlanEnabled] = useState(true);
   const [unlimitedDurationMonths, setUnlimitedDurationMonths] = useState('6');
-  const [inspectionTiers, setInspectionTiers]           = useState({
-    tier1: { min: 1, max: 10, fee: 1200 },
-    tier2: { min: 11, max: 20, fee: 1500 },
-    tier3: { min: 21, max: null, fee: 1700 },
-  });
+  // Flat GHA-accompany inspection fee + GHA salary settings (strings, as stored in app_settings)
+  const [ghaAccompanyFee, setGhaAccompanyFee]           = useState('');
+  const [ghaSalary, setGhaSalary]                       = useState('');
+  const [ghaMonthlyTarget, setGhaMonthlyTarget]         = useState('25');
+  const [ghaPpa, setGhaPpa]                             = useState('');
+  const [saMonthlyTarget, setSaMonthlyTarget]           = useState('');
+  // Listing verifications (admin review queue + immediate payouts)
+  const [verifRows, setVerifRows]                       = useState([]);
+  const [verifFilter, setVerifFilter]                   = useState('pending');
+  const [verifLoading, setVerifLoading]                 = useState(false);
+  const [verifMsg, setVerifMsg]                         = useState('');
+  const [verifFeeGha, setVerifFeeGha]                   = useState('0');
+  const [verifFeeSa, setVerifFeeSa]                     = useState('0');
+  const fetchVerifications = async function(status) {
+    setVerifLoading(true);
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + '/api/admin/listing-verifications?status=' + (status || verifFilter), { headers: { Authorization: 'Bearer ' + token } });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load verifications');
+      setVerifRows(data.verifications || []);
+      if (data.fees) { setVerifFeeGha(String(data.fees.gha)); setVerifFeeSa(String(data.fees.sa)); }
+    } catch (e) { setVerifMsg('Error: ' + e.message); }
+    setVerifLoading(false);
+  };
+  const actOnVerification = async function(path, body, okMsg, refreshListings) {
+    try {
+      var token = localStorage.getItem('gh_token');
+      var res = await fetch(API_URL + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify(body) });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      setVerifMsg(okMsg);
+      setTimeout(function() { setVerifMsg(''); }, 4000);
+      fetchVerifications(verifFilter);
+      if (refreshListings) fetchListings();
+    } catch (e) { setVerifMsg('Error: ' + e.message); }
+  };
   // Super-admin-only Admin Management state
   const [adminList, setAdminList]                       = useState([]);
   const [newAdminEmail, setNewAdminEmail]               = useState('');
@@ -5282,7 +5478,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
   const fetchAppSettings = async function() {
     try {
-      var res = await fetch(API_URL + '/api/settings');
+      var res = await fetch(API_URL + '/api/settings', { headers: { Authorization: 'Bearer ' + (localStorage.getItem('gh_token') || '') } });
       var data = await res.json();
       if (res.ok) {
         setAppSettings(data);
@@ -5309,7 +5505,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         if (data.agency_plan_price) setAgencyPlanPrice(data.agency_plan_price);
         if (data.unlimited_plan_enabled !== undefined) setUnlimitedPlanEnabled(data.unlimited_plan_enabled === 'true' || data.unlimited_plan_enabled === true);
         if (data.unlimited_plan_duration_months) setUnlimitedDurationMonths(data.unlimited_plan_duration_months);
-        if (data.inspection_fee_tiers) setInspectionTiers(data.inspection_fee_tiers);
+        if (data.gha_accompany_fee !== undefined) setGhaAccompanyFee(String(data.gha_accompany_fee));
+        if (data.gha_salary !== undefined) setGhaSalary(String(data.gha_salary));
+        if (data.gha_monthly_target !== undefined) setGhaMonthlyTarget(String(data.gha_monthly_target));
+        if (data.gha_ppa !== undefined) setGhaPpa(String(data.gha_ppa));
+        if (data.sa_monthly_target !== undefined) setSaMonthlyTarget(String(data.sa_monthly_target));
+        if (data.verification_fee_gha !== undefined) setVerifFeeGha(String(data.verification_fee_gha));
+        if (data.verification_fee_sa !== undefined) setVerifFeeSa(String(data.verification_fee_sa));
         if (data.escrow_fee_rate) setEscrowFeeRate(data.escrow_fee_rate);
       }
     } catch(e) { console.error('Settings fetch error:', e.message); }
@@ -6272,7 +6474,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
   var navItems = [
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
-    ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],
+    ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],['verifications','Verifications'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['gha-referrals','Referrals'],['earnings','Earnings'],
     ['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],['settings','Settings'],
   ];
@@ -6287,6 +6489,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (t === 'earnings') fetchEarnings(earningsMonth);
     if (t === 'inspections') { fetchAdminInspections(); setInspectionSearch(''); setInspectionFilter('all'); }
     if (t === 'inspection-fees') fetchInspectionFees();
+    if (t === 'verifications') { fetchVerifications(verifFilter); fetchListings(); }
     if (t === 'staff-payments') fetchStaffPayments(staffPaymentsMonth);
     if (t === 'performance') fetchKPIs();
     if (t === 'inbox') { fetchAdminMessages(); if (allSAs.length === 0) fetchAllSAs(); if (allGHAsAdmin.length === 0) fetchAllGHAsAdmin(); }
@@ -7490,8 +7693,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <p style={{ margin: '0 0 4px 0', color: '#64748b', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}><MapPin size={12} /> {prop.location}</p>
                                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Agent: {prop.agent_name || '—'}</span>
-                                    {prop.sa_code && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>Set by: {prop.sa_code} — {prop.sa_name}</span>}
-                                    {prop.inspection_fee_set_at && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{new Date(prop.inspection_fee_set_at).toLocaleDateString()}</span>}
+                                                                        {prop.inspection_fee_set_at && <span style={{ fontSize: '0.74rem', color: '#94a3b8' }}>{new Date(prop.inspection_fee_set_at).toLocaleDateString()}</span>}
                                   </div>
                                 </div>
 
@@ -7499,53 +7701,11 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                   <p style={{ margin: '0 0 4px 0', fontWeight: '900', fontSize: '1.1rem', color: prop.inspection_fee > 0 ? '#27ae60' : '#94a3b8' }}>
                                     {prop.inspection_fee > 0 ? '₦' + parseFloat(prop.inspection_fee).toLocaleString() : 'No fee set'}
                                   </p>
-                                  <button onClick={function() {
-                                    setSettingAdminFee(prop.id);
-                                    setAdminFeeInput(prop.inspection_fee > 0 ? String(prop.inspection_fee) : '');
-                                  }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    {prop.inspection_fee > 0 ? <><Edit size={11} style={{ verticalAlign: '-1px' }} /> Adjust Fee</> : '+ Set Fee'}
-                                  </button>
+                                  <p style={{ margin: 0, fontSize: '0.70rem', color: '#94a3b8' }}>Set by listing agent</p>
                                 </div>
                               </div>
 
-                              {settingAdminFee === prop.id && (
-                                <div style={{ marginTop: '12px', padding: '12px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                                  <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', fontWeight: '700', color: '#0a2240' }}>Set Inspection Fee for this property</p>
-                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                    <div style={{ position: 'relative', flex: 1 }}>
-                                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
-                                      <input type='number' min='0' placeholder='Enter fee amount'
-                                        value={adminFeeInput}
-                                        onChange={function(e) { setAdminFeeInput(e.target.value); }}
-                                        style={{ width: '100%', padding: '9px 10px 9px 28px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
-                                    </div>
-                                    <button onClick={async function() {
-                                      if (adminFeeInput === '') { setAdminFeeMsg('Please enter a fee amount'); return; }
-                                      try {
-                                        var token = localStorage.getItem('gh_token');
-                                        var res = await fetch(API_URL + '/api/admin/set-inspection-fee', {
-                                          method: 'POST',
-                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                          body: JSON.stringify({ property_id: prop.id, inspection_fee: parseFloat(adminFeeInput) || 0 }),
-                                        });
-                                        var data = await res.json();
-                                        if (!res.ok) throw new Error(data.error || 'Failed');
-                                        setAdminFeeMsg('Fee updated successfully');
-                                        setSettingAdminFee(null);
-                                        fetchInspectionFees();
-                                        setTimeout(function() { setAdminFeeMsg(''); }, 3000);
-                                      } catch(err) { setAdminFeeMsg('Error: ' + err.message); }
-                                    }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '9px 16px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                      Save
-                                    </button>
-                                    <button onClick={function() { setSettingAdminFee(null); setAdminFeeInput(''); }}
-                                      style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '9px 12px', fontSize: '0.78rem', cursor: 'pointer' }}>
-                                      Cancel
-                                    </button>
-                                  </div>
-                                  {adminFeeMsg && <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', color: adminFeeMsg.startsWith('Error') ? '#ef4444' : '#27ae60', fontWeight: '600' }}>{adminFeeMsg}</p>}
-                                </div>
-                              )}
+                              
                             </div>
                           </div>
                         </div>
@@ -8479,13 +8639,13 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           rows.push([
                             'Staff Type', 'Code', 'Full Name', 'Location',
                             'Bank Name', 'Account Number', 'Account Name',
-                            'Unpaid Commission', 'Inspection Count', 'Inspection Payment',
+                            'Unpaid Commission', 'Inspection Count', 'Inspection Payment', 'Salary Due',
                             'Total Due', 'Bank Details Status', 'Month'
                           ].join(','));
 
                           // GHA rows
                           (ghaStaffPayments || []).forEach(function(gha) {
-                            var ghaTotalDue = parseFloat(gha.unpaid_commission || 0) + ((!gha.inspection_paid && gha.inspection_payment) ? parseFloat(gha.inspection_payment) : 0);
+                            var ghaTotalDue = parseFloat(gha.unpaid_commission || 0) + ((!gha.inspection_paid && gha.inspection_payment) ? parseFloat(gha.inspection_payment) : 0) + parseFloat(gha.salary_due || 0);
                             rows.push([
                               'GHA',
                               gha.gha_code || '',
@@ -8497,6 +8657,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               parseFloat(gha.unpaid_commission || 0).toFixed(2),
                               gha.confirmed_inspections || 0,
                               parseFloat(gha.inspection_payment || 0).toFixed(2),
+                              parseFloat(gha.salary_due || 0).toFixed(2),
                               ghaTotalDue.toFixed(2),
                               gha.has_bank_details ? 'Complete' : 'Missing',
                               staffPaymentsMonth,
@@ -8516,6 +8677,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               parseFloat(sa.unpaid_commission || 0).toFixed(2),
                               '',
                               '',
+                              '',
                               parseFloat(sa.total_due || 0).toFixed(2),
                               sa.has_bank_details ? 'Complete' : 'Missing',
                               staffPaymentsMonth,
@@ -8526,7 +8688,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           var totalGhaComm = (ghaStaffPayments || []).reduce(function(s, g) { return s + parseFloat(g.unpaid_commission || 0); }, 0);
                           var totalSaComm = (saStaffPayments || []).reduce(function(s, g) { return s + parseFloat(g.total_due || 0); }, 0);
                           var totalInsp = (ghaStaffPayments || []).reduce(function(s, g) { return s + ((!g.inspection_paid && g.inspection_payment) ? parseFloat(g.inspection_payment || 0) : 0); }, 0);
-                          var grandTotal = totalGhaComm + totalSaComm + totalInsp;
+                          var totalSalary = (ghaStaffPayments || []).reduce(function(s, g) { return s + parseFloat(g.salary_due || 0); }, 0);
+                          var grandTotal = totalGhaComm + totalSaComm + totalInsp + totalSalary;
 
                           rows.push('');
                           rows.push([
@@ -8534,6 +8697,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             totalGhaComm.toFixed(2),
                             '',
                             totalInsp.toFixed(2),
+                            totalSalary.toFixed(2),
                             grandTotal.toFixed(2),
                             '',
                             staffPaymentsMonth,
@@ -8628,7 +8792,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         // paying one GHA can never change another card's status.
                         var ghaCommissionDue = gha.unpaid_commission || 0;
                         var ghaInspDue = (!gha.inspection_paid && gha.inspection_payment) ? gha.inspection_payment : 0;
-                        var totalDue = ghaCommissionDue + ghaInspDue;
+                        var ghaSalaryDue = gha.salary_due || 0;
+                        var totalDue = ghaCommissionDue + ghaInspDue + ghaSalaryDue;
                         var isFullyPaid = totalDue === 0;
                         var isExpanded = expandedGhaId === gha.gha_id;
                         return (
@@ -8674,6 +8839,32 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                               </div>
                             )}
 
+                            {/* Salary */}
+                            {(gha.full_salary > 0 || gha.salary_due > 0 || gha.salary_paid > 0) && (
+                              <div style={{ backgroundColor: '#faf5ff', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #e9d5ff' }}>
+                                <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', fontWeight: '700', color: '#7e22ce', textTransform: 'uppercase' }}>Salary</p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#374151' }}>
+                                    {gha.subscribing_agents || 0} / {gha.monthly_target || 0} subscribing agents
+                                  </p>
+                                  <p style={{ margin: 0, fontSize: '0.76rem', fontWeight: '700', color: gha.target_met ? '#27ae60' : '#f59e0b' }}>
+                                    {gha.target_met ? 'Target met' : 'Below target'}
+                                  </p>
+                                </div>
+                                <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', color: '#64748b' }}>
+                                  {gha.target_met
+                                    ? 'Full salary: ₦' + parseFloat(gha.full_salary || 0).toLocaleString()
+                                    : (gha.subscribing_agents || 0) + ' × ₦' + parseFloat(gha.ppa || 0).toLocaleString() + ' = ₦' + parseFloat(gha.salary_earned || 0).toLocaleString()}
+                                </p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                    {gha.salary_paid > 0 ? 'Already paid ₦' + parseFloat(gha.salary_paid).toLocaleString() : 'Not yet paid'}
+                                  </span>
+                                  <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#7e22ce' }}>Due ₦{parseFloat(gha.salary_due || 0).toLocaleString()}</span>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Inspection payment */}
                             {gha.confirmed_inspections > 0 && (
                               <div style={{ backgroundColor: '#eff6ff', borderRadius: '8px', padding: '8px 12px', marginBottom: '10px', border: '1px solid #bfdbfe' }}>
@@ -8690,11 +8881,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                 </div>
                                 <div style={{ backgroundColor: '#f0f7ff', borderRadius: '6px', padding: '4px 8px' }}>
                                   <p style={{ margin: 0, fontSize: '0.70rem', color: '#64748b' }}>
-                                    {gha.confirmed_inspections <= 10
-                                      ? 'Tier 1 (1-10): ₦' + parseFloat(gha.fee_per_inspection || 0).toLocaleString() + ' per inspection'
-                                      : gha.confirmed_inspections <= 20
-                                      ? 'Tier 2 (11-20): ₦' + parseFloat(gha.fee_per_inspection || 0).toLocaleString() + ' per inspection'
-                                      : 'Tier 3 (21+): ₦' + parseFloat(gha.fee_per_inspection || 0).toLocaleString() + ' per inspection'}
+                                    GHA-accompanied inspections: ₦{parseFloat(gha.fee_per_inspection || 0).toLocaleString()} per inspection
                                   </p>
                                 </div>
                                 {gha.inspection_paid && (
@@ -8719,6 +8906,32 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             {/* Pay buttons — commission + inspection, both inside the GHA card */}
                             {totalDue > 0 && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {/* Pay salary button */}
+                                {(gha.salary_due || 0) > 0 && (
+                                  <button disabled={!gha.has_bank_details}
+                                    onClick={async function() {
+                                      if (!gha.has_bank_details) { alert('No bank details on file for this GHA'); return; }
+                                      if (!window.confirm('Pay salary ₦' + parseFloat(gha.salary_due).toLocaleString() + ' to ' + gha.full_name + '? (' + (gha.subscribing_agents || 0) + '/' + (gha.monthly_target || 0) + ' subscribing agents)')) return;
+                                      try {
+                                        var token = localStorage.getItem('gh_token');
+                                        var res = await fetch(API_URL + '/api/admin/mark-staff-paid', {
+                                          method: 'POST',
+                                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                                          body: JSON.stringify({ staff_id: gha.gha_id, staff_type: 'GHA', month_year: staffPaymentsMonth, salary_only: true }),
+                                        });
+                                        var d = await res.json();
+                                        if (!res.ok) throw new Error(d.error || 'Failed');
+                                        alert('Salary paid to ' + gha.full_name);
+                                        fetchStaffPayments();
+                                      } catch(err) { alert('Error: ' + err.message); }
+                                    }}
+                                    style={{ width: '100%', padding: '11px', border: 'none', borderRadius: '10px', fontWeight: '800', fontSize: '0.82rem',
+                                      backgroundColor: gha.has_bank_details ? '#7e22ce' : '#94a3b8',
+                                      color: '#fff', cursor: gha.has_bank_details ? 'pointer' : 'not-allowed' }}>
+                                    ✓ Pay Salary — ₦{parseFloat(gha.salary_due || 0).toLocaleString()}
+                                  </button>
+                                )}
+
                                 {/* Pay commission button */}
                                 {(gha.unpaid_commission || 0) > 0 && (
                                   <button disabled={!gha.has_bank_details}
@@ -9242,38 +9455,147 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               );
             })()}
 
-            {/* ── PERFORMANCE ── */}
+            {/* ── VERIFICATIONS ── */}
+            {adminTab === 'verifications' && (function() {
+              var money = function(n) { return '₦' + (Number(n) || 0).toLocaleString(); };
+              var filters = [['pending','Pending'],['confirmed','Confirmed'],['rejected','Rejected'],['all','All']];
+              var unverified = (listings || []).filter(function(p) { return !p.gha_verified && !p.is_deleted; }).slice(0, 30);
+              return (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: 0 }}>Listing Verifications</h2>
+                    <button onClick={function() { fetchVerifications(verifFilter); }} style={{ padding: '6px 14px', backgroundColor: '#f1f5f9', color: '#0a2240', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>Refresh</button>
+                  </div>
+
+                  {verifMsg && (
+                    <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: verifMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (verifMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
+                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: verifMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{verifMsg}</p>
+                    </div>
+                  )}
+
+                  {/* Verification fees are managed in Admin > Settings */}
+                  <p style={{ margin: '0 0 14px 0', fontSize: '0.78rem', color: '#64748b' }}>
+                    Current fee per confirmed verification: <strong>GHA {money(verifFeeGha)}</strong> · <strong>SA {money(verifFeeSa)}</strong>. Change these in Settings.
+                  </p>
+
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                    {filters.map(function(f) {
+                      var active = verifFilter === f[0];
+                      return (
+                        <button key={f[0]} onClick={function() { setVerifFilter(f[0]); fetchVerifications(f[0]); }}
+                          style={{ padding: '6px 16px', borderRadius: '20px', border: '1.5px solid ' + (active ? '#0a2240' : '#e2e8f0'), backgroundColor: active ? '#0a2240' : '#fff', color: active ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>{f[1]}</button>
+                      );
+                    })}
+                  </div>
+
+                  {verifLoading ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>Loading…</p>
+                  ) : verifRows.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '24px' }}>No {verifFilter === 'all' ? '' : verifFilter + ' '}verifications.</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                      {verifRows.map(function(v) {
+                        var fee = v.status === 'pending' ? (v.staff_type === 'SA' ? verifFeeSa : verifFeeGha) : v.fee_amount;
+                        return (
+                          <div key={v.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', border: '1.5px solid ' + (v.status === 'pending' ? '#fde68a' : v.status === 'confirmed' ? '#bbf7d0' : '#fecaca') }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.9rem' }}>{v.properties?.title || 'Listing #' + v.property_id}</p>
+                                <p style={{ margin: 0, fontSize: '0.74rem', color: '#64748b' }}>{v.properties?.location || ''}</p>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '0.76rem', color: '#374151' }}>
+                                  By <strong>{v.staff_type} {v.staff_code || ''}</strong>{v.staff_name ? ' — ' + v.staff_name : ''} · {new Date(v.created_at).toLocaleString()}
+                                </p>
+                              </div>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ margin: 0, fontWeight: '900', color: '#27ae60', fontSize: '1rem' }}>{money(fee)}</p>
+                                <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: '700', textTransform: 'uppercase', color: v.status === 'pending' ? '#92400e' : v.status === 'confirmed' ? '#166534' : '#b91c1c' }}>
+                                  {v.status}{v.status === 'confirmed' ? (v.payment_status === 'paid' ? ' · paid' : ' · unpaid') : ''}
+                                </p>
+                              </div>
+                            </div>
+                            {v.notes && <p style={{ margin: '0 0 8px 0', fontSize: '0.78rem', color: '#374151', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '8px' }}>{v.notes}</p>}
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                              {(v.media_urls || []).map(function(url, i) {
+                                var isVideo = /\.(mp4|mov|webm|m4v|avi)(\?|$)/i.test(url);
+                                return isVideo
+                                  ? <video key={i} src={url} controls preload="metadata" style={{ width: '140px', height: '100px', borderRadius: '8px', backgroundColor: '#000' }} />
+                                  : <a key={i} href={url} target="_blank" rel="noopener noreferrer"><img src={url} alt={'proof ' + (i + 1)} loading="lazy" style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '8px' }} /></a>;
+                              })}
+                            </div>
+                            {v.status === 'rejected' && v.rejection_reason && <p style={{ margin: '0 0 8px 0', fontSize: '0.76rem', color: '#b91c1c' }}>Reason: {v.rejection_reason}</p>}
+                            {v.status === 'confirmed' && v.payment_status !== 'paid' && (
+                              <p style={{ margin: '0 0 8px 0', fontSize: '0.74rem', color: '#64748b' }}>
+                                🏦 {v.bank_name ? v.bank_name + ' · ' + v.account_number + ' · ' + v.account_name : 'No bank details on file'}
+                              </p>
+                            )}
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {v.status === 'pending' && (
+                                <>
+                                  <button onClick={function() { actOnVerification('/api/admin/confirm-verification', { id: v.id }, 'Verification confirmed — listing marked verified. Pay the staff member below.'); }}
+                                    style={{ padding: '9px 16px', backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '800', cursor: 'pointer' }}>✓ Confirm &amp; Verify</button>
+                                  <button onClick={function() {
+                                    var reason = window.prompt('Reason for rejecting (shown to the staff member):');
+                                    if (reason === null) return;
+                                    actOnVerification('/api/admin/reject-verification', { id: v.id, reason: reason }, 'Verification rejected');
+                                  }} style={{ padding: '9px 16px', backgroundColor: '#fff', color: '#ef4444', border: '1.5px solid #ef4444', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '700', cursor: 'pointer' }}>Reject</button>
+                                </>
+                              )}
+                              {v.status === 'confirmed' && v.payment_status !== 'paid' && parseFloat(v.fee_amount) > 0 && (
+                                <button onClick={function() {
+                                  if (!window.confirm('Mark ' + money(v.fee_amount) + ' as paid to ' + (v.staff_name || v.staff_code) + '? Send the transfer first.')) return;
+                                  actOnVerification('/api/admin/pay-verification', { id: v.id }, 'Payment recorded');
+                                }} style={{ padding: '9px 16px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '800', cursor: 'pointer' }}>
+                                  ✓ Pay Now — {money(v.fee_amount)}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Admin can verify a listing directly (no staff earning) */}
+                  <div style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem' }}>Mark a listing verified directly</p>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.76rem', color: '#64748b' }}>Unverified listings (first 30). No staff verification fee is created.</p>
+                    {unverified.length === 0 ? (
+                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.8rem' }}>No unverified listings loaded.</p>
+                    ) : unverified.map(function(p) {
+                      return (
+                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px 0', borderTop: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#0a2240', fontWeight: '600' }}>{p.title} <span style={{ color: '#94a3b8', fontWeight: '400' }}>· {p.location}</span></span>
+                          <button onClick={function() {
+                            if (!window.confirm('Mark "' + p.title + '" as verified?')) return;
+                            actOnVerification('/api/admin/mark-verified', { property_id: p.id }, 'Listing marked verified', true);
+                          }} style={{ padding: '6px 12px', backgroundColor: '#f0fff4', color: '#166534', border: '1px solid #86efac', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>Mark Verified</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+{/* ── PERFORMANCE ── */}
             {adminTab === 'performance' && (function() {
               var staffList = kpiTab === 'SA' ? (kpiData.sa_kpis || []) : (kpiData.gha_kpis || []);
-
-              // Weights used to combine each staff member's KPI scores into an overall score
-              var WEIGHTS = {
-                attendance: 15,
-                csat: 25,
-                onboarding: 25,
-                fidelity: 20,
-                response: 15,
-              };
+              var targetVal = kpiTab === 'SA' ? saMonthlyTarget : ghaMonthlyTarget;
+              var setTargetVal = kpiTab === 'SA' ? setSaMonthlyTarget : setGhaMonthlyTarget;
+              var targetKey = kpiTab === 'SA' ? 'sa_monthly_target' : 'gha_monthly_target';
 
               return (
                 <div>
-                  {/* Prominent Recalculate Scores banner */}
-                  <div style={{ background: 'linear-gradient(135deg, #0a2240, #133a67)', borderRadius: '14px', padding: isMobile ? '16px' : '20px 24px', marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', boxShadow: '0 6px 20px rgba(10,34,64,0.25)' }}>
-                    <div>
-                      <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '800', fontSize: '0.98rem', display: 'flex', alignItems: 'center', gap: '5px' }}><Zap size={16} /> Scores may be out of date</p>
-                      <p style={{ margin: 0, color: 'rgba(255,255,255,0.75)', fontSize: '0.80rem' }}>Recalculate to refresh KPI scores from the latest inspection, rating and agent activity data.</p>
-                    </div>
-                    <button onClick={handleAutoCalculate} disabled={calculatingScores}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '14px 28px', backgroundColor: calculatingScores ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '0.94rem', fontWeight: '800', cursor: calculatingScores ? 'not-allowed' : 'pointer', boxShadow: calculatingScores ? 'none' : '0 4px 16px rgba(34,197,94,0.35)', whiteSpace: 'nowrap' }}>
-                      <RefreshCw size={16} />
-                      {calculatingScores ? 'Calculating…' : 'Recalculate Scores'}
-                    </button>
-                  </div>
-
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-                    <h2 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.1rem', margin: 0 }}>Staff Performance Matrix</h2>
-                    <input type="month" value={kpiMonth} onChange={function(e){ setKpiMonth(e.target.value); }}
-                      style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                    <h2 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.1rem', margin: 0 }}>Staff Performance</h2>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input type="month" value={kpiMonth} onChange={function(e){ setKpiMonth(e.target.value); }}
+                        style={{ padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '0.82rem', color: '#0a2240' }} />
+                      <button onClick={handleAutoCalculate} disabled={calculatingScores}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', backgroundColor: calculatingScores ? '#94a3b8' : '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '700', cursor: calculatingScores ? 'not-allowed' : 'pointer' }}>
+                        <RefreshCw size={14} /> {calculatingScores ? 'Calculating…' : 'Refresh Scores'}
+                      </button>
+                    </div>
                   </div>
 
                   {calcMsg && (
@@ -9282,18 +9604,12 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     </div>
                   )}
 
-                  {kpiMsg && (
-                    <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: kpiMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (kpiMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
-                      <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: kpiMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{kpiMsg}</p>
-                    </div>
-                  )}
-
-                  {/* Sub-tabs */}
+                  {/* SA / GHA sub-tabs */}
                   <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
                     {['SA','GHA'].map(function(t) {
                       var isActive = kpiTab === t;
                       return (
-                        <button key={t} onClick={function(){ setKpiTab(t); }}
+                        <button key={t} onClick={function(){ setKpiTab(t); setTargetsMsg(''); }}
                           style={{ padding: '7px 18px', borderRadius: '8px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.80rem', cursor: 'pointer' }}>
                           {t}
                         </button>
@@ -9301,125 +9617,39 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     })}
                   </div>
 
-                  {/* KPI targets reference card */}
-                  <div style={{ backgroundColor: '#eff6ff', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-                    <p style={{ margin: '0 0 10px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.82rem' }}>KPI Parameters &amp; Targets</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '8px 24px' }}>
-                      {[
-                        ['Attendance & Availability', '≥ 98.5%', '15%'],
-                        ['Customer Satisfaction (CSAT)', '≥ 4.7/5.0', '25%'],
-                        ['Inspection Log Fidelity', '100%', '20%'],
-                        ['Agent Onboarding Milestones', 'Target Met', '25%'],
-                        ['Response Time', '≤ 15 mins', '15%'],
-                      ].map(function(row) {
-                        return (
-                          <div key={row[0]} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#0a2240', gap: '8px' }}>
-                            <span style={{ fontWeight: '600' }}>{row[0]}</span>
-                            <span style={{ display: 'flex', gap: '10px', whiteSpace: 'nowrap' }}>
-                              <span style={{ fontWeight: '700' }}>{row[1]}</span>
-                              <span style={{ color: '#64748b' }}>Weight: {row[2]}</span>
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Monthly Targets (collapsible) */}
-                  <div style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '12px', marginBottom: '16px', overflow: 'hidden' }}>
-                    <button onClick={function(){ setShowTargets(!showTargets); }}
-                      style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', backgroundColor: '#f8fafc', border: 'none', cursor: 'pointer' }}>
-                      <span style={{ fontWeight: '800', color: '#0a2240', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Target size={15} /> Monthly Targets (GHA &amp; SA)</span>
-                      <span style={{ color: '#64748b', fontSize: '0.78rem', fontWeight: '700' }}>{showTargets ? '▲ Collapse' : '▼ Expand'}</span>
-                    </button>
-                    {showTargets && (
-                      <div style={{ padding: '16px' }}>
-                        <p style={{ margin: '0 0 14px 0', fontSize: '0.78rem', color: '#64748b' }}>
-                          These targets are used to auto-calculate performance scores. Update them at the start of each month before calculating.
-                        </p>
-
-                        {/* GHA / SA targets sub-tabs */}
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
-                          {['GHA','SA'].map(function(t) {
-                            var isActive = targetsSubTab === t;
-                            return (
-                              <button key={t} onClick={function(){ setTargetsSubTab(t); setTargetsMsg(''); }}
-                                style={{ padding: '6px 16px', borderRadius: '20px', border: '1.5px solid ' + (isActive ? '#0a2240' : '#e2e8f0'), backgroundColor: isActive ? '#0a2240' : '#fff', color: isActive ? '#fff' : '#64748b', fontWeight: '700', fontSize: '0.78rem', cursor: 'pointer' }}>
-                                {t} Targets
-                              </button>
-                            );
-                          })}
-                        </div>
-
-                        {targetsMsg && (
-                          <div style={{ padding: '10px 14px', borderRadius: '10px', marginBottom: '14px', backgroundColor: targetsMsg.indexOf('Error') === 0 ? '#fef2f2' : '#f0fff4', border: '1px solid ' + (targetsMsg.indexOf('Error') === 0 ? '#fecaca' : '#86efac') }}>
-                            <p style={{ margin: 0, fontWeight: '600', fontSize: '0.84rem', color: targetsMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{targetsMsg}</p>
-                          </div>
-                        )}
-
-                        {targetsSubTab === 'GHA' ? (
-                          <>
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Inspections Target</label>
-                                <input type="number" step="1" value={ghaTargetsForm.inspections_target}
-                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { inspections_target: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
-                                <input type="number" step="1" value={ghaTargetsForm.response_time_target_hours}
-                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Verifications Target</label>
-                                <input type="number" step="1" value={ghaTargetsForm.agent_verifications_target}
-                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { agent_verifications_target: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
-                                <input type="number" step="0.1" value={ghaTargetsForm.csat_target}
-                                  onChange={function(e){ var v = e.target.value; setGhaTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                            </div>
-                            <button onClick={function(){ handleSaveTargets('GHA'); }} disabled={savingTargets}
-                              style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
-                              {savingTargets ? 'Saving…' : 'Save GHA Targets'}
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Agent Approvals Target</label>
-                                <input type="number" step="1" value={saTargetsForm.agent_approvals_target}
-                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { agent_approvals_target: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Response Time Target (hours)</label>
-                                <input type="number" step="1" value={saTargetsForm.response_time_target_hours}
-                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { response_time_target_hours: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                              <div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>CSAT Target</label>
-                                <input type="number" step="0.1" value={saTargetsForm.csat_target}
-                                  onChange={function(e){ var v = e.target.value; setSaTargetsForm(function(prev){ return Object.assign({}, prev, { csat_target: v === '' ? '' : Number(v) }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                              </div>
-                            </div>
-                            <button onClick={function(){ handleSaveTargets('SA'); }} disabled={savingTargets}
-                              style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer', opacity: savingTargets ? 0.7 : 1 }}>
-                              {savingTargets ? 'Saving…' : 'Save SA Targets'}
-                            </button>
-                          </>
-                        )}
-                      </div>
+                  {/* Monthly target for subscribing agents */}
+                  <div style={{ backgroundColor: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.88rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}><Target size={15} /> {kpiTab} Monthly Target — Subscribing Agents</p>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '0.76rem', color: '#64748b' }}>
+                      {kpiTab === 'GHA' ? 'GHAs who reach this target earn their full salary. Below it, they are paid per subscribing agent (see Settings).' : 'Number of subscribing agents each SA is expected to reach every month.'}
+                    </p>
+                    {targetsMsg && (
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.8rem', fontWeight: '600', color: targetsMsg.indexOf('Error') === 0 ? '#b91c1c' : '#166534' }}>{targetsMsg}</p>
                     )}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input type="number" min="0" step="1" value={targetVal} onChange={function(e){ setTargetVal(e.target.value); }}
+                        style={{ width: '120px', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', color: '#0a2240' }} />
+                      <button disabled={savingTargets} onClick={async function() {
+                        var n = parseInt(targetVal);
+                        if (isNaN(n) || n < 0) { setTargetsMsg('Error: enter a valid target'); return; }
+                        setSavingTargets(true);
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: targetKey, setting_value: String(n) }),
+                          });
+                          if (!res.ok) throw new Error('Failed to save');
+                          setTargetsMsg(kpiTab + ' monthly target saved');
+                          fetchKPIs(true);
+                          setTimeout(function() { setTargetsMsg(''); }, 3000);
+                        } catch(err) { setTargetsMsg('Error: ' + err.message); }
+                        setSavingTargets(false);
+                      }} style={{ padding: '9px 18px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.80rem', fontWeight: '700', cursor: savingTargets ? 'not-allowed' : 'pointer' }}>
+                        {savingTargets ? 'Saving…' : 'Save Target'}
+                      </button>
+                    </div>
                   </div>
 
                   {kpiLoading ? (
@@ -9429,230 +9659,37 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {staffList.map(function(s) {
-                        var isEditing = editingKpi === s.id;
-                        var typeLabel = (s.staff_type || kpiTab || '').toString().toUpperCase();
-                        var isSAType = typeLabel === 'SA';
-
-                        // Per-staff KPI metrics with weighted contributions
+                        var isSAType = (s.staff_type || kpiTab) === 'SA';
+                        var target = parseInt(s.monthly_target) || 0;
+                        var subs = s.subscribing_agents || 0;
+                        var pct = target > 0 ? Math.min(100, Math.round((subs / target) * 100)) : 0;
                         var metrics = [
-                          {
-                            key: 'attendance',
-                            label: 'Attendance & Availability',
-                            score: s.attendance_score,
-                            weight: WEIGHTS.attendance,
-                            target: '98.5%',
-                            display: s.attendance_score != null ? Number(s.attendance_score).toFixed(1) + '%' : '—',
-                          },
-                          {
-                            key: 'csat',
-                            label: 'Customer Satisfaction',
-                            // Convert back from percentage to rating display e.g. 80% → 4.0/5
-                            score: s.csat_score,
-                            weight: WEIGHTS.csat,
-                            target: '4.7/5',
-                            display: s.csat_score != null
-                              ? (Number(s.csat_score) / 20).toFixed(1) + '/5'
-                              : '—',
-                          },
-                          {
-                            key: 'onboarding',
-                            label: isSAType ? 'Agent Approvals' : 'Agent Verifications',
-                            score: s.onboarding_milestones_score,
-                            weight: WEIGHTS.onboarding,
-                            target: isSAType ? '20 agents' : '5 verifications',
-                            display: s.onboarding_milestones_score != null ? Number(s.onboarding_milestones_score).toFixed(1) + '%' : '—',
-                          },
-                          {
-                            key: 'fidelity',
-                            label: 'Inspection Fidelity',
-                            score: s.inspection_fidelity_score,
-                            weight: WEIGHTS.fidelity,
-                            target: '100%',
-                            display: s.inspection_fidelity_score != null ? Number(s.inspection_fidelity_score).toFixed(1) + '%' : '—',
-                          },
-                          {
-                            key: 'response',
-                            label: 'Response Time',
-                            score: s.response_time_score,
-                            weight: WEIGHTS.response,
-                            target: isSAType ? '≤24h' : '≤48h',
-                            display: s.response_time_score != null ? Number(s.response_time_score).toFixed(1) + '%' : '—',
-                          },
+                          { label: 'Subscribing Agents', display: subs + (target > 0 ? ' / ' + target : ''), sub: target > 0 ? pct + '% of monthly target' : 'No target set' },
+                          { label: 'Customer Satisfaction', display: s.csat_score != null ? (Number(s.csat_score) / 20).toFixed(1) + '/5' : '—', sub: 'Target: 4.7/5' },
+                          { label: isSAType ? 'Agent Approval' : 'Agent Verification', display: s.onboarding_milestones_score != null ? Number(s.onboarding_milestones_score).toFixed(1) + '%' : '—', sub: isSAType ? 'Target: 20 agents' : 'Target: 5 verifications' },
                         ];
-
-                        // Calculate total score (sum of weighted contributions)
-                        var scoredMetrics = metrics.filter(function(m) { return m.score != null; });
-                        var totalWeight = scoredMetrics.reduce(function(sum, m) { return sum + m.weight; }, 0);
-                        var weightedSum = scoredMetrics.reduce(function(sum, m) { return sum + (m.score * m.weight / 100); }, 0);
-                        var totalScore = totalWeight > 0 ? (weightedSum / totalWeight * 100).toFixed(1) : null;
-
-                        // Use DB overall_score if available, otherwise fall back to the computed weighted score
-                        var displayScore = s.overall_score != null ? s.overall_score : totalScore;
-
                         return (
-                          <div key={s.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', marginBottom: '12px', border: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
-                              <div>
-                                <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>
-                                  {s.staff_code} — {s.staff_name || s.full_name || 'Unnamed'}
-                                </p>
-                                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>{typeLabel}</p>
+                          <div key={s.id} style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '16px', border: '1px solid #e2e8f0' }}>
+                            <p style={{ margin: '0 0 2px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.90rem' }}>
+                              {s.staff_code} — {s.staff_name || s.full_name || 'Unnamed'}
+                            </p>
+                            <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: '#64748b' }}>{isSAType ? 'SA' : 'GHA'}</p>
+                            {target > 0 && (
+                              <div style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '4px', marginBottom: '8px', overflow: 'hidden' }}>
+                                <div style={{ width: pct + '%', height: '100%', backgroundColor: subs >= target ? '#27ae60' : '#f59e0b' }} />
                               </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <p style={{ margin: '0 0 2px 0', fontWeight: '900', fontSize: '1.4rem',
-                                  color: displayScore >= 80 ? '#27ae60' : displayScore >= 60 ? '#f59e0b' : displayScore != null ? '#ef4444' : '#94a3b8' }}>
-                                  {displayScore != null ? displayScore + '/100' : 'No Data'}
-                                </p>
-                                <p style={{ margin: '0 0 6px 0', fontSize: '0.70rem', color: '#94a3b8' }}>Overall Score</p>
-                                <button onClick={function() {
-                                    setEditingKpi(s.id);
-                                    setKpiForm({
-                                      attendance_score: s.attendance_score,
-                                      csat_score: s.csat_score,
-                                      inspection_fidelity_score: s.inspection_fidelity_score,
-                                      onboarding_milestones_score: s.onboarding_milestones_score,
-                                      response_time_score: s.response_time_score,
-                                      management_notes: s.management_notes,
-                                    });
-                                  }}
-                                  style={{ padding: '4px 10px', backgroundColor: '#fff', color: '#0a2240', border: '1.5px solid #0a2240', borderRadius: '7px', fontSize: '0.66rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                  Edit Scores
-                                </button>
-                              </div>
-                            </div>
-
-                            {metrics.map(function(metric) {
-                              var weightedContrib = metric.score != null ? (metric.score * metric.weight / 100).toFixed(1) : null;
+                            )}
+                            {metrics.map(function(m) {
                               return (
-                                <div key={metric.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #f8fafc' }}>
-                                  <div style={{ flex: 1 }}>
-                                    <p style={{ margin: '0 0 1px 0', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>
-                                      {metric.label}
-                                    </p>
-                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>
-                                      Weight: {metric.weight}% | Target: {metric.target}
-                                    </p>
+                                <div key={m.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderTop: '1px solid #f8fafc' }}>
+                                  <div>
+                                    <p style={{ margin: '0 0 1px 0', fontSize: '0.76rem', fontWeight: '600', color: '#374151' }}>{m.label}</p>
+                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#94a3b8' }}>{m.sub}</p>
                                   </div>
-                                  <div style={{ textAlign: 'right', marginLeft: '12px' }}>
-                                    <p style={{ margin: '0 0 1px 0', fontWeight: '700', color: metric.score != null ? '#0a2240' : '#94a3b8', fontSize: '0.84rem' }}>
-                                      {metric.display}
-                                    </p>
-                                    <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b' }}>
-                                      {weightedContrib != null ? weightedContrib + '/' + metric.weight + ' pts' : 'Not scored'}
-                                    </p>
-                                  </div>
+                                  <p style={{ margin: 0, fontWeight: '700', color: '#0a2240', fontSize: '0.88rem' }}>{m.display}</p>
                                 </div>
                               );
                             })}
-
-                            {/* Attendance manual input */}
-                            {s.attendance_score == null && (
-                              <div style={{ marginTop: '10px', padding: '8px 10px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #fde68a' }}>
-                                <p style={{ margin: '0 0 6px 0', fontSize: '0.72rem', color: '#92400e', fontWeight: '600' }}>
-                                  ⚠ Attendance not scored — enter manually
-                                </p>
-                                <div style={{ display: 'flex', gap: '6px' }}>
-                                  <input type='number' min='0' max='100' placeholder='e.g. 98.5'
-                                    id={'att-' + s.id}
-                                    style={{ flex: 1, padding: '6px 8px', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '0.80rem' }} />
-                                  <button onClick={async function() {
-                                    var val = parseFloat(document.getElementById('att-' + s.id)?.value);
-                                    if (isNaN(val) || val < 0 || val > 100) { alert('Enter a value between 0 and 100'); return; }
-                                    try {
-                                      var token = localStorage.getItem('gh_token');
-                                      await fetch(API_URL + '/api/admin/set-attendance', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                        body: JSON.stringify({ staff_id: s.id, month: kpiMonth, score: val }),
-                                      });
-                                      fetchKPIs();
-                                    } catch(e) { alert('Error: ' + e.message); }
-                                  }} style={{ padding: '6px 12px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    Save
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {(s.management_notes || s.updated_at) && (
-                              <div style={{ marginTop: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', padding: '10px 12px' }}>
-                                {s.management_notes && (
-                                  <>
-                                    <p style={{ margin: '0 0 4px 0', fontSize: '0.70rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Coaching Notes</p>
-                                    <p style={{ margin: 0, fontSize: '0.80rem', color: '#374151' }}>{s.management_notes}</p>
-                                  </>
-                                )}
-                                {s.updated_at && (
-                                  <p style={{ margin: s.management_notes ? '6px 0 0 0' : 0, fontSize: '0.68rem', color: '#94a3b8' }}>
-                                    Last updated: {new Date(s.updated_at).toLocaleDateString()}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-
-                            {isEditing && (
-                              <div style={{ marginTop: '12px', padding: '14px', backgroundColor: '#f8fafc', borderRadius: '10px', border: '1.5px solid #e2e8f0' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                                  <div>
-                                    <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Attendance % (manual entry required)</label>
-                                    <input type="number" step="0.1" value={kpiForm.attendance_score === null || kpiForm.attendance_score === undefined ? '' : kpiForm.attendance_score} placeholder="Target: 98.5"
-                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { attendance_score: v === '' ? null : Number(v) }); }); }}
-                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                                    <p style={{ margin: '4px 0 0 0', fontSize: '0.66rem', color: '#94a3b8' }}>Enter the percentage of rostered hours this staff member was checked in and available this month.</p>
-                                  </div>
-                                  <div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
-                                      CSAT (out of 5.0)
-                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
-                                    </label>
-                                    <input type="number" step="0.1" value={kpiForm.csat_score === null || kpiForm.csat_score === undefined ? '' : kpiForm.csat_score} placeholder="Target: 4.7"
-                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { csat_score: v === '' ? null : Number(v) }); }); }}
-                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                                  </div>
-                                  <div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
-                                      Inspection Log Fidelity (%)
-                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
-                                    </label>
-                                    <input type="number" step="0.1" value={kpiForm.inspection_fidelity_score === null || kpiForm.inspection_fidelity_score === undefined ? '' : kpiForm.inspection_fidelity_score} placeholder="Target: 100"
-                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { inspection_fidelity_score: v === '' ? null : Number(v) }); }); }}
-                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                                  </div>
-                                  <div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
-                                      Agent Onboarding Milestones (%)
-                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
-                                    </label>
-                                    <input type="number" step="0.1" value={kpiForm.onboarding_milestones_score === null || kpiForm.onboarding_milestones_score === undefined ? '' : kpiForm.onboarding_milestones_score} placeholder="Target: 100"
-                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { onboarding_milestones_score: v === '' ? null : Number(v) }); }); }}
-                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                                  </div>
-                                  <div>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>
-                                      Response Time (mins)
-                                      <span style={{ fontSize: '0.58rem', padding: '1px 6px', borderRadius: '10px', fontWeight: '800', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>AUTO</span>
-                                    </label>
-                                    <input type="number" step="1" value={kpiForm.response_time_score === null || kpiForm.response_time_score === undefined ? '' : kpiForm.response_time_score} placeholder="Target: 15"
-                                      onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { response_time_score: v === '' ? null : Number(v) }); }); }}
-                                      style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240' }} />
-                                  </div>
-                                </div>
-                                <label style={{ display: 'block', fontSize: '0.70rem', fontWeight: '700', color: '#64748b', marginBottom: '4px' }}>Coaching / Management Notes</label>
-                                <textarea rows={3} value={kpiForm.management_notes || ''} placeholder="Add coaching notes for this staff member…"
-                                  onChange={function(e){ var v = e.target.value; setKpiForm(function(prev){ return Object.assign({}, prev, { management_notes: v }); }); }}
-                                  style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #e2e8f0', fontSize: '0.82rem', color: '#0a2240', marginBottom: '12px', resize: 'vertical', fontFamily: "'Inter', sans-serif" }} />
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button onClick={function(){ handleSaveKPI(s); }}
-                                    style={{ padding: '7px 16px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    Save
-                                  </button>
-                                  <button onClick={function(){ setEditingKpi(null); setKpiForm({}); }}
-                                    style={{ padding: '7px 16px', backgroundColor: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer' }}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -9662,7 +9699,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
               );
             })()}
 
-            {/* ── INBOX ── */}
+{/* ── INBOX ── */}
             {adminTab === 'inbox' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
@@ -10538,76 +10575,104 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                   </div>
                 )}
 
-                {/* GHA Inspection Fee Tiers — super admin only */}
+                {/* GHA Accompany Fee + Salary — super admin only */}
                 {isSuperAdmin && (
                   <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
-                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>GHA Inspection Fee Tiers</h3>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>GHA Inspection Fee &amp; Salary</h3>
                     <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>
-                      GHAs earn a per-inspection fee based on how many confirmed customer inspections they complete per month.
+                      One flat fee is added to the customer's inspection total when they ask a GHA to accompany them, and the GHA earns it per confirmed accompanied inspection. Salary is paid in full when a GHA reaches the monthly target of subscribing agents; otherwise they are paid subscribing agents × pay per agent.
                     </p>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {[
-                        { key: 'tier1', label: '1 – 10 inspections', color: '#eff6ff', border: '#bfdbfe', text: '#1e40af' },
-                        { key: 'tier2', label: '11 – 20 inspections', color: '#f0fff4', border: '#bbf7d0', text: '#166534' },
-                        { key: 'tier3', label: '21+ inspections', color: '#faf5ff', border: '#e9d5ff', text: '#7e22ce' },
-                      ].map(function(tier) {
-                        return (
-                          <div key={tier.key} style={{ backgroundColor: tier.color, borderRadius: '10px', padding: '12px 14px', border: '1px solid ' + tier.border }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                              <div>
-                                <p style={{ margin: '0 0 2px 0', fontWeight: '700', color: tier.text, fontSize: '0.82rem' }}>{tier.label}</p>
-                                <p style={{ margin: 0, color: tier.text, fontSize: '0.74rem', opacity: 0.8 }}>
-                                  Current: ₦{parseFloat(inspectionTiers[tier.key]?.fee || 0).toLocaleString()} per inspection
-                                </p>
-                              </div>
-                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                                <div style={{ position: 'relative' }}>
-                                  <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.78rem', fontWeight: '600' }}>₦</span>
-                                  <input type='number' min='0' step='50'
-                                    value={inspectionTiers[tier.key]?.fee || ''}
-                                    onChange={function(e) {
-                                      var val = parseFloat(e.target.value) || 0;
-                                      setInspectionTiers(function(prev) {
-                                        return Object.assign({}, prev, {
-                                          [tier.key]: Object.assign({}, prev[tier.key], { fee: val })
-                                        });
-                                      });
-                                    }}
-                                    style={{ width: '110px', padding: '7px 8px 7px 24px', borderRadius: '8px', border: '1.5px solid ' + tier.border, fontSize: '0.84rem', boxSizing: 'border-box', backgroundColor: '#fff' }} />
-                                </div>
-                              </div>
-                            </div>
+                    {[
+                      { label: 'GHA accompany fee (per inspection)', val: ghaAccompanyFee, set: setGhaAccompanyFee, money: true },
+                      { label: 'GHA monthly salary (full)', val: ghaSalary, set: setGhaSalary, money: true },
+                      { label: 'Monthly target (subscribing agents)', val: ghaMonthlyTarget, set: setGhaMonthlyTarget, money: false },
+                      { label: 'Pay per agent (PPA) when target is missed', val: ghaPpa, set: setGhaPpa, money: true },
+                    ].map(function(f) {
+                      return (
+                        <div key={f.label} style={{ marginBottom: '10px' }}>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>{f.label}</label>
+                          <div style={{ position: 'relative' }}>
+                            {f.money && <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.82rem', fontWeight: '600' }}>₦</span>}
+                            <input type='number' min='0' value={f.val} onChange={function(e) { f.set(e.target.value); }}
+                              style={{ width: '100%', padding: f.money ? '9px 10px 9px 26px' : '9px 10px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', boxSizing: 'border-box' }} />
                           </div>
-                        );
-                      })}
-                    </div>
-
+                        </div>
+                      );
+                    })}
                     <button onClick={async function() {
                       try {
                         var token = localStorage.getItem('gh_token');
-                        var res = await fetch(API_URL + '/api/admin/settings', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                          body: JSON.stringify({
-                            setting_key: 'inspection_fee_tiers',
-                            setting_json: inspectionTiers,
-                          }),
-                        });
-                        if (!res.ok) throw new Error('Failed');
-                        setSettingsMsg('Inspection fee tiers updated successfully');
+                        var pairs = [
+                          ['gha_accompany_fee', ghaAccompanyFee], ['gha_salary', ghaSalary],
+                          ['gha_monthly_target', ghaMonthlyTarget], ['gha_ppa', ghaPpa],
+                        ];
+                        for (var i = 0; i < pairs.length; i++) {
+                          var n = parseFloat(pairs[i][1]);
+                          if (isNaN(n) || n < 0) throw new Error('Enter a valid number for every field');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: pairs[i][0], setting_value: String(n) }),
+                          });
+                          if (!res.ok) throw new Error('Failed to save ' + pairs[i][0]);
+                        }
+                        setSettingsMsg('GHA fee and salary settings updated successfully');
                         window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
                         setTimeout(function() { setSettingsMsg(''); }, 3000);
                       } catch(err) { setSettingsMsg('Error: ' + err.message); }
-                    }} style={{ width: '100%', marginTop: '14px', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
-                      Save Inspection Fee Tiers
+                    }} style={{ width: '100%', marginTop: '6px', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
+                      Save GHA Fee &amp; Salary
                     </button>
-
                     <div style={{ marginTop: '10px', padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
                       <p style={{ margin: 0, fontSize: '0.74rem', color: '#1e40af' }}>
-                        ℹ Changes apply to the next payment calculation. Example: GHA with 15 confirmed inspections this month earns ₦{(15 * (inspectionTiers.tier2?.fee || 1500)).toLocaleString()} at current tier 2 rate.
+                        ℹ Example: target {parseInt(ghaMonthlyTarget) || 0}, PPA ₦{(parseFloat(ghaPpa) || 0).toLocaleString()} — a GHA with 10 subscribing agents earns ₦{(10 * (parseFloat(ghaPpa) || 0)).toLocaleString()} salary (plus commission). Meeting the target earns the full ₦{(parseFloat(ghaSalary) || 0).toLocaleString()}. Changes apply to the current month's calculation.
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {/* Listing Verification Fees — super admin only */}
+                {isSuperAdmin && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>Listing Verification Fees</h3>
+                    <p style={{ margin: '0 0 16px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      What a GHA or SA earns for each listing verification you confirm. It is paid right after confirmation. The fee is locked in at the moment you confirm, so changes only affect future verifications.
+                    </p>
+                    {[
+                      { label: 'GHA verification fee (per listing)', val: verifFeeGha, set: setVerifFeeGha },
+                      { label: 'SA verification fee (per listing)', val: verifFeeSa, set: setVerifFeeSa },
+                    ].map(function(f) {
+                      return (
+                        <div key={f.label} style={{ marginBottom: '10px' }}>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>{f.label}</label>
+                          <div style={{ position: 'relative' }}>
+                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.82rem', fontWeight: '600' }}>₦</span>
+                            <input type='number' min='0' value={f.val} onChange={function(e) { f.set(e.target.value); }}
+                              style={{ width: '100%', padding: '9px 10px 9px 26px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.86rem', boxSizing: 'border-box' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button onClick={async function() {
+                      try {
+                        var token = localStorage.getItem('gh_token');
+                        var pairs = [['verification_fee_gha', verifFeeGha], ['verification_fee_sa', verifFeeSa]];
+                        for (var i = 0; i < pairs.length; i++) {
+                          var n = parseFloat(pairs[i][1]);
+                          if (isNaN(n) || n < 0) throw new Error('Enter a valid amount for both fees');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: pairs[i][0], setting_value: String(n) }),
+                          });
+                          if (!res.ok) throw new Error('Failed to save ' + pairs[i][0]);
+                        }
+                        setSettingsMsg('Verification fees updated successfully');
+                        setTimeout(function() { setSettingsMsg(''); }, 3000);
+                      } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                    }} style={{ width: '100%', marginTop: '6px', padding: '11px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.86rem' }}>
+                      Save Verification Fees
+                    </button>
                   </div>
                 )}
 
@@ -11515,6 +11580,17 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     // total reflects the latest numbers instead of whatever the 60s interval last cached.
     if (ghaTab === 'earnings' || ghaTab === 'overview') fetchGHAOverview();
   }, [ghaTab]);
+  const [ghaSalaryInfo, setGhaSalaryInfo] = useState(null);
+  const fetchGhaSalaryInfo = async function() {
+    try {
+      var tkn = localStorage.getItem('gh_staff_token');
+      var r = await fetch(API_URL + '/api/gha/salary-progress', { headers: { Authorization: 'Bearer ' + tkn } });
+      if (r.ok) setGhaSalaryInfo(await r.json());
+    } catch (e) { console.error('GHA salary progress error:', e.message); }
+  };
+  useEffect(function() {
+    if (ghaTab === 'overview' || ghaTab === 'earnings') fetchGhaSalaryInfo();
+  }, [ghaTab]);
   useEffect(function() {
     if (ghaTab === 'monthly-history') { fetchMonthlyHistory(historyMonth); fetchHistoryEarnings(historyMonth); }
   }, [ghaTab, historyMonth]);
@@ -11743,6 +11819,43 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
               <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading...</p></div>
             ) : (
               <div>
+                <VerificationEarnings />
+
+                {/* Monthly target + salary progress */}
+                {ghaSalaryInfo && (function() {
+                  var si = ghaSalaryInfo;
+                  var tgt = parseInt(si.monthly_target) || 0;
+                  var subs = si.subscribing_agents || 0;
+                  var pct = tgt > 0 ? Math.min(100, Math.round((subs / tgt) * 100)) : 0;
+                  return (
+                    <div style={{ ...cardSt, padding: '18px 20px', marginBottom: '20px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                        <div>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>MONTHLY TARGET — SUBSCRIBING AGENTS</p>
+                          <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: '900', color: '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{subs} <span style={{ fontSize: '1rem', color: '#64748b', fontWeight: '700' }}>/ {tgt}</span></p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em', fontFamily: "'Inter', sans-serif" }}>SALARY THIS MONTH</p>
+                          <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: '900', color: si.target_met ? '#27ae60' : '#0a2240', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>₦{(si.salary_earned || 0).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <div style={{ height: '8px', backgroundColor: '#e2e8f0', borderRadius: '6px', overflow: 'hidden', marginBottom: '8px' }}>
+                        <div style={{ width: pct + '%', height: '100%', backgroundColor: si.target_met ? '#27ae60' : '#f59e0b' }} />
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.78rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
+                        {si.target_met
+                          ? 'Target met! You earn your full salary of ₦' + (si.full_salary || 0).toLocaleString() + ' plus your commission.'
+                          : tgt > 0
+                            ? (tgt - subs) + ' more subscribing agent' + (tgt - subs === 1 ? '' : 's') + ' to reach your target and earn the full ₦' + (si.full_salary || 0).toLocaleString() + ' salary. Until then you earn ₦' + (si.ppa || 0).toLocaleString() + ' per subscribing agent.'
+                            : 'No monthly target has been set yet.'}
+                      </p>
+                      {si.salary_paid > 0 && (
+                        <p style={{ margin: '6px 0 0 0', fontSize: '0.74rem', color: '#166534', fontWeight: '600' }}>Salary paid so far this month: ₦{si.salary_paid.toLocaleString()}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Identity cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
                   <div style={{ ...cardSt, padding: '18px 20px' }}>
@@ -12271,24 +12384,10 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
                         {!isVerified && (
-                          <button onClick={async function() {
-                            setVerifyingId(p.id);
-                            try {
-                              var res = await fetch(API_URL + '/api/gha/verify-listing', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                body: JSON.stringify({ property_id: p.id })
-                              });
-                              var data = await res.json();
-                              if (!res.ok) throw new Error(data.error || 'Failed');
-                              setListings(function(prev) { return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { gha_verified: true }) : x; }); });
-                              showMsg('Listing marked as GHA Verified.');
-                            } catch(e) { showMsg('Error: ' + e.message); }
-                            finally { setVerifyingId(null); }
-                          }} disabled={isVerifying}
-                            style={{ padding: '8px 14px', backgroundColor: isVerifying ? '#94a3b8' : '#0a2240', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.74rem', fontWeight: '700', cursor: isVerifying ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'Inter', sans-serif" }}>
-                            {isVerifying ? 'Verifying…' : 'Mark GHA Verified'}
-                          </button>
+                          <VerificationSubmit property={p} onSubmitted={function() {
+                            setListings(function(prev) { return prev.map(function(x){ return x.id === p.id ? Object.assign({}, x, { verification_status: 'pending' }) : x; }); });
+                            showMsg('Verification sent to admin for review.');
+                          }} />
                         )}
                         <button onClick={async function() {
                             if (!window.confirm('Report this property as inaccurate or non-existent? Admin will be notified immediately.')) return;
@@ -15622,6 +15721,11 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                   <AlertCircle size={12} /> Awaiting GHA Verification
                                 </span>
                               )}
+                              {!l.gha_verified && (
+                                <VerificationSubmit property={l} onSubmitted={function() {
+                                  setSaListings(function(prev) { return prev.map(function(row) { return row.id === l.id ? Object.assign({}, row, { verification_status: 'pending' }) : row; }); });
+                                }} />
+                              )}
                             </div>
                             <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.72rem', fontFamily: "'Inter', sans-serif" }}>{l.agent_name || '—'} · {l.agent_email || '—'}</p>
 
@@ -15709,61 +15813,10 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                                 {l.inspection_fee > 0 ? '₦' + parseFloat(l.inspection_fee).toLocaleString() : 'Not set'}
                               </p>
                             </div>
-                            <button onClick={function() {
-                              setSettingFeeForListing(l.id);
-                              setFeeInput(l.inspection_fee > 0 ? String(l.inspection_fee) : '');
-                              setFeeMsg('');
-                            }} style={{ backgroundColor: 'transparent', border: '1.5px solid #0a2240', color: '#0a2240', borderRadius: '8px', padding: '5px 12px', fontSize: '0.74rem', fontWeight: '700', cursor: 'pointer' }}>
-                              {l.inspection_fee > 0 ? 'Edit Fee' : 'Set Fee'}
-                            </button>
+                            <span style={{ fontSize: '0.70rem', color: '#94a3b8' }}>Set by listing agent</span>
                           </div>
 
-                          {settingFeeForListing === l.id && (
-                            <div style={{ marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <div style={{ position: 'relative', flex: 1 }}>
-                                <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', fontSize: '0.84rem', fontWeight: '600' }}>₦</span>
-                                <input
-                                  type='number'
-                                  min='0'
-                                  placeholder='e.g. 5000'
-                                  value={feeInput}
-                                  onChange={function(e) { setFeeInput(e.target.value); }}
-                                  style={{ width: '100%', padding: '8px 10px 8px 26px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }}
-                                />
-                              </div>
-                              <button onClick={async function() {
-                                if (!feeInput && feeInput !== '0') { setFeeMsg('Please enter a fee amount'); return; }
-                                try {
-                                  var token = localStorage.getItem('gh_staff_token');
-                                  var res = await fetch(API_URL + '/api/sa/set-inspection-fee', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-                                    body: JSON.stringify({ property_id: l.id, inspection_fee: parseFloat(feeInput) || 0 }),
-                                  });
-                                  var data = await res.json();
-                                  if (!res.ok) throw new Error(data.error || 'Failed');
-                                  setFeeMsg('Fee saved successfully');
-                                  setSettingFeeForListing(null);
-                                  setSaListings(function(prev) {
-                                    return prev.map(function(row) {
-                                      return row.id === l.id ? Object.assign({}, row, { inspection_fee: parseFloat(feeInput) }) : row;
-                                    });
-                                  });
-                                  setTimeout(function() { setFeeMsg(''); }, 3000);
-                                } catch(err) { setFeeMsg('Error: ' + err.message); }
-                              }} style={{ backgroundColor: '#27ae60', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 14px', fontSize: '0.78rem', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                Save Fee
-                              </button>
-                              <button onClick={function() { setSettingFeeForListing(null); setFeeInput(''); }}
-                                style={{ backgroundColor: 'transparent', border: '1.5px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '8px 10px', fontSize: '0.78rem', cursor: 'pointer' }}>
-                                Cancel
-                              </button>
-                            </div>
-                          )}
-
-                          {settingFeeForListing === l.id && feeMsg && (
-                            <p style={{ margin: '8px 0 0 0', fontSize: '0.76rem', fontWeight: '600', color: feeMsg.startsWith('Error') ? '#ef4444' : '#166534' }}>{feeMsg}</p>
-                          )}
+                          
                         </div>
                       </div>
                     );
@@ -15789,6 +15842,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
           console.log('Earnings tab display - agentRows:', agentRows.length, '| earningRows:', earningRows.length, '| ghaRows:', ghaRows.length);
           return (
             <div>
+            <VerificationEarnings />
               <h2 style={{ color: '#0a2240', fontSize: '1.1rem', fontWeight: '800', margin: '0 0 16px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Earnings</h2>
 
               {/* Month selector row */}
