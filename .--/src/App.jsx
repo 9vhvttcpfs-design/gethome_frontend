@@ -2684,6 +2684,16 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                 </div>);
               })}
             </div>
+            {inspectionMode === 'whatsapp' && inspGhaFee > 0 && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 14px', borderRadius: '10px', border: '1.5px solid ' + (inspGhaAccompany ? '#27ae60' : '#e2e8f0'), backgroundColor: inspGhaAccompany ? '#f0fff4' : '#fff', marginBottom: '12px', cursor: 'pointer' }}>
+                <input type='checkbox' checked={inspGhaAccompany} onChange={function(e) { setInspGhaAccompany(e.target.checked); }}
+                  style={{ marginTop: '3px', width: '18px', height: '18px', accentColor: '#27ae60', flexShrink: 0 }} />
+                <span>
+                  <span style={{ display: 'block', fontWeight: '700', color: '#0a2240', fontSize: '0.84rem' }}>Let a GetHome agent (GHA) accompany me (+₦{inspGhaFee.toLocaleString()})</span>
+                  <span style={{ display: 'block', color: '#64748b', fontSize: '0.74rem', marginTop: '2px' }}>A verified GHA goes with you to the inspection to assist you.</span>
+                </span>
+              </label>
+            )}
             {inspectionMode === 'whatsapp' ? <button onClick={function() { handleBookInspection(property); }} style={{ width: '100%', padding: '11px', backgroundColor: '#25D366', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>
                 {(inspectionFeeAmount + (inspGhaAccompany && inspGhaFee > 0 ? inspGhaFee : 0)) > 0
                   ? 'Book Inspection (₦' + (inspectionFeeAmount + (inspGhaAccompany && inspGhaFee > 0 ? inspGhaFee : 0)).toLocaleString() + ')'
