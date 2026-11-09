@@ -8186,16 +8186,23 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                     ) : (
                       <div>
                         {(function(){
+                          // Resolve a GHA's SA to its readable code (e.g. SA0017), never the raw UUID.
+                          var saCodeOf = function(g) {
+                            if (g.sa_code) return g.sa_code;
+                            var match = g.sa_id ? allSAs.find(function(s){ return s.id === g.sa_id; }) : null;
+                            if (match) return match.sa_code || match.staff_id || 'Unassigned';
+                            return 'Unassigned';
+                          };
                           var filteredGHAs = allGHAsAdmin.filter(function(g){
                             var q = ghaSearch.trim().toLowerCase();
                             if (!q) return true;
                             return (g.gha_code || g.staff_id || '').toLowerCase().includes(q) ||
                                    (g.full_name || g.name || '').toLowerCase().includes(q) ||
                                    (g.email || '').toLowerCase().includes(q) ||
-                                   (g.sa_code || g.sa_id || '').toLowerCase().includes(q);
+                                   saCodeOf(g).toLowerCase().includes(q);
                           });
-                          return Array.from(new Set(filteredGHAs.map(function(g){ return g.sa_code || g.sa_id || 'Unassigned'; }))).map(function(saCode) {
-                          var group = filteredGHAs.filter(function(g){ return (g.sa_code || g.sa_id || 'Unassigned') === saCode; });
+                          return Array.from(new Set(filteredGHAs.map(saCodeOf))).map(function(saCode) {
+                          var group = filteredGHAs.filter(function(g){ return saCodeOf(g) === saCode; });
                           var saInfo = allSAs.find(function(s){ return (s.sa_code || s.staff_id) === saCode; });
                           return (
                             <div key={saCode} style={{ marginBottom: '16px' }}>
@@ -8322,7 +8329,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                                       {reassignGhaSaTarget && (reassignGhaSaTarget.id || reassignGhaSaTarget.gha_code || reassignGhaSaTarget.staff_id) === gKey && (
                                         <div style={{ marginTop: '8px', padding: '12px 14px', backgroundColor: '#f0f9ff', border: '1.5px solid #7dd3fc', borderRadius: '9px' }}>
                                           <p style={{ margin: '0 0 2px 0', fontWeight: '800', fontSize: '0.82rem', color: '#0369a1' }}>Change SA — {g.gha_code || g.staff_id} {g.full_name || g.name}</p>
-                                          <p style={{ margin: '0 0 10px 0', fontSize: '0.74rem', color: '#0369a1' }}>Current SA: <strong>{g.sa_code || g.sa_id || 'Unassigned'}</strong></p>
+                                          <p style={{ margin: '0 0 10px 0', fontSize: '0.74rem', color: '#0369a1' }}>Current SA: <strong>{g.sa_code || ((allSAs.find(function(s){ return s.id === g.sa_id; }) || {}).sa_code) || 'Unassigned'}</strong></p>
                                           <label style={{ display: 'block', fontSize: '0.66rem', fontWeight: '700', color: '#0369a1', marginBottom: '3px', letterSpacing: '0.04em' }}>ASSIGN TO SA:</label>
                                           <select value={reassignGhaSaNewCode} onChange={function(e){ setReassignGhaSaNewCode(e.target.value); }}
                                             style={{ width: '100%', padding: '8px 10px', borderRadius: '7px', border: '1.5px solid #7dd3fc', fontSize: '0.80rem', color: '#0a2240', backgroundColor: '#fff', boxSizing: 'border-box', marginBottom: '9px' }}>
