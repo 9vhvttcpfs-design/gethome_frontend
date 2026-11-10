@@ -1063,6 +1063,8 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
     }
     setLoading(true);
     setError('');
+    var ghaRefCode = '';
+    try { ghaRefCode = (sessionStorage.getItem('gh_ref') || localStorage.getItem('gh_referral_code') || '').trim().toUpperCase(); } catch(e) {}
     try {
       // Sign up via Supabase Auth with customer role metadata
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -1074,7 +1076,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             full_name: customerName.trim(),
             phone: customerPhone.trim() || null,
             intent: customerIntent,
-            referred_by_gha: sessionStorage.getItem('gh_ref') || undefined,
+            referred_by_gha: ghaRefCode || undefined,
           }
         }
       });
@@ -1087,17 +1089,17 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
       }
 
       if (!authData?.user?.id) throw new Error('Account creation failed. Please try again.');
-      sessionStorage.removeItem('gh_ref');
+      try { sessionStorage.removeItem('gh_ref'); localStorage.removeItem('gh_referral_code'); } catch(e) {}
 
       // Update profile with full details
-      await supabase.from('profiles').upsert([{
+      await supabase.from('profiles').upsert([Object.assign({
         id: authData.user.id,
         email: email.trim().toLowerCase(),
         role: 'customer',
         full_name: customerName.trim(),
         phone: customerPhone.trim() || null,
         status: 'active',
-      }], { onConflict: 'id' });
+      }, ghaRefCode ? { referred_by_gha: ghaRefCode } : {})], { onConflict: 'id' });
 
       // After successful signUp check if email confirmation is required
       if (authData?.user && !authData?.session) {
@@ -1221,6 +1223,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
     return (
       <div className="gh-auth-form-inner">
         {showTermsModal && <LegalModal type="terms" forceAccept onClose={function(){ setShowTermsModal(false); }} onAccept={function(){ setTermsAccepted(true); setShowTermsModal(false); }} />}
+        {showPrivacyModal && <LegalModal type="privacy" forceAccept onClose={function(){ setShowPrivacyModal(false); }} onAccept={function(){ setShowPrivacyModal(false); }} />}
         <h3 style={{ color: '#0a2240', fontWeight: '800', fontSize: '1.05rem', margin: '0 0 4px 0' }}>
           Create Your Account
         </h3>
@@ -1287,14 +1290,18 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', margin: '12px 0' }}>
-            <input type='checkbox' id='terms-agree' checked={termsAccepted}
-              onChange={function(e) { setTermsAccepted(e.target.checked); }}
-              style={{ marginTop: '3px', flexShrink: 0 }} />
-            <label htmlFor='terms-agree' style={{ fontSize: '0.78rem', color: '#374151', lineHeight: 1.5 }}>
-              I agree to the <span onClick={function(e) { e.preventDefault(); setShowTermsModal(true); }} style={{ color: '#0a2240', fontWeight: '700', textDecoration: 'underline', cursor: 'pointer' }}>Terms of Use</span> and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
-            </label>
-          </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', fontSize: '0.78rem', color: '#374151', lineHeight: 1.5 }}>
+            <div onClick={function(e){ e.preventDefault(); e.stopPropagation(); setTermsAccepted(function(v){ return !v; }); }}
+              style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid ' + (termsAccepted ? '#27ae60' : '#cbd5e1'), backgroundColor: termsAccepted ? '#27ae60' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '1px', cursor: 'pointer', transition: 'border-color 0.15s, background-color 0.15s' }}>
+              {termsAccepted && <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#fff' }} />}
+            </div>
+            <span>I agree to the{' '}
+              <span onClick={function(e){ e.preventDefault(); e.stopPropagation(); setShowTermsModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Terms</span>
+              {' '}and{' '}
+              <span onClick={function(e){ e.preventDefault(); e.stopPropagation(); setShowPrivacyModal(true); }} style={{ color: '#27ae60', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>
+              {' '}and confirm I will not post objectionable, fraudulent, or abusive content. Violations result in immediate account removal.
+            </span>
+          </label>
 
           {error && <p style={{ color: '#ef4444', fontSize: '0.78rem', margin: 0 }}>{error}</p>}
 
@@ -2094,9 +2101,20 @@ function VerificationEarnings() {
       .then(function(d) { if (d) setInfo(d); })
       .catch(function() {});
   }, []);
+  var dismissKey = 'gh_dismissed_verifs_' + String(localStorage.getItem('gh_staff_token') || '').slice(-12);
+  const [dismissed, setDismissed] = useState(function() {
+    try { return JSON.parse(localStorage.getItem(dismissKey) || '[]'); } catch(e) { return []; }
+  });
+  var saveDismissed = function(list) {
+    setDismissed(list);
+    try { localStorage.setItem(dismissKey, JSON.stringify(list)); } catch(e) {}
+  };
   if (!info) return null;
   var money = function(n) { return '₦' + (Number(n) || 0).toLocaleString(); };
   var statusColor = { pending: '#92400e', confirmed: '#166534', rejected: '#b91c1c' };
+  var isClearable = function(v) { return v.status === 'rejected' || (v.status === 'confirmed' && v.payment_status === 'paid'); };
+  var visibleVerifs = (info.verifications || []).filter(function(v) { return dismissed.indexOf(v.id) === -1; });
+  var clearableIds = visibleVerifs.filter(isClearable).map(function(v) { return v.id; });
   return (
     <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8edf5', padding: '18px 20px', marginBottom: '20px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
       <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em' }}>LISTING VERIFICATION EARNINGS</p>
@@ -2105,10 +2123,51 @@ function VerificationEarnings() {
         <div><p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#27ae60' }}>{money(info.total_paid)}</p><p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>Paid</p></div>
         <div><p style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#f59e0b' }}>{money(info.total_unpaid)}</p><p style={{ margin: 0, fontSize: '0.7rem', color: '#64748b' }}>Awaiting payment</p></div>
       </div>
-      {(info.verifications || []).slice(0, 5).map(function(v) {
+      {clearableIds.length > 0 && (
+        <div style={{ textAlign: 'right', marginBottom: '4px' }}>
+          <button onClick={function() { saveDismissed(dismissed.concat(clearableIds)); }}
+            style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.72rem', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+            Clear paid &amp; rejected
+          </button>
+        </div>
+      )}
+      {visibleVerifs.slice(0, 5).map(function(v) {
+        return (
+          <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '6px 0', borderTop: '1px solid #f1f5f9', fontSize: '0.76rem' }}>
+            <span style={{ color: '#374151', flex: 1 }}>{v.properties?.title || 'Listing #' + v.property_id}</span>
+            <span style={{ fontWeight: '700', color: statusColor[v.status] || '#64748b', whiteSpace: 'nowrap' }}>
+              {v.status === 'confirmed' ? (v.payment_status === 'paid' ? 'Paid ' : 'Confirmed ') + money(v.fee_amount) : v.status === 'rejected' ? 'Rejected' : 'Pending'}
+            </span>
+            {isClearable(v) && (
+              <button title="Clear from overview" onClick={function() { saveDismissed(dismissed.concat([v.id])); }}
+                style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '20px', height: '20px', lineHeight: '20px', padding: 0, color: '#64748b', cursor: 'pointer', fontSize: '0.8rem', flexShrink: 0 }}>×</button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VerificationHistory({ month }) {
+  const [rows, setRows] = useState([]);
+  useEffect(function() {
+    fetch(API_URL + '/api/staff/my-verifications', { headers: { Authorization: 'Bearer ' + localStorage.getItem('gh_staff_token') } })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d) setRows(d.verifications || []); })
+      .catch(function() {});
+  }, [month]);
+  var money = function(n) { return '₦' + (Number(n) || 0).toLocaleString(); };
+  var inMonth = rows.filter(function(v) { return String(v.reviewed_at || v.created_at || '').slice(0, 7) === month; });
+  if (inMonth.length === 0) return null;
+  var statusColor = { pending: '#92400e', confirmed: '#166534', rejected: '#b91c1c' };
+  return (
+    <div style={{ backgroundColor: '#fff', borderRadius: '16px', border: '1px solid #e8edf5', padding: '18px 20px', marginBottom: '20px', boxShadow: '0 2px 12px rgba(10,34,64,0.06)' }}>
+      <p style={{ margin: '0 0 10px 0', fontSize: '0.72rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.06em' }}>LISTING VERIFICATIONS THIS MONTH</p>
+      {inMonth.map(function(v) {
         return (
           <div key={v.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '6px 0', borderTop: '1px solid #f1f5f9', fontSize: '0.76rem' }}>
-            <span style={{ color: '#374151' }}>{v.properties?.title || 'Listing #' + v.property_id}</span>
+            <span style={{ color: '#374151', flex: 1 }}>{v.properties?.title || 'Listing #' + v.property_id}</span>
             <span style={{ fontWeight: '700', color: statusColor[v.status] || '#64748b', whiteSpace: 'nowrap' }}>
               {v.status === 'confirmed' ? (v.payment_status === 'paid' ? 'Paid ' : 'Confirmed ') + money(v.fee_amount) : v.status === 'rejected' ? 'Rejected' : 'Pending'}
             </span>
@@ -5167,7 +5226,7 @@ function GhaReferralCard({ r }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ background: '#dcfce7', color: '#166534', fontWeight: '800', fontSize: '0.78rem', padding: '3px 10px', borderRadius: '20px' }}>
-            {(r.agents_total || 0) + (r.customers_total || 0)} total
+            {r.customers_total || 0} customer{(r.customers_total || 0) === 1 ? '' : 's'}
           </span>
           <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>{open ? '▲' : '▼'}</span>
         </div>
@@ -5177,7 +5236,6 @@ function GhaReferralCard({ r }) {
       {open && (
         <div style={{ padding: '12px 14px', background: '#fff', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {[
-            { title: 'Agents',    titleColor: '#1e40af', bg: '#eff6ff', vals: [['Today', r.agents_today],    ['This Month', r.agents_month],    ['Total', r.agents_total]] },
             { title: 'Customers', titleColor: '#166534', bg: '#f0fdf4', vals: [['Today', r.customers_today], ['This Month', r.customers_month], ['Total', r.customers_total]] },
           ].map(function(g) {
             return (
@@ -5247,6 +5305,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     if (adminTab === 'gha-referrals') fetchGhaReferrals();
   }, [refDateFrom, refDateTo]);
   const filteredReferrals = ghaReferrals.filter(function(r) {
+    if (!(r.customers_total > 0)) return false;
     if (refSearch && !(r.gha_code || '').toLowerCase().includes(refSearch.toLowerCase()) &&
         !(r.gha_name || '').toLowerCase().includes(refSearch.toLowerCase())) return false;
     return true;
@@ -8474,7 +8533,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
 
             {adminTab === 'gha-referrals' && (
               <div style={{ padding: '16px' }}>
-                <div style={{ fontWeight: '800', color: '#0a2240', fontSize: '1rem', marginBottom: '14px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Referrals</div>
+                <div style={{ fontWeight: '800', color: '#0a2240', fontSize: '1rem', marginBottom: '14px', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>GHA Referrals <span style={{ fontWeight: '600', color: '#64748b', fontSize: '0.78rem' }}>(customers only)</span></div>
 
                 {/* Filters */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
@@ -12701,6 +12760,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
                 </button>
               </div>
 
+              <VerificationHistory month={historyMonth} />
+
               {historyLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading monthly history…</p></div>
               ) : !monthlyHistory ? (
@@ -15503,6 +15564,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
                   🔄 Refresh
                 </button>
               </div>
+
+              <VerificationHistory month={historyMonth} />
 
               {historyLoading ? (
                 <div style={{ textAlign: 'center', padding: '40px' }}><p style={{ color: '#94a3b8', fontFamily: "'Inter', sans-serif" }}>Loading monthly history…</p></div>
