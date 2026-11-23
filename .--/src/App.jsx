@@ -19044,7 +19044,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
       });
       var data = await res.json();
 
-      var aiMsg = { id: Date.now() + 1, sender: 'ai', text: data.reply, time: new Date(), properties: data.properties || [], is_alternative: data.is_alternative, wants_human: data.wants_human };
+      var aiMsg = { id: Date.now() + 1, sender: 'ai', text: data.reply, time: new Date(), properties: data.properties || [], is_alternative: data.is_alternative, wants_human: data.wants_human, contact: data.contact || null };
       setMessages(function(prev) { return [...prev, aiMsg]; });
       if (!isOpen) setUnread(function(n) { return n + 1; });
 
@@ -19110,6 +19110,17 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
                       {msg.text}
                     </div>
                   </div>
+
+                  {/* Human handoff: WhatsApp the area SA, else the area GHA, else GetHome support */}
+                  {isAi && msg.contact && msg.contact.wa_link && (
+                    <div style={{ marginLeft: '32px', marginBottom: '8px' }}>
+                      <a href={msg.contact.wa_link} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', padding: '10px 16px', borderRadius: '10px', backgroundColor: '#25D366', color: '#fff', fontWeight: '700', fontSize: '0.82rem', textDecoration: 'none' }}>
+                        {msg.contact.role === 'SA' ? 'Chat with your area Service Agent on WhatsApp' : msg.contact.role === 'GHA' ? 'Chat with your area GetHome Agent on WhatsApp' : 'Chat with GetHome support on WhatsApp'}
+                      </a>
+                      {msg.contact.name && msg.contact.role !== 'GETHOME' && <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: '4px' }}>{msg.contact.name}</div>}
+                    </div>
+                  )}
 
                   {/* Property cards in chat */}
                   {isAi && msg.properties && msg.properties.length > 0 && (
