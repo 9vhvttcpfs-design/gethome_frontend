@@ -5,6 +5,7 @@ import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
 import { formatLocalPrice } from './utils/pricing';
 import GrowthCRM from './features/growth/GrowthCRM';
+import OutreachCommandCentre from './features/outreach/OutreachCommandCentre';
 import { matchesCity } from './constants/cityAreas';
 import { gxSignupMeta, linkAttribution, attachAiSession } from './utils/growth';
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
@@ -6577,7 +6578,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
     ['agents','Agents'],['listings','Listings'],['transactions','Transactions'],
     ['deposits','Deposits'],['inspections','Inspections'],['inspection-fees','Inspection Fees'],['verifications','Verifications'],
     ['sa-management','SA Management'],['gha-management','GHA Management'],['gha-referrals','Referrals'],['earnings','Earnings'],
-    ['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['inbox','Inbox'],['settings','Settings'],
+    ['staff-payments','Staff Payments'],['monthly-history','Monthly History'],['performance','Performance'],['outreach','Outreach'],['inbox','Inbox'],['settings','Settings'],
   ];
   function switchTab(t) {
     setAdminTab(t);
@@ -9808,6 +9809,8 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
             })()}
 
 {/* ── INBOX ── */}
+            {adminTab === 'outreach' && <OutreachCommandCentre />}
+
             {adminTab === 'inbox' && (
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
