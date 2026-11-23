@@ -4,6 +4,8 @@ import { Home, Search, Building2, Star, MapPin, Mail, User, Users, CheckCircle, 
 import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
 import { formatLocalPrice } from './utils/pricing';
+import GrowthCRM from './features/growth/GrowthCRM';
+import { gxSignupMeta, linkAttribution, attachAiSession } from './utils/growth';
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
 });
@@ -839,7 +841,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
           email,
           password,
           options: {
-            data: { role: 'agent', status: 'pending' },
+            data: { role: 'agent', status: 'pending', ...gxSignupMeta() },
           },
         });
         if (authError) throw authError;
@@ -1077,6 +1079,7 @@ function InlineAuthForm({ onSuccess, actionLabel = 'continue', initialMode, glob
             phone: customerPhone.trim() || null,
             intent: customerIntent,
             referred_by_gha: ghaRefCode || undefined,
+            ...gxSignupMeta(),
           }
         }
       });
@@ -11741,6 +11744,7 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'earnings', label: 'Earnings' },
     { id: 'inbox', label: 'Inbox' },
     { id: 'referrals', label: 'Referrals' },
+    { id: 'growth', label: 'Leads & Recruits' },
   ];
 
   return (
@@ -11910,6 +11914,8 @@ function GHADashboard({ staffUser: initialStaffUser, onLogout }) {
         )}
 
         {/* ── OVERVIEW ── */}
+        {ghaTab === 'growth' && <GrowthCRM token={token} />}
+
         {ghaTab === 'overview' && (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', margin: '0 0 20px 0' }}>
@@ -13990,6 +13996,7 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
     { id: 'monthly-history', label: 'Monthly History' },
     { id: 'earnings', label: 'Earnings' },
     { id: 'inbox', label: 'Inbox' },
+    { id: 'growth', label: 'Leads & Recruits' },
     { id: 'profile', label: 'Profile' },
   ];
 
@@ -14226,6 +14233,8 @@ function SADashboard({ staffUser: initialStaffUser, onLogout }) {
         )}
 
         {/* ── OVERVIEW ── */}
+        {saTab === 'growth' && <GrowthCRM token={token} />}
+
         {saTab === 'overview' && (function() {
           var overviewMonthLabel = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
           return (
@@ -17025,6 +17034,7 @@ function AppContent() {
       if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
         if (session?.access_token) localStorage.setItem('gh_token', session.access_token);
         if (session?.refresh_token) localStorage.setItem('gh_refresh_token', session.refresh_token);
+        if (event === 'SIGNED_IN') linkAttribution(session); // Growth: link first-touch attribution to a new account
         // A background refresh (e.g. our own mobile session-restore fallback)
         // can restore auth after the UI already rendered logged-out — sync it.
         if (event === 'TOKEN_REFRESHED' && session?.user) {
@@ -18985,6 +18995,8 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
   });
   var [unread, setUnread] = useState(0);
   var messagesEndRef = useRef(null);
+  // Growth: let AI-chat leads inherit this visitor's campaign attribution
+  useEffect(function() { attachAiSession(sessionId); }, [sessionId]);
 
   var welcomeMessage = globalSettings?.ai_welcome_message || 'Hi 👋 I\'m the GetHome AI Agent. I can help you find a property, answer questions, or arrange an inspection. What are you looking for?';
   var aiName = globalSettings?.ai_name || 'GetHome AI';
