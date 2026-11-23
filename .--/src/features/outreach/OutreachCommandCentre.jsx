@@ -1,15 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
+import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate } from './shared';
+import { Badge, Msg } from './widgets';
+import { Dashboard, Discovery, Campaigns, Review, Replies, Setup } from './OutreachOps';
 
 // Outreach Command Centre: admin-only prospect CRM (phase 1). Talks to /api/growth/outreach/* with the
 // admin's Supabase token. Every number shown comes from the database; nothing here is computed client-side
 // except display formatting. Server-side rules (consent gate, roles, pipeline rules) are authoritative.
-const API = import.meta.env.VITE_API_URL || 'https://gethome-backend-7ocr.onrender.com';
-const GREEN = '#27ae60', NAVY = '#0a2240';
-const card = { backgroundColor: '#fff', borderRadius: 14, boxShadow: '0 2px 12px rgba(10,34,64,0.06)', border: '1.5px solid #e2e8f0', padding: 16, marginBottom: 12 };
-const input = { padding: '8px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: '0.85rem', width: '100%', boxSizing: 'border-box' };
-const btn = { padding: '7px 14px', border: 'none', borderRadius: 8, backgroundColor: GREEN, color: '#fff', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' };
-const btnSec = Object.assign({}, btn, { backgroundColor: NAVY });
-const btnGhost = Object.assign({}, btn, { backgroundColor: '#e2e8f0', color: '#334155' });
 const STAGES = ['new', 'qualified', 'permission_obtained', 'campaign_ready', 'contacted', 'interested', 'applied', 'approved', 'subscribed', 'lost'];
 const STAGE_LABEL = { new: 'Discovered', qualified: 'Qualified', permission_obtained: 'Permission Obtained', campaign_ready: 'Campaign Ready', contacted: 'Contacted', interested: 'Interested', applied: 'Registered', approved: 'Registered (verified)', subscribed: 'Subscribed', lost: 'Lost' };
 const MANUAL_STAGES = ['new', 'qualified', 'permission_obtained', 'campaign_ready', 'contacted', 'interested', 'lost'];
@@ -23,27 +19,6 @@ const REASONS = {
   contact_invalid: 'This contact is marked invalid.', contact_bounced: 'This contact bounced.', source_not_recorded: 'No source URL recorded for this contact.',
   no_contact: 'No contact of this type.', stage_subscribed: 'Already a paying agent.', stage_applied: 'Already registered on GetHome.', stage_approved: 'Already registered on GetHome.', stage_lost: 'Marked lost.',
 };
-
-function useApi() {
-  return useCallback(function (path, method, body, raw) {
-    const token = localStorage.getItem('gh_token');
-    return fetch(API + '/api/growth' + path, {
-      method: method || 'GET',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: body ? JSON.stringify(body) : undefined,
-    }).then(function (r) {
-      if (raw && r.ok) return r.blob();
-      return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) { const e = new Error(j.error || ('Request failed (' + r.status + ')')); e.status = r.status; e.body = j; throw e; }
-        return j;
-      });
-    });
-  }, []);
-}
-
-const fmtDate = (d) => (d ? new Date(d).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '');
-const Badge = ({ children, color }) => <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: '0.68rem', fontWeight: 700, backgroundColor: (color || '#64748b') + '22', color: color || '#64748b', marginRight: 4 }}>{children}</span>;
-const Msg = ({ m }) => (m ? <div style={{ color: m.ok ? GREEN : '#b91c1c', fontSize: '0.82rem', margin: '6px 0' }}>{m.text}</div> : null);
 
 function Pipeline({ api, onOpen }) {
   const [data, setData] = useState(null);
@@ -376,9 +351,9 @@ function AuditLog({ api }) {
 
 export default function OutreachCommandCentre() {
   const api = useApi();
-  const [view, setView] = useState('pipeline');
+  const [view, setView] = useState('dashboard');
   const [openId, setOpenId] = useState(null);
-  const tabs = [['pipeline', 'Pipeline'], ['prospects', 'Prospects'], ['duplicates', 'Duplicates'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
+  const tabs = [['dashboard', 'Dashboard'], ['pipeline', 'Pipeline'], ['discovery', 'Discovery'], ['prospects', 'Prospects'], ['duplicates', 'Duplicates'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['replies', 'Replies'], ['setup', 'Email & WhatsApp'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
   return (
     <div>
       <div style={{ fontWeight: 800, color: NAVY, fontSize: '1.1rem', marginBottom: 4 }}>Outreach Command Centre</div>
@@ -389,6 +364,12 @@ export default function OutreachCommandCentre() {
           return <button key={t[0]} onClick={function () { setView(t[0]); }} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', backgroundColor: active ? NAVY : '#f1f5f9', color: active ? '#fff' : '#334155' }}>{t[1]}</button>;
         })}
       </div>
+      {view === 'dashboard' && <Dashboard />}
+      {view === 'discovery' && <Discovery />}
+      {view === 'campaigns' && <Campaigns />}
+      {view === 'review' && <Review />}
+      {view === 'replies' && <Replies />}
+      {view === 'setup' && <Setup />}
       {view === 'pipeline' && <div>{openId && <ProspectPanel id={openId} api={api} onClose={function () { setOpenId(null); }} onChanged={function () { /* refreshed on reopen */ }} />}<Pipeline api={api} onOpen={setOpenId} /></div>}
       {view === 'prospects' && <Prospects api={api} openId={openId} setOpenId={setOpenId} />}
       {view === 'duplicates' && <Duplicates api={api} onOpen={function (id) { setOpenId(id); setView('prospects'); }} />}
