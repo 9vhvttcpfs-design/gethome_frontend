@@ -1,0 +1,18 @@
+# Rebuilds the Netlify site daily so the pre-rendered SEO landing pages and sitemap
+# pick up new and removed listings. Requires a repository secret NETLIFY_BUILD_HOOK
+# (Netlify > Site settings > Build & deploy > Build hooks). Does nothing until it is set.
+name: Daily SEO rebuild
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Netlify build hook
+        env:
+          HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then echo "NETLIFY_BUILD_HOOK secret not set; skipping"; exit 0; fi
+          curl -fsS -X POST -d '{}' "$HOOK"

@@ -5,6 +5,7 @@ import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
 import { formatLocalPrice } from './utils/pricing';
 import GrowthCRM from './features/growth/GrowthCRM';
+import { matchesCity } from './constants/cityAreas';
 import { gxSignupMeta, linkAttribution, attachAiSession } from './utils/growth';
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
@@ -17491,7 +17492,7 @@ function AppContent() {
       });
     }
     var effectiveFilterCity = filterCity === 'Other' ? customCity : filterCity;
-    if (filterCity !== 'All' && effectiveFilterCity) { result = result.filter(function(p) { return String(p.location || '').toLowerCase().includes(effectiveFilterCity.toLowerCase()); }); }
+    if (filterCity !== 'All' && effectiveFilterCity) { result = result.filter(function(p) { return matchesCity(p.location, effectiveFilterCity); }); }
     if (selectedPropertyType) {
       var t = selectedPropertyType.toLowerCase();
       result = result.filter(function(p) {
