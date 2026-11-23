@@ -19116,7 +19116,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
                     <div style={{ marginLeft: '32px', marginBottom: '8px' }}>
                       <a href={msg.contact.wa_link} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-block', padding: '10px 16px', borderRadius: '10px', backgroundColor: '#25D366', color: '#fff', fontWeight: '700', fontSize: '0.82rem', textDecoration: 'none' }}>
-                        {msg.contact.role === 'SA' ? 'Chat with your area Service Agent on WhatsApp' : msg.contact.role === 'GHA' ? 'Chat with your area GetHome Agent on WhatsApp' : 'Chat with GetHome support on WhatsApp'}
+                        {msg.contact.role === 'SA' ? 'Chat with your area Service Agent on WhatsApp' : 'Chat with GetHome Realestate on WhatsApp'}
                       </a>
                       {msg.contact.name && msg.contact.role !== 'GETHOME' && <div style={{ fontSize: '0.70rem', color: '#64748b', marginTop: '4px' }}>{msg.contact.name}</div>}
                     </div>
