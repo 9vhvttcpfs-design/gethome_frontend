@@ -361,6 +361,7 @@ export function Setup() {
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Email</div>
         <select style={Object.assign({}, input, { maxWidth: 320 })} value={s.email_provider} onChange={function (e) { save({ email_provider: e.target.value }); }}><option value="resend">Resend</option><option value="smtp">SMTP</option></select>
+        <div style={{ marginTop: 8, fontSize: '0.8rem' }}>WhatsApp contact line shown in outreach messages{' '}<input style={Object.assign({}, input, { maxWidth: 200, display: 'inline-block' })} defaultValue={s.outreach_whatsapp_number} onBlur={function (e) { if (e.target.value !== s.outreach_whatsapp_number) save({ outreach_whatsapp_number: e.target.value }); }} /></div>
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 6 }}>Sender name: "{s.email_sender_name}". Replies go to {s.reply_to_email}. Email only sends from a domain verified with your provider; set it with OUTREACH_FROM_EMAIL. Delivery and bounce tracking needs the Resend webhook (see setup notes).</div>
       </div>
       <div style={card}>
