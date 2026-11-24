@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate } from './shared';
 import { Badge, Msg } from './widgets';
 import { Dashboard, Discovery, Campaigns, Review, Replies, Setup } from './OutreachOps';
+import StartHere from './StartHere';
 
 // Outreach Command Centre: admin-only prospect CRM (phase 1). Talks to /api/growth/outreach/* with the
 // admin's Supabase token. Every number shown comes from the database; nothing here is computed client-side
@@ -351,19 +352,24 @@ function AuditLog({ api }) {
 
 export default function OutreachCommandCentre() {
   const api = useApi();
-  const [view, setView] = useState('dashboard');
+  const [view, setView] = useState('start');
+  const [advanced, setAdvanced] = useState(false);
   const [openId, setOpenId] = useState(null);
-  const tabs = [['dashboard', 'Dashboard'], ['pipeline', 'Pipeline'], ['discovery', 'Discovery'], ['prospects', 'Prospects'], ['duplicates', 'Duplicates'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['replies', 'Replies'], ['setup', 'Email & WhatsApp'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
+  const main = [['start', 'Start Here'], ['discovery', 'Find Agents'], ['prospects', 'Prospects'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['replies', 'Replies'], ['dashboard', 'Results']];
+  const more = [['pipeline', 'Pipeline'], ['duplicates', 'Duplicates'], ['setup', 'Email & WhatsApp'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
+  const tabs = advanced || more.some(function (t) { return t[0] === view; }) ? main.concat(more) : main;
   return (
     <div>
       <div style={{ fontWeight: 800, color: NAVY, fontSize: '1.1rem', marginBottom: 4 }}>Outreach Command Centre</div>
-      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12 }}>Agent and agency recruitment. Figures come straight from the database.</div>
+      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12 }}>Recruit agents and agencies. New here? Open Start Here.</div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {tabs.map(function (t) {
           const active = view === t[0];
           return <button key={t[0]} onClick={function () { setView(t[0]); }} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', backgroundColor: active ? NAVY : '#f1f5f9', color: active ? '#fff' : '#334155' }}>{t[1]}</button>;
         })}
+        <button onClick={function () { setAdvanced(!advanced); }} style={{ padding: '8px 12px', borderRadius: 10, border: '1.5px dashed #cbd5e1', cursor: 'pointer', fontSize: '0.78rem', background: 'none', color: '#64748b' }}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
       </div>
+      {view === 'start' && <StartHere go={setView} />}
       {view === 'dashboard' && <Dashboard />}
       {view === 'discovery' && <Discovery />}
       {view === 'campaigns' && <Campaigns />}
