@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate } from './shared';
 import { Badge, Msg } from './widgets';
-import { Dashboard, Discovery, Campaigns, Review, Replies, Setup } from './OutreachOps';
+import { Dashboard, Discovery, Campaigns, Review, BulkEmail, Replies, Setup } from './OutreachOps';
 import StartHere from './StartHere';
 
 // Outreach Command Centre: admin-only prospect CRM (phase 1). Talks to /api/growth/outreach/* with the
@@ -118,9 +118,9 @@ function ProspectPanel({ id, api, onClose, onChanged }) {
       </div>
       <div style={{ margin: '8px 0' }}>
         <Badge color={NAVY}>{STAGE_LABEL[p.stage] || p.stage}</Badge>
-        <Badge color={p.email_permission === 'granted' ? GREEN : '#64748b'}>email consent: {p.email_permission}</Badge>
+        <Badge color={p.email_permission === 'granted' ? GREEN : '#64748b'}>email consent: {p.email_permission} (not required)</Badge>
         <Badge color={p.whatsapp_permission === 'granted' ? GREEN : '#64748b'}>WhatsApp opt-in: {p.whatsapp_permission}</Badge>
-        {p.effective_email_permission === 'legitimate_interest' && <Badge color="#b45309">email via legitimate interest</Badge>}
+        {p.effective_email_permission === 'allowed' && <Badge color={GREEN}>email allowed (unsubscribe link added)</Badge>}
         {p.do_not_contact && <Badge color="#b91c1c">do not contact</Badge>}
         <Badge color="#64748b">emails sent without reply: {p.email_attempts}</Badge>
       </div>
@@ -225,7 +225,7 @@ function Prospects({ api, openId, setOpenId }) {
                   <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{(p.category || '').replace(/_/g, ' ')}</td>
                   <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{[p.city, p.state].filter(Boolean).join(', ')}</td>
                   <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{p.contacts.length} {p.contacts.some(function (c) { return c.verification_status === 'verified'; }) && <Badge color={GREEN}>verified</Badge>}</td>
-                  <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{p.effective_email_permission === 'consent' ? <Badge color={GREEN}>consent</Badge> : p.effective_email_permission === 'legitimate_interest' ? <Badge color="#b45309">legit. interest</Badge> : <Badge>none</Badge>}</td>
+                  <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{p.effective_email_permission === 'consent' ? <Badge color={GREEN}>consent</Badge> : p.effective_email_permission === 'allowed' ? <Badge color={GREEN}>email allowed</Badge> : <Badge>none</Badge>}</td>
                   <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9' }}>{STAGE_LABEL[p.stage] || p.stage}</td>
                   <td style={{ padding: 6, borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{fmtDate(p.discovered_at)}</td>
                 </tr>
@@ -275,13 +275,11 @@ function Duplicates({ api, onOpen }) {
 
 function Compliance({ api }) {
   const [settings, setSettings] = useState(null);
-  const [ack, setAck] = useState(null);
   const [sup, setSup] = useState({ total: 0, suppressions: [] });
   const [value, setValue] = useState('');
-  const [note, setNote] = useState('');
   const [msg, setMsg] = useState(null);
   const load = useCallback(function () {
-    api('/outreach/settings').then(function (j) { setSettings(j.settings); setAck(j.legitimate_interest_acknowledgement); }).catch(function (e) { setMsg({ text: e.message }); });
+    api('/outreach/settings').then(function (j) { setSettings(j.settings); }).catch(function (e) { setMsg({ text: e.message }); });
     api('/outreach/suppressions?limit=50').then(setSup).catch(function () { /* admin only */ });
   }, [api]);
   useEffect(load, [load]);
@@ -296,20 +294,10 @@ function Compliance({ api }) {
     <div>
       <Msg m={msg} />
       <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Legitimate-interest B2B email</div>
-        <div style={{ fontSize: '0.8rem', color: '#334155', marginBottom: 8 }}>
-          When ON, a first business-to-business email may be sent to a publicly listed business contact without prior consent, always with an unsubscribe link, and never more than {settings.max_email_attempts} unanswered attempts. WhatsApp is never covered by this: it always needs a recorded opt-in. Turn this on only after the Legitimate Interest Assessment has been completed and signed off.
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Who can be emailed</div>
+        <div style={{ fontSize: '0.8rem', color: '#334155' }}>
+          Recorded consent is <b>not</b> required for email. Anyone with an email address can be emailed unless they are marked do-not-contact, unsubscribed, on the suppression list below, bounced, or already registered. Every email carries an unsubscribe link, and no one is emailed more than {settings.max_email_attempts} times without replying. WhatsApp still needs a recorded opt-in.
         </div>
-        <Badge color={settings.li_b2b_email_enabled ? GREEN : '#64748b'}>{settings.li_b2b_email_enabled ? 'ON' : 'OFF'}</Badge>
-        {ack && <span style={{ fontSize: '0.74rem', color: '#64748b' }}>acknowledged by {ack.by} on {fmtDate(ack.at)}: "{ack.note}"</span>}
-        {settings.li_b2b_email_enabled ? (
-          <div style={{ marginTop: 8 }}><button style={btnGhost} onClick={function () { save({ li_b2b_email_enabled: false }, 'Legitimate-interest email switched off'); }}>Switch off</button></div>
-        ) : (
-          <div style={{ marginTop: 8 }}>
-            <input style={input} placeholder="Note: who completed the assessment and when (required)" value={note} onChange={function (e) { setNote(e.target.value); }} />
-            <button style={Object.assign({}, btn, { marginTop: 6 })} onClick={function () { save({ li_b2b_email_enabled: true, acknowledge_lia: true, lia_note: note }, 'Legitimate-interest email switched on'); }}>I confirm the assessment is complete: switch on</button>
-          </div>
-        )}
       </div>
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>Limits</div>
@@ -355,7 +343,7 @@ export default function OutreachCommandCentre() {
   const [view, setView] = useState('start');
   const [advanced, setAdvanced] = useState(false);
   const [openId, setOpenId] = useState(null);
-  const main = [['start', 'Start Here'], ['discovery', 'Find Agents'], ['prospects', 'Prospects'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['replies', 'Replies'], ['dashboard', 'Results']];
+  const main = [['start', 'Start Here'], ['discovery', 'Find Agents'], ['prospects', 'Prospects'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['bulk', 'Bulk Email'], ['replies', 'Replies'], ['dashboard', 'Results']];
   const more = [['pipeline', 'Pipeline'], ['duplicates', 'Duplicates'], ['setup', 'Email & WhatsApp'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
   const tabs = advanced || more.some(function (t) { return t[0] === view; }) ? main.concat(more) : main;
   return (
@@ -374,6 +362,7 @@ export default function OutreachCommandCentre() {
       {view === 'discovery' && <Discovery />}
       {view === 'campaigns' && <Campaigns />}
       {view === 'review' && <Review />}
+      {view === 'bulk' && <BulkEmail />}
       {view === 'replies' && <Replies />}
       {view === 'setup' && <Setup />}
       {view === 'pipeline' && <div>{openId && <ProspectPanel id={openId} api={api} onClose={function () { setOpenId(null); }} onChanged={function () { /* refreshed on reopen */ }} />}<Pipeline api={api} onOpen={setOpenId} /></div>}

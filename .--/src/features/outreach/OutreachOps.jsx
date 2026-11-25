@@ -136,7 +136,7 @@ export function Discovery() {
         {f.adapter === 'website' && <textarea style={Object.assign({}, input, { marginTop: 8 })} rows={4} placeholder="One agency website per line. Only public business contact details are read; robots.txt is obeyed." value={f.urls} onChange={set('urls')} />}
         <button style={Object.assign({}, btn, { marginTop: 8 })} onClick={create}>Create job</button>
         {d && <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 6 }}>Today: {d.used} of {d.limit} discovered ({d.remaining} left). Change the limit in Permissions & Limits.</div>}
-        <div style={{ fontSize: '0.72rem', color: '#92400e', marginTop: 6 }}>Finding a contact does not give permission to market to it. Nothing is sent until the permission rules allow it.</div>
+        <div style={{ fontSize: '0.72rem', color: '#92400e', marginTop: 6 }}>Anyone who opts out or bounces is never contacted again.</div>
       </div>
       <Table title="Jobs" rows={jobs.jobs} cols={[['Source', (r) => r.adapter], ['Where', (r) => [r.city, r.state].filter(Boolean).join(', ')], ['Status', (r) => r.status], ['Found', (r) => r.found_count], ['Added', (r) => r.inserted_count], ['Duplicates', (r) => r.duplicate_count], ['When', (r) => fmtDate(r.created_at)], ['Notes', (r) => r.error || '']]} />
       {jobs.jobs.filter(function (j) { return ['queued', 'running'].includes(j.status); }).map(function (j) {
@@ -232,7 +232,7 @@ function Templates({ tpls, reload }) {
   return (
     <div style={card}>
       <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Templates</div>
-      <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>Placeholders: {'{{contact_name}} {{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. The unsubscribe link and sender identity are added automatically to every email.</div>
+      <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>Placeholders: {'{{contact_name}} {{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. {'{{contact_name}}'} becomes the person's name, or Sir/Madam when none is recorded. The unsubscribe link and sender identity are added automatically to every email.</div>
       <Msg m={msg} />
       {tpls.filter(function (t) { return t.channel === 'email'; }).map(function (t) {
         const cur = edit[t.id];
@@ -282,12 +282,65 @@ export function Review() {
               <div>
                 {m.channel === 'email' && <input style={Object.assign({}, input, { margin: '6px 0' })} value={ed.subject || ''} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { subject: e.target.value }) })); }} />}
                 <textarea style={input} rows={8} value={ed.body} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { body: e.target.value }) })); }} />
+                {m.channel === 'email' && <input style={Object.assign({}, input, { marginTop: 6 })} placeholder="Optional picture: public image link (https://...)" value={ed.image_url !== undefined ? ed.image_url : ((m.personalization && m.personalization.image_url) || '')} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { image_url: e.target.value }) })); }} />}
                 <div style={{ marginTop: 6 }}><button style={btn} onClick={function () { act(api('/outreach/messages/' + m.id + '/approve', 'POST', edits[m.id] || {}), 'Approved'); }}>Approve</button> <button style={Object.assign({}, btnGhost, { color: '#b91c1c' })} onClick={function () { act(api('/outreach/messages/' + m.id + '/reject', 'POST'), 'Rejected: this prospect will not be contacted by this campaign'); }}>Reject</button></div>
               </div>
             ) : <div><div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{m.subject}</div><pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.78rem', margin: '4px 0' }}>{m.body}</pre><div style={{ fontSize: '0.72rem', color: '#64748b' }}>{m.status}{m.sent_at ? ' · sent ' + fmtDate(m.sent_at) : ''}{m.last_error ? ' · ' + m.last_error : ''}</div></div>}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ===================== Bulk email =====================
+const BULK_DEFAULT = 'Hello {{contact_name}},\n\nI am writing from {{sender_name}}. GetHome is a Nigerian property marketplace that connects property seekers with verified agents and agencies. We are inviting agents{{in_location}} to list their properties on the platform.\n\nYou can see how it works and register here: {{link}}\n\nIf you have questions, just reply to this email.\n\nKind regards,\n{{sender_name}}';
+export function BulkEmail() {
+  const api = useApi();
+  const [f, setF] = useState({ subject: 'Invitation to list your properties on GetHome', body: BULK_DEFAULT, image_url: '', state: '', category: '', limit: 100 });
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const set = (k) => (e) => setF(Object.assign({}, f, { [k]: e.target.value }));
+  function send() {
+    setMsg(null); setRes(null);
+    if (!f.subject.trim() || !f.body.trim()) { setMsg({ text: 'Subject and message are required.' }); return; }
+    if (!window.confirm('Send this email now to up to ' + (Number(f.limit) || 100) + ' matching prospects' + (f.state ? ' in ' + f.state : '') + '?')) return;
+    setBusy(true); setMsg({ ok: true, text: 'Sending... this can take up to a minute.' });
+    api('/outreach/bulk-send', 'POST', { subject: f.subject, body: f.body, image_url: f.image_url.trim() || undefined, state: f.state.trim() || undefined, category: f.category || undefined, limit: Number(f.limit) || 100 })
+      .then(function (r) { setRes(r); setMsg({ ok: true, text: 'Done.' }); })
+      .catch(function (e) { setMsg({ text: e.message }); })
+      .then(function () { setBusy(false); });
+  }
+  const s = res && res.sending;
+  return (
+    <div>
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Send one email to many prospects</div>
+        <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 8 }}>
+          Everyone marked do-not-contact, unsubscribed, bounced or already registered is skipped automatically, and anyone emailed in the last 3 days is skipped. Each person gets their own greeting: <code>{'{{contact_name}}'}</code> becomes their name, or Sir/Madam when no name is recorded. Other placeholders: {'{{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. An unsubscribe link is added automatically.
+        </div>
+        <input style={Object.assign({}, input, { marginBottom: 6 })} placeholder="Subject" value={f.subject} onChange={set('subject')} />
+        <textarea style={input} rows={11} value={f.body} onChange={set('body')} />
+        <input style={Object.assign({}, input, { marginTop: 6 })} placeholder="Optional picture: public image link (https://...)" value={f.image_url} onChange={set('image_url')} />
+        {f.image_url.trim() && /^https:\/\//.test(f.image_url.trim()) && <img src={f.image_url.trim()} alt="preview" style={{ maxWidth: 260, maxHeight: 140, marginTop: 6, borderRadius: 6, border: '1px solid #e2e8f0' }} />}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
+          <input style={Object.assign({}, input, { maxWidth: 160 })} placeholder="State (optional)" value={f.state} onChange={set('state')} />
+          <select style={Object.assign({}, input, { maxWidth: 210 })} value={f.category} onChange={set('category')}>
+            <option value="">All types</option><option value="independent_agent">Independent agents</option><option value="established_agency">Agencies</option><option value="commercial_agent">Commercial agents</option><option value="residential_agent">Residential agents</option><option value="property_consultant">Property consultants</option>
+          </select>
+          <label style={{ fontSize: '0.8rem' }}>Up to <input style={Object.assign({}, input, { maxWidth: 80, display: 'inline-block' })} type="number" min="1" max="200" value={f.limit} onChange={set('limit')} /> people</label>
+          <button style={btn} disabled={busy} onClick={send}>{busy ? 'Sending...' : 'Send to matching prospects'}</button>
+        </div>
+        <Msg m={msg} />
+        {res && (
+          <div style={{ fontSize: '0.82rem', color: '#334155', marginTop: 6 }}>
+            Matched <b>{res.matched}</b>, queued <b>{res.queued}</b>{s ? <span>, sent <b>{s.sent}</b>, failed {s.failed}, blocked {s.blocked}{s.stopped_reason ? ' (stopped: ' + String(s.stopped_reason).replace(/_/g, ' ') + ')' : ''}. Left in today's allowance: {s.remaining_today}.</span> : '.'}
+            <div>Skipped: {Object.keys(res.skipped || {}).length ? Object.keys(res.skipped).map(function (k) { return k.replace(/_/g, ' ') + ' ' + res.skipped[k]; }).join(', ') : 'none'}</div>
+            <div style={{ color: '#64748b', marginTop: 4 }}>{res.note}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -361,6 +414,7 @@ export function Setup() {
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Email</div>
         <select style={Object.assign({}, input, { maxWidth: 320 })} value={s.email_provider} onChange={function (e) { save({ email_provider: e.target.value }); }}><option value="resend">Resend</option><option value="smtp">SMTP</option></select>
+        <div style={{ marginTop: 8, fontSize: '0.8rem' }}>Logo shown at the top of every email (public https link, leave empty for none){' '}<input style={Object.assign({}, input, { maxWidth: 360, display: 'inline-block' })} placeholder="https://trygethome.online/logo.png" defaultValue={s.email_logo_url || ''} onBlur={function (e) { if (e.target.value.trim() !== (s.email_logo_url || '')) save({ email_logo_url: e.target.value.trim() }); }} />{s.email_logo_url && <img src={s.email_logo_url} alt="logo" style={{ maxHeight: 40, marginLeft: 8, verticalAlign: 'middle' }} />}</div>
         <div style={{ marginTop: 8, fontSize: '0.8rem' }}>WhatsApp contact line shown in outreach messages{' '}<input style={Object.assign({}, input, { maxWidth: 200, display: 'inline-block' })} defaultValue={s.outreach_whatsapp_number} onBlur={function (e) { if (e.target.value !== s.outreach_whatsapp_number) save({ outreach_whatsapp_number: e.target.value }); }} /></div>
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 6 }}>Sender name: "{s.email_sender_name}". Replies go to {s.reply_to_email}. Email only sends from a domain verified with your provider; set it with OUTREACH_FROM_EMAIL. Delivery and bounce tracking needs the Resend webhook (see setup notes).</div>
       </div>
