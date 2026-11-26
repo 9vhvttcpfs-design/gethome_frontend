@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate, parseCsv, money } from './shared';
-import { Badge, Msg, StateSelect, Field, Section } from './widgets';
+import { Badge, Msg, StateSelect, Field, Section, ImagePicker } from './widgets';
 
 // Outreach Command Centre phases 2-8: dashboard, discovery, campaigns, review & send, replies, setup.
 // Every figure is read from the backend; the server enforces permission, limits and role rules.
@@ -306,6 +306,10 @@ export function Review() {
   useEffect(load, [load]);
   const act = (p, t) => p.then(function () { setMsg({ ok: true, text: t }); load(); }).catch(function (e) { setMsg({ text: e.message }); });
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState({});
+  // Functional update: the upload finishes later, after the person may have typed in the other fields.
+  const setPicture = (m, url) => setEdits(function (all) { return Object.assign({}, all, { [m.id]: Object.assign({}, all[m.id] || { subject: m.subject, body: m.body }, { image_url: url }) }); });
+  const anyUploading = Object.values(uploading).some(Boolean);
   function sendNow() {
     setSending(true); setMsg({ ok: true, text: 'Sending...' });
     sendQueue(api, null, function (t) { setMsg({ ok: true, text: 'Sending... ' + t.sent + ' sent so far.' }); })
@@ -319,7 +323,7 @@ export function Review() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <select style={Object.assign({}, input, { width: 'auto' })} value={status} onChange={function (e) { setStatus(e.target.value); }}>{Object.keys(STATUS_NAMES).map(function (s) { return <option key={s} value={s}>{STATUS_NAMES[s]}</option>; })}</select>
         <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{list.length} shown</span>
-        {status === 'pending_approval' && list.length > 0 && <button style={btn} onClick={function () { act(api('/outreach/messages/approve-bulk', 'POST', { ids: list.map(function (m) { return m.id; }) }), 'Approved all shown'); }}>Approve all shown</button>}
+        {status === 'pending_approval' && list.length > 0 && <button style={btn} disabled={anyUploading} onClick={function () { act(api('/outreach/messages/approve-bulk', 'POST', { ids: list.map(function (m) { return m.id; }) }), 'Approved all shown'); }}>Approve all shown</button>}
         <button style={btnSec} disabled={sending} onClick={sendNow}>{sending ? 'Sending...' : 'Send approved now'}</button>
       </div>
       {!list.length && <div style={card}>Nothing in this list.</div>}
@@ -333,8 +337,8 @@ export function Review() {
               <div>
                 {m.channel === 'email' && <input style={Object.assign({}, input, { margin: '6px 0' })} value={ed.subject || ''} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { subject: e.target.value }) })); }} />}
                 <textarea style={input} rows={8} value={ed.body} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { body: e.target.value }) })); }} />
-                {m.channel === 'email' && <input style={Object.assign({}, input, { marginTop: 6 })} placeholder="Optional picture: public image link (https://...)" value={ed.image_url !== undefined ? ed.image_url : ((m.personalization && m.personalization.image_url) || '')} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { image_url: e.target.value }) })); }} />}
-                <div style={{ marginTop: 6 }}><button style={btn} onClick={function () { act(api('/outreach/messages/' + m.id + '/approve', 'POST', edits[m.id] || {}), 'Approved'); }}>Approve</button> <button style={Object.assign({}, btnGhost, { color: '#b91c1c' })} onClick={function () { act(api('/outreach/messages/' + m.id + '/reject', 'POST'), 'Rejected: this prospect will not be contacted by this campaign'); }}>Reject</button></div>
+                {m.channel === 'email' && <ImagePicker label="Picture (optional)" value={ed.image_url !== undefined ? ed.image_url : ((m.personalization && m.personalization.image_url) || '')} onChange={function (url) { setPicture(m, url); }} onBusy={function (b) { setUploading(function (u) { return Object.assign({}, u, { [m.id]: b }); }); }} />}
+                <div style={{ marginTop: 6 }}><button style={btn} disabled={!!uploading[m.id]} onClick={function () { act(api('/outreach/messages/' + m.id + '/approve', 'POST', edits[m.id] || {}), 'Approved'); }}>Approve</button> <button style={Object.assign({}, btnGhost, { color: '#b91c1c' })} onClick={function () { act(api('/outreach/messages/' + m.id + '/reject', 'POST'), 'Rejected: this prospect will not be contacted by this campaign'); }}>Reject</button></div>
               </div>
             ) : <div><div style={{ fontSize: '0.78rem', fontWeight: 700 }}>{m.subject}</div><pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.78rem', margin: '4px 0' }}>{m.body}</pre><div style={{ fontSize: '0.72rem', color: '#64748b' }}>{m.status}{m.sent_at ? ' · sent ' + fmtDate(m.sent_at) : ''}{m.last_error ? ' · ' + m.last_error : ''}</div></div>}
           </div>
@@ -358,9 +362,10 @@ export function BulkEmail({ go }) {
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);
-  const set = (k) => (e) => { setF(Object.assign({}, f, { [k]: e.target.value })); setRes(null); };
+  const [uploading, setUploading] = useState(false);
+  const set =(k) => (e) => { setF(Object.assign({}, f, { [k]: e.target.value })); setRes(null); };
   const audience = () => ({ state: f.state || undefined, category: f.category || undefined, limit: Number(f.limit), skip_recent_days: Number(f.skip) });
-  const content = () => ({ subject: f.subject, body: f.body, image_url: f.image_url.trim() || undefined });
+  const content = () => ({ subject: f.subject, body: f.body, image_url: f.image_url || undefined });
 
   async function run(kind) {
     setMsg(null); setRes(null);
@@ -403,15 +408,14 @@ export function BulkEmail({ go }) {
         <input style={Object.assign({}, input, { marginBottom: 6 })} placeholder="Subject" value={f.subject} onChange={set('subject')} />
         <textarea style={input} rows={11} value={f.body} onChange={set('body')} />
         <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}><code>{'{{contact_name}}'}</code> becomes their name, or Sir/Madam. Also: {'{{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. An unsubscribe link is added automatically.</div>
-        <input style={Object.assign({}, input, { marginTop: 6 })} placeholder="Optional picture: public image link (https://...)" value={f.image_url} onChange={set('image_url')} />
-        {f.image_url.trim() && /^https:\/\//.test(f.image_url.trim()) && <img src={f.image_url.trim()} alt="preview" style={{ maxWidth: 260, maxHeight: 140, marginTop: 6, borderRadius: 6, border: '1px solid #e2e8f0' }} />}
+        <ImagePicker label="Picture (optional)" value={f.image_url} onBusy={setUploading} onChange={function (url) { setF(function (cur) { return Object.assign({}, cur, { image_url: url }); }); setRes(null); }} />
       </div>
 
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>3. Send</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button style={btn} disabled={busy} onClick={function () { run('send'); }}>{busy ? 'Working...' : 'Send now'}</button>
-          <button style={btnSec} disabled={busy} onClick={function () { run('review'); }}>Save for my approval first</button>
+          <button style={btn} disabled={busy || uploading} onClick={function () { run('send'); }}>{busy ? 'Working...' : 'Send now'}</button>
+          <button style={btnSec} disabled={busy || uploading}onClick={function () { run('review'); }}>Save for my approval first</button>
           {res && res.mode === 'review' && res.queued > 0 && go && <button style={btnGhost} onClick={function () { go('review'); }}>Open Pending approval</button>}
         </div>
         <Msg m={msg} />
@@ -496,7 +500,7 @@ export function Setup() {
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Email</div>
         <select style={Object.assign({}, input, { maxWidth: 320 })} value={s.email_provider} onChange={function (e) { save({ email_provider: e.target.value }); }}><option value="resend">Resend</option><option value="smtp">SMTP</option></select>
-        <div style={{ marginTop: 8, fontSize: '0.8rem' }}>Logo shown at the top of every email (public https link, leave empty for none){' '}<input style={Object.assign({}, input, { maxWidth: 360, display: 'inline-block' })} placeholder="https://trygethome.online/logo.png" defaultValue={s.email_logo_url || ''} onBlur={function (e) { if (e.target.value.trim() !== (s.email_logo_url || '')) save({ email_logo_url: e.target.value.trim() }); }} />{s.email_logo_url && <img src={s.email_logo_url} alt="logo" style={{ maxHeight: 40, marginLeft: 8, verticalAlign: 'middle' }} />}</div>
+        <ImagePicker label="Logo shown at the top of every email (optional, saved as soon as you choose it)" value={s.email_logo_url || ''} onChange={function (url) { save({ email_logo_url: url }); }} />
         <div style={{ marginTop: 8, fontSize: '0.8rem' }}>WhatsApp contact line shown in outreach messages{' '}<input style={Object.assign({}, input, { maxWidth: 200, display: 'inline-block' })} defaultValue={s.outreach_whatsapp_number} onBlur={function (e) { if (e.target.value !== s.outreach_whatsapp_number) save({ outreach_whatsapp_number: e.target.value }); }} /></div>
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 6 }}>Sender name: "{s.email_sender_name}". Replies go to {s.reply_to_email}. Email only sends from a domain verified with your provider; set it with OUTREACH_FROM_EMAIL. Delivery and bounce tracking needs the Resend webhook (see setup notes).</div>
       </div>

@@ -26,7 +26,15 @@ export function useApi() {
   }, []);
 }
 
-export const fmtDate = (d) => (d ? new Date(d).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+// Stores a photo in the public media bucket and resolves with { url }. No Content-Type header: the browser sets the boundary.
+export function uploadImage(file) {
+  const fd = new FormData(); fd.append('file', file);
+  return fetch(API + '/api/growth/marketing/media', { method: 'POST', headers: { Authorization: 'Bearer ' + localStorage.getItem('gh_token') }, body: fd }).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || 'Upload failed (' + r.status + ')'); return j; });
+  });
+}
+
+export const fmtDate =(d) => (d ? new Date(d).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 // Minimal CSV parser (quoted fields, commas and newlines inside quotes). First row = headers, lower-cased.
 export function parseCsv(text) {
