@@ -5,13 +5,13 @@ import { Msg } from './widgets';
 // "Start Here": the whole outreach process in plain words, with a live checklist from the server.
 // The checklist only shows whether each setting exists, never its value.
 const STEPS = [
-  ['1', 'Find agents', 'Find Agents tab: pick a state or city and press Run, or upload a CSV. People found appear in Prospects.', 'discovery'],
-  ['2', 'Choose who you may contact', 'Prospects tab: open a person and check "Can we message this prospect?". Anyone who opted out or bounced is blocked automatically.', 'prospects'],
-  ['3', 'Start a campaign', 'Campaigns tab: create a campaign, enrol prospects, press Activate, then Prepare messages.', 'campaigns'],
-  ['4', 'Read and approve', 'Review & Send tab: read every message, approve the good ones, press Send approved now.', 'review'],
-  ['4b', 'Or email many at once', 'Bulk Email tab: write one message, add an optional picture, and send it to many prospects. Each person gets their own name in the greeting (Sir/Madam if no name).', 'bulk'],
-  ['5', 'Answer replies', 'Replies tab: answer anyone who replied. Follow-ups stop automatically when they reply or register.', 'replies'],
-  ['6', 'See results', 'Results tab: press Sync registrations & payments to see who registered and subscribed.', 'dashboard'],
+  ['1', 'Find agents', 'Find prospects: pick a state and press Find prospects. It searches the web. You can also upload a CSV.', 'discovery'],
+  ['2', 'Look over your list', 'Contacts > All prospects. Anyone who opted out or bounced is blocked automatically.', 'prospects'],
+  ['3', 'Email many at once', 'Send > Bulk email: choose a state, write your message, then Send now or save it for approval.', 'bulk'],
+  ['4', 'Read and approve', 'Send > Review and approve: read the saved messages, approve them, press Send approved now.', 'review'],
+  ['5', 'Add follow-ups (optional)', 'Send > Campaigns and follow-ups: create a campaign, enrol prospects, Activate, then Prepare messages.', 'campaigns'],
+  ['6', 'Answer replies', 'Replies: answer anyone who replied. Follow-ups stop automatically when they reply or register.', 'replies'],
+  ['7', 'See results', 'Results: press Sync registrations & payments to see who registered and subscribed.', 'dashboard'],
 ];
 
 function Dot({ ok, optional }) {
@@ -39,7 +39,7 @@ export default function StartHere({ go }) {
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>What this does</div>
         <div style={{ fontSize: '0.85rem', color: '#334155', lineHeight: 1.6 }}>
           It helps you <b>recruit agents and agencies</b> onto GetHome. It finds them, emails them an invitation (WhatsApp only if they agreed),
-          follows up, and tracks who registered and who pays a subscription. <b>Nothing is sent until you approve it.</b>{' '}
+          follows up, and tracks who registered and who pays a subscription. <b>Nothing is sent until you press send or approve it.</b>{' '}
           It does <b>not</b> find customers (people looking to rent or buy). Customers come from your listings, SEO, social posts and the lead form, and are tracked in the Growth CRM.
         </div>
       </div>
@@ -72,11 +72,11 @@ export default function StartHere({ go }) {
           );
         })}
         <div style={{ marginTop: 8, fontSize: '0.84rem', fontWeight: 700, color: d.required_ok ? GREEN : '#dc2626' }}>{d.required_ok ? 'Ready to send emails.' : 'Email is not ready yet. Fix the red items.'}</div>
-        <div style={{ marginTop: 4, fontSize: '0.78rem', color: '#64748b' }}>Email does not need recorded consent: anyone not marked do-not-contact or unsubscribed can be emailed, and every email has an unsubscribe link.</div>
+        <div style={{ marginTop: 4, fontSize: '0.78rem', color: '#64748b' }}>Email does not need recorded consent: anyone who can receive email and has not blocked you can be emailed, and every email has an unsubscribe link.</div>
       </div>}
 
       <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>The 6 steps</div>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>The steps</div>
         {STEPS.map(function (s) {
           return (
             <div key={s[0]} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderTop: '1px solid #f1f5f9' }}>

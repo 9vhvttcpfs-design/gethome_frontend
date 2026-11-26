@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate, parseCsv, money } from './shared';
-import { Badge, Msg } from './widgets';
+import { Badge, Msg, StateSelect, Field, Section } from './widgets';
 
 // Outreach Command Centre phases 2-8: dashboard, discovery, campaigns, review & send, replies, setup.
 // Every figure is read from the backend; the server enforces permission, limits and role rules.
@@ -56,7 +56,7 @@ export function Dashboard() {
     <div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
         {[7, 30, 90].map(function (d) { return <button key={d} style={d === days ? btnSec : btnGhost} onClick={function () { setDays(d); }}>{d} days</button>; })}
-        <input style={Object.assign({}, input, { maxWidth: 150 })} placeholder="State" value={state} onChange={function (e) { setState(e.target.value); }} />
+        <StateSelect style={{ maxWidth: 170 }} value={state} onChange={setState} />
         <select style={Object.assign({}, input, { maxWidth: 220 })} value={campaign} onChange={function (e) { setCampaign(e.target.value); }}><option value="">All campaigns</option>{camps.map(function (c) { return <option key={c.id} value={c.id}>{c.name}</option>; })}</select>
         <button style={btn} onClick={function () { api('/outreach/conversions/sync', 'POST').then(function (r) { setMsg({ ok: true, text: 'Synced: ' + r.linked + ' linked, ' + r.registered + ' new registrations, ' + r.subscribed_payments + ' verified payments' }); load(); }).catch(function (e) { setMsg({ text: e.message }); }); }}>Sync registrations & payments</button>
       </div>
@@ -88,66 +88,92 @@ export function Dashboard() {
 }
 
 // ===================== Discovery (phase 2) =====================
-export function Discovery() {
+const SOURCE_NAMES = { web: 'Web search', website: 'My website list', osm: 'OpenStreetMap' };
+export function Discovery({ go }) {
   const api = useApi();
   const [adapters, setAdapters] = useState([]);
   const [jobs, setJobs] = useState({ jobs: [], daily: null });
-  const [f, setF] = useState({ adapter: 'osm', state: '', city: '', target: 'agency', limit: 100, urls: '' });
+  const [f, setF] = useState({ adapter: 'web', state: '', city: '', target: 'agency', limit: 50, urls: '' });
   const [csv, setCsv] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState(0);
+  const stop = useRef(false);
   const load = useCallback(function () {
     api('/outreach/discovery/adapters').then(setAdapters).catch(function (e) { setMsg({ text: e.message }); });
     api('/outreach/discovery/jobs').then(setJobs).catch(function () { /* admin only */ });
   }, [api]);
   useEffect(load, [load]);
+  useEffect(function () { return function () { stop.current = true; }; }, []);
   const set = (k) => (e) => setF(Object.assign({}, f, { [k]: e.target.value }));
-  function create() {
-    setMsg(null);
-    const body = { adapter: f.adapter, state: f.state, city: f.city, target: f.target, limit: Number(f.limit) || 100 };
-    if (f.adapter === 'website') body.urls = f.urls.split(/\s+/).map(function (u) { return u.trim(); }).filter(Boolean);
-    api('/outreach/discovery/jobs', 'POST', body).then(function () { setMsg({ ok: true, text: 'Job created. Press Run on it below.' }); load(); }).catch(function (e) { setMsg({ text: e.message }); });
+
+  // Runs a job round after round until the source has nothing more, the limit is reached or Stop is pressed.
+  async function runJob(id) {
+    stop.current = false; setBusy(true); setAdded(0);
+    const total = { found: 0, inserted: 0, duplicates: 0 };
+    try {
+      for (let round = 1; round <= 15; round++) {
+        setMsg({ ok: true, text: 'Searching... added ' + total.inserted + ' so far. Each round can take a minute or two.' });
+        const r = await api('/outreach/discovery/jobs/' + id + '/run', 'POST');
+        total.found += r.found; total.inserted += r.inserted; total.duplicates += r.duplicates; setAdded(total.inserted);
+        load();
+        if (r.done || stop.current) break;
+      }
+      setMsg({ ok: true, text: 'Finished. Found ' + total.found + ', added ' + total.inserted + ' new, ' + total.duplicates + ' already in your list.' });
+    } catch (e) {
+      setMsg({ text: e.message + (total.inserted ? ' (' + total.inserted + ' were added before this)' : '') });
+    }
+    setBusy(false); load();
   }
-  function run(id) {
-    setBusy(true); setMsg({ ok: true, text: 'Running... this can take up to a minute.' });
-    api('/outreach/discovery/jobs/' + id + '/run', 'POST').then(function (r) {
-      setMsg({ ok: true, text: 'Found ' + r.found + ', added ' + r.inserted + ' new, ' + r.duplicates + ' duplicates, ' + r.invalid + ' rejected. ' + r.email_domains_checked + ' email domains checked (' + r.email_domains_invalid + ' invalid).' + (r.done ? '' : ' More to do: press Run again.') + (r.notes ? ' Notes: ' + r.notes : '') });
-      load();
-    }).catch(function (e) { setMsg({ text: e.message }); load(); }).then(function () { setBusy(false); });
+  async function find() {
+    setMsg(null);
+    if (f.adapter !== 'website' && !f.state) { setMsg({ text: 'Choose a state first.' }); return; }
+    const body = { adapter: f.adapter, state: f.state, city: f.city, target: f.target, limit: Number(f.limit) || 50 };
+    if (f.adapter === 'website') body.urls = f.urls.split(/\s+/).map(function (u) { return u.trim(); }).filter(Boolean);
+    try { const job = await api('/outreach/discovery/jobs', 'POST', body); await runJob(job.id); }
+    catch (e) { setMsg({ text: e.message }); }
   }
   function importCsv() {
     const rows = parseCsv(csv); if (!rows.length) { setMsg({ text: 'Nothing to import' }); return; }
     api('/outreach/discovery/import', 'POST', { rows: rows }).then(function (r) { setMsg({ ok: true, text: 'Imported ' + r.inserted + ', merged ' + r.duplicates + ' duplicates, rejected ' + r.invalid + (r.errors.length ? ': ' + r.errors.slice(0, 4).map(function (e) { return 'row ' + e.row + ' ' + e.error; }).join('; ') : '') }); setCsv(''); load(); }).catch(function (e) { setMsg({ text: e.message }); });
   }
   const d = jobs.daily;
+  const chosen = adapters.filter(function (a) { return a.id === f.adapter; })[0];
+  const unfinished = jobs.jobs.filter(function (j) { return ['queued', 'running'].includes(j.status); });
   return (
     <div>
-      <Msg m={msg} />
       <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Find prospects</div>
-        {adapters.filter(function (a) { return a.id === f.adapter; }).map(function (a) { return <div key={a.id} style={{ fontSize: '0.78rem', color: '#334155', marginBottom: 8 }}>{a.description} <em style={{ color: '#64748b' }}>{a.limits}</em></div>; })}
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>Find agencies and agents</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 8 }}>
-          <select style={input} value={f.adapter} onChange={set('adapter')}>{adapters.filter(function (a) { return a.id !== 'provider'; }).map(function (a) { return <option key={a.id} value={a.id}>{a.label}</option>; })}</select>
-          <input style={input} placeholder="State (e.g. Lagos)" value={f.state} onChange={set('state')} />
-          <input style={input} placeholder="City (optional)" value={f.city} onChange={set('city')} />
-          <select style={input} value={f.target} onChange={set('target')}><option value="agency">Agencies</option><option value="agent">Independent agents</option><option value="both">Both</option></select>
-          <input style={input} type="number" placeholder="Max to add" value={f.limit} onChange={set('limit')} />
+          <Field label="Search method"><select style={input} value={f.adapter} onChange={set('adapter')}>{adapters.filter(function (a) { return a.id !== 'provider'; }).map(function (a) { return <option key={a.id} value={a.id}>{a.label}</option>; })}</select></Field>
+          <Field label="State or region"><StateSelect any="Choose a state" value={f.state} onChange={function (v) { setF(Object.assign({}, f, { state: v })); }} /></Field>
+          <Field label="City (optional)"><input style={input} value={f.city} onChange={set('city')} /></Field>
+          <Field label="Looking for"><select style={input} value={f.target} onChange={set('target')}><option value="agency">Agencies</option><option value="agent">Independent agents</option><option value="both">Both</option></select></Field>
+          <Field label="Add up to"><select style={input} value={f.limit} onChange={set('limit')}>{[25, 50, 100, 200].map(function (n) { return <option key={n} value={n}>{n} new prospects</option>; })}</select></Field>
         </div>
-        {f.adapter === 'website' && <textarea style={Object.assign({}, input, { marginTop: 8 })} rows={4} placeholder="One agency website per line. Only public business contact details are read; robots.txt is obeyed." value={f.urls} onChange={set('urls')} />}
-        <button style={Object.assign({}, btn, { marginTop: 8 })} onClick={create}>Create job</button>
-        {d && <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 6 }}>Today: {d.used} of {d.limit} discovered ({d.remaining} left). Change the limit in Permissions & Limits.</div>}
-        <div style={{ fontSize: '0.72rem', color: '#92400e', marginTop: 6 }}>Anyone who opts out or bounces is never contacted again.</div>
+        {chosen && <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: 8 }}>{chosen.description} <em style={{ color: '#64748b' }}>{chosen.limits}</em></div>}
+        {f.adapter === 'website' && <textarea style={Object.assign({}, input, { marginTop: 8 })} rows={4} placeholder="One agency website per line" value={f.urls} onChange={set('urls')} />}
+        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button style={btn} disabled={busy} onClick={find}>{busy ? 'Searching...' : 'Find prospects'}</button>
+          {busy && <button style={btnGhost} onClick={function () { stop.current = true; }}>Stop after this round</button>}
+          {!busy && added > 0 && go && <button style={btnSec} onClick={function () { go('prospects'); }}>See prospects</button>}
+        </div>
+        <Msg m={msg} />
+        {d && <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 6 }}>Today: {d.used} of {d.limit} added ({d.remaining} left). Change the limit in Settings.</div>}
       </div>
-      <Table title="Jobs" rows={jobs.jobs} cols={[['Source', (r) => r.adapter], ['Where', (r) => [r.city, r.state].filter(Boolean).join(', ')], ['Status', (r) => r.status], ['Found', (r) => r.found_count], ['Added', (r) => r.inserted_count], ['Duplicates', (r) => r.duplicate_count], ['When', (r) => fmtDate(r.created_at)], ['Notes', (r) => r.error || '']]} />
-      {jobs.jobs.filter(function (j) { return ['queued', 'running'].includes(j.status); }).map(function (j) {
-        return <div key={j.id} style={{ marginBottom: 6 }}><button style={btn} disabled={busy} onClick={function () { run(j.id); }}>Run: {j.adapter} {[j.city, j.state].filter(Boolean).join(', ')}</button> <button style={btnGhost} onClick={function () { api('/outreach/discovery/jobs/' + j.id + '/cancel', 'POST').then(load); }}>Cancel</button></div>;
+
+      {!busy && unfinished.map(function (j) {
+        return <div key={j.id} style={{ marginBottom: 6 }}><button style={btnSec} onClick={function () { runJob(j.id); }}>Continue: {SOURCE_NAMES[j.adapter] || j.adapter} {[j.city, j.state].filter(Boolean).join(', ')}</button> <button style={btnGhost} onClick={function () { api('/outreach/discovery/jobs/' + j.id + '/cancel', 'POST').then(load); }}>Cancel</button></div>;
       })}
-      <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Import a CSV list</div>
+
+      <Section title="Past searches" hint={jobs.jobs.length + ' shown'}>
+        <Table rows={jobs.jobs} cols={[['Method', (r) => SOURCE_NAMES[r.adapter] || r.adapter], ['Where', (r) => [r.city, r.state].filter(Boolean).join(', ')], ['Status', (r) => r.status], ['Found', (r) => r.found_count], ['Added', (r) => r.inserted_count], ['Already had', (r) => r.duplicate_count], ['When', (r) => fmtDate(r.created_at)], ['Notes', (r) => r.error || '']]} />
+      </Section>
+      <Section title="Import a list you already have (CSV)">
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>Header row with: business_name, contact_person, category, state, city, email, phone, website, source_url, notes. Duplicates are merged, not re-added. Only import lists you are entitled to use.</div>
         <textarea style={Object.assign({}, input, { fontFamily: 'monospace' })} rows={5} value={csv} onChange={function (e) { setCsv(e.target.value); }} placeholder={'business_name,email,phone,state,city,source_url\nPrime Haven,info@primehaven.ng,08031234567,Lagos,Ikeja,https://primehaven.ng/contact'} />
         <button style={Object.assign({}, btn, { marginTop: 6 })} onClick={importCsv}>Import</button>
-      </div>
+      </Section>
     </div>
   );
 }
@@ -192,15 +218,14 @@ export function Campaigns() {
               {c.status !== 'active' && <button style={btn} onClick={function () { act(api('/outreach/campaigns/' + c.id, 'PATCH', { status: 'active' }), c.status === 'paused' ? 'Resumed' : 'Activated'); }}>{c.status === 'paused' ? 'Resume' : 'Activate'}</button>}
               {c.status === 'active' && <button style={btnSec} onClick={function () { act(api('/outreach/campaigns/' + c.id, 'PATCH', { status: 'paused' }), 'Paused'); }}>Pause</button>}
               <button style={Object.assign({}, btnGhost, { color: '#b91c1c' })} onClick={function () { if (window.confirm('Stop this campaign for good? Unsent messages are cancelled and it cannot be restarted.')) act(api('/outreach/campaigns/' + c.id, 'PATCH', { status: 'stopped' }), 'Stopped'); }}>Stop</button>
-              <input style={Object.assign({}, input, { maxWidth: 130 })} placeholder="State filter" value={e.state} onChange={function (ev) { setEnrol(Object.assign({}, enrol, { [c.id]: Object.assign({}, e, { state: ev.target.value }) })); }} />
-              <button style={btnSec} onClick={function () { act(api('/outreach/campaigns/' + c.id + '/enroll', 'POST', { state: e.state || undefined, limit: Number(e.limit) || 50 }), function (r) { return 'Enrolled ' + r.enrolled + '. Skipped: ' + (Object.keys(r.skipped).map(function (k) { return k.replace(/_/g, ' ') + ' ' + r.skipped[k]; }).join(', ') || 'none'); }); }}>Enrol qualified prospects</button>
+              <StateSelect style={{ maxWidth: 160 }} value={e.state} onChange={function (v) { setEnrol(Object.assign({}, enrol, { [c.id]: Object.assign({}, e, { state: v }) })); }} />
+              <button style={btnSec} onClick={function () { act(api('/outreach/campaigns/' + c.id + '/enroll', 'POST', { state: e.state || undefined, limit: Number(e.limit) || 50 }), function (r) { return 'Enrolled ' + r.enrolled + '. Skipped: ' + (Object.keys(r.skipped).map(function (k) { return k.replace(/_/g, ' ') + ' ' + r.skipped[k]; }).join(', ') || 'none'); }); }}>Enrol prospects</button>
               {c.status === 'active' && <button style={btnSec} onClick={function () { act(api('/outreach/campaigns/' + c.id + '/prepare', 'POST'), function (r) { return 'Prepared ' + r.prepared + ' messages for review'; }); }}>Prepare messages</button>}
             </div>
           </div>
         );
       })}
-      <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>New campaign</div>
+      <Section title="New campaign">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8 }}>
           <input style={input} placeholder="Name" value={nc.name} onChange={function (e) { setNc(Object.assign({}, nc, { name: e.target.value })); }} />
           <select style={input} value={nc.sequence_id} onChange={function (e) { setNc(Object.assign({}, nc, { sequence_id: e.target.value })); }}><option value="">Choose a sequence</option>{seqs.map(function (s) { return <option key={s.id} value={s.id}>{s.name}</option>; })}</select>
@@ -208,9 +233,8 @@ export function Campaigns() {
           <label style={{ fontSize: '0.8rem' }}><input type="checkbox" checked={nc.approval_required} onChange={function (e) { setNc(Object.assign({}, nc, { approval_required: e.target.checked })); }} /> Require my approval before sending</label>
         </div>
         <button style={Object.assign({}, btn, { marginTop: 8 })} onClick={function () { act(api('/outreach/campaigns', 'POST', Object.assign({}, nc, { daily_send_limit: nc.daily_send_limit || undefined })), 'Campaign created (draft). Enrol prospects, then activate it.'); }}>Create campaign</button>
-      </div>
-      <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>New follow-up sequence</div>
+      </Section>
+      <Section title="New follow-up sequence">
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>An invitation plus up to two follow-ups. Follow-ups stop automatically on a reply, registration, opt-out or bounce, and never go beyond the attempt limit in Permissions & Limits.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8 }}>
           <input style={input} placeholder="Sequence name" value={ns.name} onChange={function (e) { setNs(Object.assign({}, ns, { name: e.target.value })); }} />
@@ -219,7 +243,7 @@ export function Campaigns() {
           <input style={input} type="number" min="1" placeholder="Days after step 1" value={ns.d2} onChange={function (e) { setNs(Object.assign({}, ns, { d2: e.target.value })); }} />
         </div>
         <button style={Object.assign({}, btn, { marginTop: 8 })} onClick={createSeq}>Create sequence</button>
-      </div>
+      </Section>
       <Templates tpls={tpls} reload={load} />
     </div>
   );
@@ -230,8 +254,7 @@ function Templates({ tpls, reload }) {
   const [edit, setEdit] = useState({});
   const [msg, setMsg] = useState(null);
   return (
-    <div style={card}>
-      <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Templates</div>
+    <Section title="Email templates">
       <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>Placeholders: {'{{contact_name}} {{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. {'{{contact_name}}'} becomes the person's name, or Sir/Madam when none is recorded. The unsubscribe link and sender identity are added automatically to every email.</div>
       <Msg m={msg} />
       {tpls.filter(function (t) { return t.channel === 'email'; }).map(function (t) {
@@ -249,11 +272,30 @@ function Templates({ tpls, reload }) {
           </div>
         );
       })}
-    </div>
+    </Section>
   );
 }
 
 // ===================== Review & send (phase 4) =====================
+const STATUS_NAMES = { pending_approval: 'Pending approval', approved: 'Approved, waiting to send', sent: 'Sent', delivered: 'Delivered', bounced: 'Bounced', replied: 'Replied', cancelled: 'Cancelled', failed: 'Failed' };
+const STOP_TEXT = { daily_limit: 'Today\'s email limit is used up. The rest stays queued. You can raise the limit in Settings.', email_not_configured: 'Email sending is not set up on the server.', provider_error: 'The email service rejected several messages in a row, so sending stopped.' };
+
+// Calls the sending pass until nothing more can go out, so one press sends the whole approved queue.
+async function sendQueue(api, first, onProgress) {
+  const total = { sent: 0, failed: 0, blocked: 0, stopped_reason: null, last_error: null, remaining_today: null };
+  let r = first || await api('/outreach/queue/process', 'POST', { max: 50 });
+  for (let i = 0; i < 8; i++) {
+    total.sent += r.sent; total.failed += r.failed; total.blocked += r.blocked; total.stopped_reason = r.stopped_reason; total.last_error = r.last_error || total.last_error; total.remaining_today = r.remaining_today;
+    if (onProgress) onProgress(total);
+    if (STOP_TEXT[r.stopped_reason] || (!first && !r.sent) || (i === 7)) break;
+    first = null;
+    r = await api('/outreach/queue/process', 'POST', { max: 50 });
+    if (!r.sent && !r.failed && !r.blocked) { total.stopped_reason = r.stopped_reason; total.last_error = r.last_error || total.last_error; break; }
+  }
+  return total;
+}
+const sendSummary = (t) => 'Sent ' + t.sent + (t.failed ? ', failed ' + t.failed : '') + (t.blocked ? ', blocked ' + t.blocked : '') + '.' + (STOP_TEXT[t.stopped_reason] ? ' ' + STOP_TEXT[t.stopped_reason] : '') + (t.last_error ? ' Reason given: ' + t.last_error : '');
+
 export function Review() {
   const api = useApi();
   const [list, setList] = useState([]);
@@ -263,13 +305,22 @@ export function Review() {
   const load = useCallback(function () { api('/outreach/messages?limit=100&status=' + status).then(setList).catch(function (e) { setMsg({ text: e.message }); }); }, [api, status]);
   useEffect(load, [load]);
   const act = (p, t) => p.then(function () { setMsg({ ok: true, text: t }); load(); }).catch(function (e) { setMsg({ text: e.message }); });
+  const [sending, setSending] = useState(false);
+  function sendNow() {
+    setSending(true); setMsg({ ok: true, text: 'Sending...' });
+    sendQueue(api, null, function (t) { setMsg({ ok: true, text: 'Sending... ' + t.sent + ' sent so far.' }); })
+      .then(function (t) { setMsg({ ok: !t.failed && !STOP_TEXT[t.stopped_reason], text: sendSummary(t) }); load(); })
+      .catch(function (e) { setMsg({ text: e.message }); })
+      .then(function () { setSending(false); });
+  }
   return (
     <div>
       <Msg m={msg} />
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
-        {['pending_approval', 'approved', 'sent', 'delivered', 'bounced', 'replied', 'cancelled', 'failed'].map(function (s) { return <button key={s} style={s === status ? btnSec : btnGhost} onClick={function () { setStatus(s); }}>{s.replace('_', ' ')}</button>; })}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select style={Object.assign({}, input, { width: 'auto' })} value={status} onChange={function (e) { setStatus(e.target.value); }}>{Object.keys(STATUS_NAMES).map(function (s) { return <option key={s} value={s}>{STATUS_NAMES[s]}</option>; })}</select>
+        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{list.length} shown</span>
         {status === 'pending_approval' && list.length > 0 && <button style={btn} onClick={function () { act(api('/outreach/messages/approve-bulk', 'POST', { ids: list.map(function (m) { return m.id; }) }), 'Approved all shown'); }}>Approve all shown</button>}
-        <button style={btnSec} onClick={function () { act(api('/outreach/queue/process', 'POST', {}), 'Sending pass finished (see counts on the Campaigns tab)'); }}>Send approved now</button>
+        <button style={btnSec} disabled={sending} onClick={sendNow}>{sending ? 'Sending...' : 'Send approved now'}</button>
       </div>
       {!list.length && <div style={card}>Nothing in this list.</div>}
       {list.map(function (m) {
@@ -295,49 +346,80 @@ export function Review() {
 
 // ===================== Bulk email =====================
 const BULK_DEFAULT = 'Hello {{contact_name}},\n\nI am writing from {{sender_name}}. GetHome is a Nigerian property marketplace that connects property seekers with verified agents and agencies. We are inviting agents{{in_location}} to list their properties on the platform.\n\nYou can see how it works and register here: {{link}}\n\nIf you have questions, just reply to this email.\n\nKind regards,\n{{sender_name}}';
-export function BulkEmail() {
+const SKIP_TEXT = {
+  no_email: 'have no email address', suppressed: 'are on the do-not-contact list', opted_out: 'opted out', contact_bounced: 'bounced before', contact_invalid: 'have an invalid address',
+  consent_withdrawn: 'withdrew consent', said_not_interested: 'said they are not interested', emailed_recently: 'were emailed recently', same_address_twice: 'share an address already included', could_not_save: 'could not be saved',
+};
+const skippedList = (s) => Object.keys(s || {}).map(function (k) { return <li key={k}>{s[k]} {SKIP_TEXT[k] || k.replace(/_/g, ' ')}</li>; });
+
+export function BulkEmail({ go }) {
   const api = useApi();
-  const [f, setF] = useState({ subject: 'Invitation to list your properties on GetHome', body: BULK_DEFAULT, image_url: '', state: '', category: '', limit: 100 });
+  const [f, setF] = useState({ subject: 'Invitation to list your properties on GetHome', body: BULK_DEFAULT, image_url: '', state: '', category: '', limit: 100, skip: 0 });
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);
-  const set = (k) => (e) => setF(Object.assign({}, f, { [k]: e.target.value }));
-  function send() {
+  const set = (k) => (e) => { setF(Object.assign({}, f, { [k]: e.target.value })); setRes(null); };
+  const audience = () => ({ state: f.state || undefined, category: f.category || undefined, limit: Number(f.limit), skip_recent_days: Number(f.skip) });
+  const content = () => ({ subject: f.subject, body: f.body, image_url: f.image_url.trim() || undefined });
+
+  async function run(kind) {
     setMsg(null); setRes(null);
-    if (!f.subject.trim() || !f.body.trim()) { setMsg({ text: 'Subject and message are required.' }); return; }
-    if (!window.confirm('Send this email now to up to ' + (Number(f.limit) || 100) + ' matching prospects' + (f.state ? ' in ' + f.state : '') + '?')) return;
-    setBusy(true); setMsg({ ok: true, text: 'Sending... this can take up to a minute.' });
-    api('/outreach/bulk-send', 'POST', { subject: f.subject, body: f.body, image_url: f.image_url.trim() || undefined, state: f.state.trim() || undefined, category: f.category || undefined, limit: Number(f.limit) || 100 })
-      .then(function (r) { setRes(r); setMsg({ ok: true, text: 'Done.' }); })
-      .catch(function (e) { setMsg({ text: e.message }); })
-      .then(function () { setBusy(false); });
+    if (kind !== 'check' && (!f.subject.trim() || !f.body.trim())) { setMsg({ text: 'Subject and message are required.' }); return; }
+    if (kind === 'send' && !window.confirm('Send this email now to up to ' + f.limit + ' prospects' + (f.state ? ' in ' + f.state : '') + '?')) return;
+    setBusy(true); setMsg({ ok: true, text: kind === 'check' ? 'Checking...' : 'Preparing the emails...' });
+    try {
+      const body = Object.assign(audience(), kind === 'check' ? { dry_run: true } : Object.assign(content(), { mode: kind }));
+      const r = await api('/outreach/bulk-send', 'POST', body);
+      setRes(r);
+      if (kind === 'check') setMsg(null);
+      else if (!r.queued) setMsg({ text: 'Nothing was sent: no matching prospect can be emailed. See the reasons below.' });
+      else if (kind === 'review') setMsg({ ok: true, text: r.queued + ' emails saved under Pending approval.' });
+      else {
+        const t = await sendQueue(api, r.sending, function (x) { setMsg({ ok: true, text: 'Sending... ' + x.sent + ' of ' + r.queued + ' sent.' }); });
+        setMsg({ ok: !t.failed && !STOP_TEXT[t.stopped_reason], text: sendSummary(t) });
+      }
+    } catch (e) { setMsg({ text: e.message }); }
+    setBusy(false);
   }
-  const s = res && res.sending;
+
   return (
     <div>
       <div style={card}>
-        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Send one email to many prospects</div>
-        <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 8 }}>
-          Everyone marked do-not-contact, unsubscribed, bounced or already registered is skipped automatically, and anyone emailed in the last 3 days is skipped. Each person gets their own greeting: <code>{'{{contact_name}}'}</code> becomes their name, or Sir/Madam when no name is recorded. Other placeholders: {'{{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. An unsubscribe link is added automatically.
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>1. Who should receive it</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8 }}>
+          <Field label="State"><StateSelect value={f.state} onChange={function (v) { setF(Object.assign({}, f, { state: v })); setRes(null); }} /></Field>
+          <Field label="Type"><select style={input} value={f.category} onChange={set('category')}>
+            <option value="">All types</option><option value="independent_agent">Independent agents</option><option value="established_agency">Agencies</option><option value="commercial_agent">Commercial agents</option><option value="residential_agent">Residential agents</option><option value="property_consultant">Property consultants</option>
+          </select></Field>
+          <Field label="How many"><select style={input} value={f.limit} onChange={set('limit')}>{[25, 50, 100, 200, 500].map(function (n) { return <option key={n} value={n}>Up to {n}</option>; })}</select></Field>
+          <Field label="Already emailed"><select style={input} value={f.skip} onChange={set('skip')}><option value={0}>Include them</option><option value={3}>Leave out last 3 days</option><option value={7}>Leave out last 7 days</option><option value={30}>Leave out last 30 days</option></select></Field>
         </div>
+        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 8 }}>People you have never emailed go first. Only those with no email address, who bounced, or who blocked you (unsubscribed, opted out, said not interested) are skipped.</div>
+        <button style={Object.assign({}, btnGhost, { marginTop: 8 })} disabled={busy} onClick={function () { run('check'); }}>Check who will receive it</button>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>2. Your message</div>
         <input style={Object.assign({}, input, { marginBottom: 6 })} placeholder="Subject" value={f.subject} onChange={set('subject')} />
         <textarea style={input} rows={11} value={f.body} onChange={set('body')} />
+        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 4 }}><code>{'{{contact_name}}'}</code> becomes their name, or Sir/Madam. Also: {'{{business_name}} {{city}} {{state}} {{in_location}} {{link}} {{sender_name}}'}. An unsubscribe link is added automatically.</div>
         <input style={Object.assign({}, input, { marginTop: 6 })} placeholder="Optional picture: public image link (https://...)" value={f.image_url} onChange={set('image_url')} />
         {f.image_url.trim() && /^https:\/\//.test(f.image_url.trim()) && <img src={f.image_url.trim()} alt="preview" style={{ maxWidth: 260, maxHeight: 140, marginTop: 6, borderRadius: 6, border: '1px solid #e2e8f0' }} />}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'center' }}>
-          <input style={Object.assign({}, input, { maxWidth: 160 })} placeholder="State (optional)" value={f.state} onChange={set('state')} />
-          <select style={Object.assign({}, input, { maxWidth: 210 })} value={f.category} onChange={set('category')}>
-            <option value="">All types</option><option value="independent_agent">Independent agents</option><option value="established_agency">Agencies</option><option value="commercial_agent">Commercial agents</option><option value="residential_agent">Residential agents</option><option value="property_consultant">Property consultants</option>
-          </select>
-          <label style={{ fontSize: '0.8rem' }}>Up to <input style={Object.assign({}, input, { maxWidth: 80, display: 'inline-block' })} type="number" min="1" max="200" value={f.limit} onChange={set('limit')} /> people</label>
-          <button style={btn} disabled={busy} onClick={send}>{busy ? 'Sending...' : 'Send to matching prospects'}</button>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>3. Send</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={btn} disabled={busy} onClick={function () { run('send'); }}>{busy ? 'Working...' : 'Send now'}</button>
+          <button style={btnSec} disabled={busy} onClick={function () { run('review'); }}>Save for my approval first</button>
+          {res && res.mode === 'review' && res.queued > 0 && go && <button style={btnGhost} onClick={function () { go('review'); }}>Open Pending approval</button>}
         </div>
         <Msg m={msg} />
         {res && (
           <div style={{ fontSize: '0.82rem', color: '#334155', marginTop: 6 }}>
-            Matched <b>{res.matched}</b>, queued <b>{res.queued}</b>{s ? <span>, sent <b>{s.sent}</b>, failed {s.failed}, blocked {s.blocked}{s.stopped_reason ? ' (stopped: ' + String(s.stopped_reason).replace(/_/g, ' ') + ')' : ''}. Left in today's allowance: {s.remaining_today}.</span> : '.'}
-            <div>Skipped: {Object.keys(res.skipped || {}).length ? Object.keys(res.skipped).map(function (k) { return k.replace(/_/g, ' ') + ' ' + res.skipped[k]; }).join(', ') : 'none'}</div>
-            <div style={{ color: '#64748b', marginTop: 4 }}>{res.note}</div>
+            {res.dry_run ? <div><b>{res.eligible}</b> would receive it, out of {res.matched} matching prospects{res.checked < res.matched ? ' (' + res.checked + ' checked)' : ''}.</div> : <div>{res.matched} matching prospects, {res.queued} emails prepared.</div>}
+            {Object.keys(res.skipped || {}).length > 0 && <div style={{ marginTop: 4 }}>Skipped:<ul style={{ margin: '4px 0 0 18px', padding: 0 }}>{skippedList(res.skipped)}</ul></div>}
+            {res.skipped && res.skipped.no_email > 0 && <div style={{ color: '#92400e', marginTop: 4 }}>For more email addresses, use Find prospects with Search the web.</div>}
           </div>
         )}
       </div>

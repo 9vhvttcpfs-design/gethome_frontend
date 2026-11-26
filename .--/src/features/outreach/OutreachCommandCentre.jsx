@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate } from './shared';
-import { Badge, Msg } from './widgets';
+import { Badge, Msg, StateSelect, Section } from './widgets';
 import { Dashboard, Discovery, Campaigns, Review, BulkEmail, Replies, Setup } from './OutreachOps';
 import StartHere from './StartHere';
 
@@ -18,7 +18,7 @@ const REASONS = {
   reply_awaiting_human: 'A reply is waiting for a person to handle it.',
   consent_withdrawn: 'Consent was withdrawn.', opted_out: 'The prospect opted out.', suppressed: 'This contact is on the suppression list.',
   contact_invalid: 'This contact is marked invalid.', contact_bounced: 'This contact bounced.', source_not_recorded: 'No source URL recorded for this contact.',
-  no_contact: 'No contact of this type.', stage_subscribed: 'Already a paying agent.', stage_applied: 'Already registered on GetHome.', stage_approved: 'Already registered on GetHome.', stage_lost: 'Marked lost.',
+  no_contact: 'No contact of this type.', said_not_interested: 'They replied that they are not interested.', stage_subscribed: 'Already a paying agent.', stage_applied: 'Already registered on GetHome.', stage_approved: 'Already registered on GetHome.', stage_lost: 'Marked lost.',
 };
 
 function Pipeline({ api, onOpen }) {
@@ -32,7 +32,7 @@ function Pipeline({ api, onOpen }) {
   if (!data) return <div style={{ color: '#64748b' }}>Loading...</div>;
   return (
     <div>
-      <input style={Object.assign({}, input, { maxWidth: 220, marginBottom: 10 })} placeholder="Filter by state" value={state} onChange={function (e) { setState(e.target.value); }} />
+      <StateSelect style={{ maxWidth: 220, marginBottom: 10 }} value={state} onChange={setState} />
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 10 }}>
         {data.columns.map(function (col) {
           return (
@@ -77,7 +77,7 @@ function ProspectForm({ api, onDone, onCancel }) {
         <input style={input} placeholder="Business name *" value={f.business_name} onChange={set('business_name')} />
         <input style={input} placeholder="Contact person" value={f.contact_person} onChange={set('contact_person')} />
         <select style={input} value={f.category} onChange={set('category')}>{CATEGORIES.map(function (c) { return <option key={c[0]} value={c[0]}>{c[1]}</option>; })}</select>
-        <input style={input} placeholder="State" value={f.state} onChange={set('state')} />
+        <StateSelect any="State" value={f.state} onChange={function (v) { setF(Object.assign({}, f, { state: v })); }} />
         <input style={input} placeholder="City" value={f.city} onChange={set('city')} />
         <input style={input} placeholder="Business email" value={f.email} onChange={set('email')} />
         <input style={input} placeholder="Business phone" value={f.phone} onChange={set('phone')} />
@@ -122,7 +122,7 @@ function ProspectPanel({ id, api, onClose, onChanged }) {
         <Badge color={p.whatsapp_permission === 'granted' ? GREEN : '#64748b'}>WhatsApp opt-in: {p.whatsapp_permission}</Badge>
         {p.effective_email_permission === 'allowed' && <Badge color={GREEN}>email allowed (unsubscribe link added)</Badge>}
         {p.do_not_contact && <Badge color="#b91c1c">do not contact</Badge>}
-        <Badge color="#64748b">emails sent without reply: {p.email_attempts}</Badge>
+        <Badge color="#64748b">emails sent: {p.email_attempts}</Badge>
       </div>
       <Msg m={msg} />
 
@@ -164,7 +164,7 @@ function ProspectPanel({ id, api, onClose, onChanged }) {
         </div>
       )}
 
-      <div style={{ fontWeight: 700, margin: '14px 0 4px' }}>Consent record</div>
+      <Section title="Consent record">
       {d.consent.map(function (c) { return <div key={c.id} style={{ fontSize: '0.78rem', color: '#334155' }}>{fmtDate(c.occurred_at)} · {c.channel} · <strong>{c.event}</strong> · {c.basis.replace(/_/g, ' ')} · {c.source} · by {c.recorded_by}{c.evidence ? ' · "' + c.evidence + '"' : ''}</div>; })}
       {!d.consent.length && <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No explicit consent recorded.</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 6, marginTop: 8 }}>
@@ -178,10 +178,14 @@ function ProspectPanel({ id, api, onClose, onChanged }) {
       </div>
       <button style={Object.assign({}, btn, { marginTop: 6 })} onClick={function () { run(api('/outreach/consent', 'POST', Object.assign({ prospect_id: id }, consent)), 'Consent event recorded'); }}>Record</button>
 
-      <div style={{ fontWeight: 700, margin: '14px 0 4px' }}>Where this came from</div>
+      </Section>
+
+      <Section title="History" hint="where this came from and what happened">
+      <div style={{ fontWeight: 700, margin: '0 0 4px' }}>Where this came from</div>
       {d.sources.map(function (s) { return <div key={s.id} style={{ fontSize: '0.78rem', color: '#334155' }}>{fmtDate(s.retrieved_at)} · {s.adapter}{s.source_url ? ' · ' + s.source_url : ''}</div>; })}
       <div style={{ fontWeight: 700, margin: '14px 0 4px' }}>Activity</div>
       {d.activity.slice(0, 8).map(function (a) { return <div key={a.id} style={{ fontSize: '0.76rem', color: '#64748b' }}>{fmtDate(a.created_at)} · {a.activity.replace(/_/g, ' ')} · {a.actor}</div>; })}
+      </Section>
     </div>
   );
 }
@@ -205,7 +209,7 @@ function Prospects({ api, openId, setOpenId }) {
     <div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         <input style={Object.assign({}, input, { maxWidth: 220 })} placeholder="Search name, email, phone, site" value={f.q} onChange={function (e) { setF(Object.assign({}, f, { q: e.target.value })); }} />
-        <input style={Object.assign({}, input, { maxWidth: 140 })} placeholder="State" value={f.state} onChange={function (e) { setF(Object.assign({}, f, { state: e.target.value })); }} />
+        <StateSelect style={{ maxWidth: 170 }} value={f.state} onChange={function (v) { setF(Object.assign({}, f, { state: v })); }} />
         <select style={Object.assign({}, input, { maxWidth: 200 })} value={f.stage} onChange={function (e) { setF(Object.assign({}, f, { stage: e.target.value })); }}><option value="">All stages</option>{STAGES.map(function (s) { return <option key={s} value={s}>{STAGE_LABEL[s]}</option>; })}</select>
         <button style={btn} onClick={function () { setAdding(!adding); }}>{adding ? 'Cancel' : 'Add prospect'}</button>
         <button style={btnSec} onClick={exportCsv}>Export CSV</button>
@@ -296,19 +300,19 @@ function Compliance({ api }) {
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Who can be emailed</div>
         <div style={{ fontSize: '0.8rem', color: '#334155' }}>
-          Recorded consent is <b>not</b> required for email. Anyone with an email address can be emailed unless they are marked do-not-contact, unsubscribed, on the suppression list below, bounced, or already registered. Every email carries an unsubscribe link, and no one is emailed more than {settings.max_email_attempts} times without replying. WhatsApp still needs a recorded opt-in.
+          Recorded consent is <b>not</b> required for email. Anyone who can receive email can be emailed, including people you have emailed before and agents already registered. Only those who blocked you are skipped: marked do-not-contact, unsubscribed, on the suppression list below, bounced, or replied that they are not interested. Every email carries an unsubscribe link. WhatsApp still needs a recorded opt-in.
         </div>
       </div>
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>Limits</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10 }}>
-          {num('max_email_attempts', 'Max unanswered emails per prospect')}
+          {num('max_email_attempts', 'Max emails in an automatic follow-up sequence')}
           {num('max_whatsapp_attempts', 'Max unanswered WhatsApp messages')}
           {num('daily_discovery_limit', 'Daily discovery limit')}
           {num('daily_email_limit', 'Daily email limit')}
           {num('retention_days_unengaged', 'Keep never-contacted prospects (days)')}
         </div>
-        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 8 }}>Replies go to {settings.reply_to_email}; sender name "{settings.email_sender_name}".</div>
+        <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 8 }}>The daily email limit protects your sending account. Do not set it above what your email provider plan allows. Replies go to {settings.reply_to_email}; sender name "{settings.email_sender_name}".</div>
       </div>
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Suppression list ({sup.total})</div>
@@ -338,31 +342,63 @@ function AuditLog({ api }) {
   );
 }
 
+// Top navigation. Entries with several screens open as a dropdown.
+const NAV = [
+  { label: 'Home', view: 'start' },
+  { label: 'Find prospects', view: 'discovery' },
+  { label: 'Contacts', items: [['prospects', 'All prospects'], ['pipeline', 'Pipeline'], ['duplicates', 'Duplicates']] },
+  { label: 'Send', items: [['bulk', 'Bulk email'], ['review', 'Review and approve'], ['campaigns', 'Campaigns and follow-ups']] },
+  { label: 'Replies', view: 'replies' },
+  { label: 'Results', view: 'dashboard' },
+  { label: 'Settings', items: [['setup', 'Email and WhatsApp'], ['compliance', 'Permissions and limits'], ['audit', 'Audit log']] },
+];
+const navStyle = (active) => ({ padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', backgroundColor: active ? NAVY : '#f1f5f9', color: active ? '#fff' : '#334155' });
+
+function Nav({ view, go }) {
+  const [open, setOpen] = useState(null);
+  const ref = useRef(null);
+  useEffect(function () {
+    const close = function (e) { if (ref.current && !ref.current.contains(e.target)) setOpen(null); };
+    document.addEventListener('mousedown', close);
+    return function () { document.removeEventListener('mousedown', close); };
+  }, []);
+  return (
+    <div ref={ref} style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+      {NAV.map(function (n) {
+        if (!n.items) return <button key={n.label} style={navStyle(view === n.view)} onClick={function () { setOpen(null); go(n.view); }}>{n.label}</button>;
+        const current = n.items.filter(function (i) { return i[0] === view; })[0];
+        return (
+          <div key={n.label} style={{ position: 'relative' }}>
+            <button style={navStyle(!!current)} aria-expanded={open === n.label} onClick={function () { setOpen(open === n.label ? null : n.label); }}>{n.label}{current ? ': ' + current[1] : ''} ▾</button>
+            {open === n.label && (
+              <div style={{ position: 'absolute', top: '110%', left: 0, zIndex: 20, minWidth: 210, backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, boxShadow: '0 8px 24px rgba(10,34,64,0.15)', padding: 4 }}>
+                {n.items.map(function (i) {
+                  return <button key={i[0]} onClick={function () { setOpen(null); go(i[0]); }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: '0.82rem', fontWeight: view === i[0] ? 800 : 500, backgroundColor: view === i[0] ? '#f0fff4' : 'transparent', color: NAVY }}>{i[1]}</button>;
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function OutreachCommandCentre() {
   const api = useApi();
   const [view, setView] = useState('start');
-  const [advanced, setAdvanced] = useState(false);
   const [openId, setOpenId] = useState(null);
-  const main = [['start', 'Start Here'], ['discovery', 'Find Agents'], ['prospects', 'Prospects'], ['campaigns', 'Campaigns'], ['review', 'Review & Send'], ['bulk', 'Bulk Email'], ['replies', 'Replies'], ['dashboard', 'Results']];
-  const more = [['pipeline', 'Pipeline'], ['duplicates', 'Duplicates'], ['setup', 'Email & WhatsApp'], ['compliance', 'Permissions & Limits'], ['audit', 'Audit log']];
-  const tabs = advanced || more.some(function (t) { return t[0] === view; }) ? main.concat(more) : main;
   return (
     <div>
       <div style={{ fontWeight: 800, color: NAVY, fontSize: '1.1rem', marginBottom: 4 }}>Outreach Command Centre</div>
-      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12 }}>Recruit agents and agencies. New here? Open Start Here.</div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-        {tabs.map(function (t) {
-          const active = view === t[0];
-          return <button key={t[0]} onClick={function () { setView(t[0]); }} style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', backgroundColor: active ? NAVY : '#f1f5f9', color: active ? '#fff' : '#334155' }}>{t[1]}</button>;
-        })}
-        <button onClick={function () { setAdvanced(!advanced); }} style={{ padding: '8px 12px', borderRadius: 10, border: '1.5px dashed #cbd5e1', cursor: 'pointer', fontSize: '0.78rem', background: 'none', color: '#64748b' }}>{advanced ? 'Hide advanced' : 'Advanced'}</button>
-      </div>
+      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: 12 }}>Recruit agents and agencies. New here? Open Home.</div>
+      <Nav view={view} go={setView} />
       {view === 'start' && <StartHere go={setView} />}
       {view === 'dashboard' && <Dashboard />}
-      {view === 'discovery' && <Discovery />}
+      {view === 'discovery' && <Discovery go={setView} />}
       {view === 'campaigns' && <Campaigns />}
       {view === 'review' && <Review />}
-      {view === 'bulk' && <BulkEmail />}
+      {view === 'bulk' && <BulkEmail go={setView} />}
       {view === 'replies' && <Replies />}
       {view === 'setup' && <Setup />}
       {view === 'pipeline' && <div>{openId && <ProspectPanel id={openId} api={api} onClose={function () { setOpenId(null); }} onChanged={function () { /* refreshed on reopen */ }} />}<Pipeline api={api} onOpen={setOpenId} /></div>}
