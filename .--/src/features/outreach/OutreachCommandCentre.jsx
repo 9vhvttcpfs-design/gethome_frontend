@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { GREEN, NAVY, card, input, btn, btnSec, btnGhost, useApi, fmtDate } from './shared';
 import { Badge, Msg, StateSelect, Section } from './widgets';
-import { Dashboard, Discovery, Campaigns, Review, BulkEmail, Replies, Setup } from './OutreachOps';
+import { Dashboard, Discovery, Campaigns, Review, BulkEmail, BulkWhatsApp, Replies, Setup } from './OutreachOps';
 import StartHere from './StartHere';
 
 // Outreach Command Centre: admin-only prospect CRM (phase 1). Talks to /api/growth/outreach/* with the
@@ -13,7 +13,6 @@ const MANUAL_STAGES = ['new', 'qualified', 'permission_obtained', 'campaign_read
 const CATEGORIES = [['independent_agent', 'Independent agent'], ['established_agency', 'Established agency'], ['commercial_agent', 'Commercial agent'], ['residential_agent', 'Residential agent'], ['property_consultant', 'Property consultant'], ['other', 'Other']];
 const REASONS = {
   legitimate_interest_not_enabled: 'Legitimate-interest email is switched off in Settings, and there is no recorded consent.',
-  whatsapp_requires_opt_in: 'WhatsApp needs a recorded opt-in. Cold WhatsApp is not allowed.',
   max_attempts_reached: 'The maximum number of unanswered attempts has been reached. Contact stops here.',
   reply_awaiting_human: 'A reply is waiting for a person to handle it.',
   consent_withdrawn: 'Consent was withdrawn.', opted_out: 'The prospect opted out.', suppressed: 'This contact is on the suppression list.',
@@ -300,7 +299,7 @@ function Compliance({ api }) {
       <div style={card}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>Who can be emailed</div>
         <div style={{ fontSize: '0.8rem', color: '#334155' }}>
-          Recorded consent is <b>not</b> required for email. Anyone who can receive email can be emailed, including people you have emailed before and agents already registered. Only those who blocked you are skipped: marked do-not-contact, unsubscribed, on the suppression list below, bounced, or replied that they are not interested. Every email carries an unsubscribe link. WhatsApp still needs a recorded opt-in.
+          Recorded consent is <b>not</b> required for email. Anyone who can receive email can be emailed, including people you have emailed before and agents already registered. Only those who blocked you are skipped: marked do-not-contact, unsubscribed, on the suppression list below, bounced, or replied that they are not interested. Every email carries an unsubscribe link. The same applies to WhatsApp: no recorded opt-in is needed, and anyone who replies STOP is not messaged again.
         </div>
       </div>
       <div style={card}>
@@ -347,7 +346,7 @@ const NAV = [
   { label: 'Home', view: 'start' },
   { label: 'Find prospects', view: 'discovery' },
   { label: 'Contacts', items: [['prospects', 'All prospects'], ['pipeline', 'Pipeline'], ['duplicates', 'Duplicates']] },
-  { label: 'Send', items: [['bulk', 'Bulk email'], ['review', 'Review and approve'], ['campaigns', 'Campaigns and follow-ups']] },
+  { label: 'Send', items: [['bulk', 'Bulk email'], ['bulkwa', 'Bulk WhatsApp'], ['review', 'Review and approve'], ['campaigns', 'Campaigns and follow-ups']] },
   { label: 'Replies', view: 'replies' },
   { label: 'Results', view: 'dashboard' },
   { label: 'Settings', items: [['setup', 'Email and WhatsApp'], ['compliance', 'Permissions and limits'], ['audit', 'Audit log']] },
@@ -399,6 +398,7 @@ export default function OutreachCommandCentre() {
       {view === 'campaigns' && <Campaigns />}
       {view === 'review' && <Review />}
       {view === 'bulk' && <BulkEmail go={setView} />}
+      {view === 'bulkwa' && <BulkWhatsApp go={setView} />}
       {view === 'replies' && <Replies />}
       {view === 'setup' && <Setup />}
       {view === 'pipeline' && <div>{openId && <ProspectPanel id={openId} api={api} onClose={function () { setOpenId(null); }} onChanged={function () { /* refreshed on reopen */ }} />}<Pipeline api={api} onOpen={setOpenId} /></div>}

@@ -8,10 +8,11 @@ const STEPS = [
   ['1', 'Find agents', 'Find prospects: pick a state and press Find prospects. It searches the web. You can also upload a CSV.', 'discovery'],
   ['2', 'Look over your list', 'Contacts > All prospects. Anyone who opted out or bounced is blocked automatically.', 'prospects'],
   ['3', 'Email many at once', 'Send > Bulk email: choose a state, write your message, then Send now or save it for approval.', 'bulk'],
-  ['4', 'Read and approve', 'Send > Review and approve: read the saved messages, approve them, press Send approved now.', 'review'],
-  ['5', 'Add follow-ups (optional)', 'Send > Campaigns and follow-ups: create a campaign, enrol prospects, Activate, then Prepare messages.', 'campaigns'],
-  ['6', 'Answer replies', 'Replies: answer anyone who replied. Follow-ups stop automatically when they reply or register.', 'replies'],
-  ['7', 'See results', 'Results: press Sync registrations & payments to see who registered and subscribed.', 'dashboard'],
+  ['4', 'Read and approve', 'Send > Review and approve: read the saved messages, approve them, press Send approved emails now.', 'review'],
+  ['5', 'WhatsApp many at once', 'Send > Bulk WhatsApp: choose a state and an approved template, then press Send now.', 'bulkwa'],
+  ['6', 'Add follow-ups (optional)', 'Send > Campaigns and follow-ups: create a campaign, enrol prospects, Activate, then Prepare messages.', 'campaigns'],
+  ['7', 'Answer replies', 'Replies: answer anyone who replied. Follow-ups stop automatically when they reply or register.', 'replies'],
+  ['8', 'See results', 'Results: press Sync registrations & payments to see who registered and subscribed.', 'dashboard'],
 ];
 
 function Dot({ ok, optional }) {
@@ -38,7 +39,7 @@ export default function StartHere({ go }) {
       <div style={Object.assign({}, card, { borderLeft: '5px solid ' + GREEN })}>
         <div style={{ fontWeight: 800, color: NAVY, marginBottom: 6 }}>What this does</div>
         <div style={{ fontSize: '0.85rem', color: '#334155', lineHeight: 1.6 }}>
-          It helps you <b>recruit agents and agencies</b> onto GetHome. It finds them, emails them an invitation (WhatsApp only if they agreed),
+          It helps you <b>recruit agents and agencies</b> onto GetHome. It finds them, invites them by email or WhatsApp,
           follows up, and tracks who registered and who pays a subscription. <b>Nothing is sent until you press send or approve it.</b>{' '}
           It does <b>not</b> find customers (people looking to rent or buy). Customers come from your listings, SEO, social posts and the lead form, and are tracked in the Growth CRM.
         </div>

@@ -193,13 +193,14 @@ export function Campaigns() {
   }, [api]);
   useEffect(load, [load]);
   const act = (p, okText) => p.then(function (r) { setMsg({ ok: true, text: typeof okText === 'function' ? okText(r) : okText }); load(); }).catch(function (e) { setMsg({ text: e.message }); });
+  const channelOf = function (id) { const t = tpls.find(function (x) { return x.id === id; }); return t ? t.channel : 'email'; };
   function createSeq() {
-    const steps = [{ channel: 'email', template_id: ns.t1, delay_days: 0 }];
-    if (ns.t2) steps.push({ channel: 'email', template_id: ns.t2, delay_days: Number(ns.d2) });
-    if (ns.t3) steps.push({ channel: 'email', template_id: ns.t3, delay_days: Number(ns.d3) });
+    const steps = [{ channel: channelOf(ns.t1), template_id: ns.t1, delay_days: 0 }];
+    if (ns.t2) steps.push({ channel: channelOf(ns.t2), template_id: ns.t2, delay_days: Number(ns.d2) });
+    if (ns.t3) steps.push({ channel: channelOf(ns.t3), template_id: ns.t3, delay_days: Number(ns.d3) });
     act(api('/outreach/sequences', 'POST', { name: ns.name, steps: steps }), 'Sequence created');
   }
-  const emailTpls = tpls.filter(function (t) { return t.channel === 'email'; });
+  const stepOptions = tpls.map(function (t) { return <option key={t.id} value={t.id}>{(t.channel === 'whatsapp' ? 'WhatsApp: ' : 'Email: ') + t.name}</option>; });
   return (
     <div>
       <Msg m={msg} />
@@ -238,8 +239,8 @@ export function Campaigns() {
         <div style={{ fontSize: '0.76rem', color: '#64748b', marginBottom: 6 }}>An invitation plus up to two follow-ups. Follow-ups stop automatically on a reply, registration, opt-out or bounce, and never go beyond the attempt limit in Permissions & Limits.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8 }}>
           <input style={input} placeholder="Sequence name" value={ns.name} onChange={function (e) { setNs(Object.assign({}, ns, { name: e.target.value })); }} />
-          <select style={input} value={ns.t1} onChange={function (e) { setNs(Object.assign({}, ns, { t1: e.target.value })); }}><option value="">Step 1 template (invitation)</option>{emailTpls.map(function (t) { return <option key={t.id} value={t.id}>{t.name}</option>; })}</select>
-          <select style={input} value={ns.t2} onChange={function (e) { setNs(Object.assign({}, ns, { t2: e.target.value })); }}><option value="">Step 2 template (optional)</option>{emailTpls.map(function (t) { return <option key={t.id} value={t.id}>{t.name}</option>; })}</select>
+          <select style={input} value={ns.t1} onChange={function (e) { setNs(Object.assign({}, ns, { t1: e.target.value })); }}><option value="">Step 1 template (invitation)</option>{stepOptions}</select>
+          <select style={input} value={ns.t2} onChange={function (e) { setNs(Object.assign({}, ns, { t2: e.target.value })); }}><option value="">Step 2 template (optional)</option>{stepOptions}</select>
           <input style={input} type="number" min="1" placeholder="Days after step 1" value={ns.d2} onChange={function (e) { setNs(Object.assign({}, ns, { d2: e.target.value })); }} />
         </div>
         <button style={Object.assign({}, btn, { marginTop: 8 })} onClick={createSeq}>Create sequence</button>
@@ -324,7 +325,7 @@ export function Review() {
         <select style={Object.assign({}, input, { width: 'auto' })} value={status} onChange={function (e) { setStatus(e.target.value); }}>{Object.keys(STATUS_NAMES).map(function (s) { return <option key={s} value={s}>{STATUS_NAMES[s]}</option>; })}</select>
         <span style={{ fontSize: '0.78rem', color: '#64748b' }}>{list.length} shown</span>
         {status === 'pending_approval' && list.length > 0 && <button style={btn} disabled={anyUploading} onClick={function () { act(api('/outreach/messages/approve-bulk', 'POST', { ids: list.map(function (m) { return m.id; }) }), 'Approved all shown'); }}>Approve all shown</button>}
-        <button style={btnSec} disabled={sending} onClick={sendNow}>{sending ? 'Sending...' : 'Send approved now'}</button>
+        <button style={btnSec} disabled={sending} onClick={sendNow}>{sending ? 'Sending...' : 'Send approved emails now'}</button>
       </div>
       {!list.length && <div style={card}>Nothing in this list.</div>}
       {list.map(function (m) {
@@ -336,7 +337,8 @@ export function Review() {
             {status === 'pending_approval' ? (
               <div>
                 {m.channel === 'email' && <input style={Object.assign({}, input, { margin: '6px 0' })} value={ed.subject || ''} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { subject: e.target.value }) })); }} />}
-                <textarea style={input} rows={8} value={ed.body} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { body: e.target.value }) })); }} />
+                {m.channel === 'whatsapp' && <div style={{ fontSize: '0.74rem', color: '#92400e', margin: '4px 0' }}>WhatsApp sends your Meta-approved template exactly as approved, so the text cannot be edited here. After approving, send it from Settings &gt; Email and WhatsApp.</div>}
+                <textarea style={input} rows={8} readOnly={m.channel === 'whatsapp'} value={ed.body} onChange={function (e) { setEdits(Object.assign({}, edits, { [m.id]: Object.assign({}, ed, { body: e.target.value }) })); }} />
                 {m.channel === 'email' && <ImagePicker label="Picture (optional)" value={ed.image_url !== undefined ? ed.image_url : ((m.personalization && m.personalization.image_url) || '')} onChange={function (url) { setPicture(m, url); }} onBusy={function (b) { setUploading(function (u) { return Object.assign({}, u, { [m.id]: b }); }); }} />}
                 <div style={{ marginTop: 6 }}><button style={btn} disabled={!!uploading[m.id]} onClick={function () { act(api('/outreach/messages/' + m.id + '/approve', 'POST', edits[m.id] || {}), 'Approved'); }}>Approve</button> <button style={Object.assign({}, btnGhost, { color: '#b91c1c' })} onClick={function () { act(api('/outreach/messages/' + m.id + '/reject', 'POST'), 'Rejected: this prospect will not be contacted by this campaign'); }}>Reject</button></div>
               </div>
@@ -424,6 +426,94 @@ export function BulkEmail({ go }) {
             {res.dry_run ? <div><b>{res.eligible}</b> would receive it, out of {res.matched} matching prospects{res.checked < res.matched ? ' (' + res.checked + ' checked)' : ''}.</div> : <div>{res.matched} matching prospects, {res.queued} emails prepared.</div>}
             {Object.keys(res.skipped || {}).length > 0 && <div style={{ marginTop: 4 }}>Skipped:<ul style={{ margin: '4px 0 0 18px', padding: 0 }}>{skippedList(res.skipped)}</ul></div>}
             {res.skipped && res.skipped.no_email > 0 && <div style={{ color: '#92400e', marginTop: 4 }}>For more email addresses, use Find prospects with Search the web.</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== Bulk WhatsApp =====================
+const WA_SKIP_TEXT = {
+  no_phone: 'have no phone number', messaged_recently: 'got a WhatsApp from you recently', same_number_twice: 'share a number already included',
+  contact_bounced: 'have a number that failed before', contact_invalid: 'have an invalid number',
+};
+const WA_STOP_TEXT = { not_configured: 'WhatsApp is not set up on the server.', daily_limit: "Today's WhatsApp limit is used up. The rest stays queued.", provider_error: 'Meta rejected several messages in a row, so sending stopped.' };
+
+export function BulkWhatsApp({ go }) {
+  const api = useApi();
+  const [tpls, setTpls] = useState([]);
+  const [f, setF] = useState({ template_id: '', state: '', category: '', limit: 50, skip: 7 });
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  useEffect(function () {
+    api('/outreach/templates').then(function (t) { setTpls(t.filter(function (x) { return x.channel === 'whatsapp'; })); }).catch(function (e) { setMsg({ text: e.message }); });
+  }, [api]);
+  const set = (k) => (e) => { setF(Object.assign({}, f, { [k]: e.target.value })); setRes(null); };
+  const approved = tpls.filter(function (t) { return t.wa_status === 'approved'; });
+  const chosen = approved.find(function (t) { return t.id === f.template_id; });
+
+  async function run(kind) {
+    setMsg(null); setRes(null);
+    if (kind === 'send' && !window.confirm('Send this WhatsApp message now to up to ' + f.limit + ' prospects' + (f.state ? ' in ' + f.state : '') + '?')) return;
+    setBusy(true); setMsg({ ok: true, text: kind === 'check' ? 'Checking...' : 'Sending...' });
+    try {
+      const audience = { state: f.state || undefined, category: f.category || undefined, limit: Number(f.limit), skip_recent_days: Number(f.skip) };
+      const r = await api('/outreach/whatsapp/bulk-send', 'POST', Object.assign(audience, kind === 'check' ? { dry_run: true } : { template_id: f.template_id }));
+      setRes(r);
+      if (kind === 'check') setMsg(null);
+      else if (!r.queued) setMsg({ text: 'Nothing was sent: no matching prospect can be messaged. See the reasons below.' });
+      else {
+        // Carry on until these messages are all sent or something stops the sending.
+        let pass = r.sending, sent = pass.sent, failed = pass.failed, blocked = pass.blocked, lastError = pass.last_error;
+        for (let i = 0; i < 20 && !WA_STOP_TEXT[pass.stopped_reason] && sent + failed + blocked < r.queued; i++) {
+          setMsg({ ok: true, text: 'Sending... ' + sent + ' of ' + r.queued + ' sent.' });
+          pass = await api('/outreach/whatsapp/process', 'POST', { max: 50, ids: r.queued_ids });
+          sent += pass.sent; failed += pass.failed; blocked += pass.blocked; lastError = pass.last_error || lastError;
+          if (!pass.sent && !pass.failed && !pass.blocked) break;
+        }
+        setMsg({ ok: !failed && !WA_STOP_TEXT[pass.stopped_reason], text: 'Sent ' + sent + ' of ' + r.queued + (failed ? ', failed ' + failed : '') + (blocked ? ', blocked ' + blocked : '') + '.' + (WA_STOP_TEXT[pass.stopped_reason] ? ' ' + WA_STOP_TEXT[pass.stopped_reason] : '') + (lastError ? ' Reason given: ' + lastError : '') });
+      }
+    } catch (e) { setMsg({ text: e.message }); }
+    setBusy(false);
+  }
+
+  return (
+    <div>
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>1. Who should receive it</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 8 }}>
+          <Field label="State"><StateSelect value={f.state} onChange={function (v) { setF(Object.assign({}, f, { state: v })); setRes(null); }} /></Field>
+          <Field label="Type"><select style={input} value={f.category} onChange={set('category')}>
+            <option value="">All types</option><option value="independent_agent">Independent agents</option><option value="established_agency">Agencies</option><option value="commercial_agent">Commercial agents</option><option value="residential_agent">Residential agents</option><option value="property_consultant">Property consultants</option>
+          </select></Field>
+          <Field label="How many"><select style={input} value={f.limit} onChange={set('limit')}>{[10, 25, 50, 100, 200, 500].map(function (n) { return <option key={n} value={n}>Up to {n}</option>; })}</select></Field>
+          <Field label="Already messaged"><select style={input} value={f.skip} onChange={set('skip')}><option value={0}>Include them</option><option value={3}>Leave out last 3 days</option><option value={7}>Leave out last 7 days</option><option value={30}>Leave out last 30 days</option></select></Field>
+        </div>
+        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 8 }}>Anyone with no phone number, or who blocked you (replied STOP, opted out, said not interested), is skipped. The daily WhatsApp limit in Permissions and limits applies.</div>
+        <button style={Object.assign({}, btnGhost, { marginTop: 8 })} disabled={busy} onClick={function () { run('check'); }}>Check who will receive it</button>
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>2. Your message</div>
+        <select style={input} value={f.template_id} onChange={set('template_id')}>
+          <option value="">Choose an approved template</option>
+          {approved.map(function (t) { return <option key={t.id} value={t.id}>{t.name}</option>; })}
+        </select>
+        {chosen && <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.8rem', margin: '8px 0 0' }}>{chosen.body}</pre>}
+        <div style={{ fontSize: '0.76rem', color: '#64748b', marginTop: 8 }}>WhatsApp only lets a business start a chat with a template Meta has approved. {!approved.length && 'You have no approved template yet: create one, submit it and check its status in Settings.'}</div>
+        {go && <button style={Object.assign({}, btnGhost, { marginTop: 8 })} onClick={function () { go('setup'); }}>Manage templates</button>}
+      </div>
+
+      <div style={card}>
+        <div style={{ fontWeight: 800, color: NAVY, marginBottom: 8 }}>3. Send</div>
+        <button style={btn} disabled={busy || !chosen} onClick={function () { run('send'); }}>{busy ? 'Working...' : 'Send now'}</button>
+        <Msg m={msg} />
+        {res && (
+          <div style={{ fontSize: '0.82rem', color: '#334155', marginTop: 6 }}>
+            {res.dry_run ? <div><b>{res.eligible}</b> would receive it, out of {res.matched} matching prospects{res.checked < res.matched ? ' (' + res.checked + ' checked)' : ''}.</div> : <div>{res.matched} matching prospects, {res.queued} messages prepared.</div>}
+            {Object.keys(res.skipped || {}).length > 0 && <div style={{ marginTop: 4 }}>Skipped:<ul style={{ margin: '4px 0 0 18px', padding: 0 }}>{Object.keys(res.skipped).map(function (k) { return <li key={k}>{res.skipped[k]} {WA_SKIP_TEXT[k] || SKIP_TEXT[k] || k.replace(/_/g, ' ')}</li>; })}</ul></div>}
           </div>
         )}
       </div>
