@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
 import { Home, Search, Building2, Star, MapPin, Mail, User, Users, CheckCircle, AlertCircle, FileText, MessageSquare, Bell, Edit, Lock, BarChart2, Award, Target, Zap, Crown, RefreshCw, Send, Link, Hotel, Layers, X, Phone as PhoneIcon } from 'lucide-react';
 import { SUPPORTED_COUNTRIES } from './constants/countries';
 import { CountryProvider, useCountry } from './context/CountryContext';
@@ -372,7 +373,7 @@ function PrivacyPolicyPage() {
         Get<span style={{ color: '#27ae60' }}>Home</span>
       </div>
       <h1 style={{ color: '#0a2240', fontSize: '1.4rem', fontWeight: '900', margin: '0 0 4px 0' }}>Privacy Policy</h1>
-      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 32px 0' }}>Last updated: September 2026</p>
+      <p style={{ color: '#94a3b8', fontSize: '0.78rem', margin: '0 0 32px 0' }}>Last updated: November 2026</p>
 
       {[
         {
@@ -389,7 +390,7 @@ function PrivacyPolicyPage() {
         },
         {
           title: '4. Information Sharing',
-          body: 'We share your information only as necessary to provide our services — for example, sharing your contact details with a verified agent when you book an inspection, or with our payment processor to complete a transaction. We do not share your data with advertisers.'
+          body: 'We share your information only as necessary to provide our services — for example, sharing your contact details with a verified agent when you book an inspection, or with our payment processor to complete a transaction. We do not give advertisers your name, contact details or payment information. Advertising partners collect information through cookies as described in the Cookies section.'
         },
         {
           title: '5. Data Security',
@@ -405,7 +406,7 @@ function PrivacyPolicyPage() {
         },
         {
           title: '8. Cookies',
-          body: 'GetHome uses essential cookies to keep you logged in and remember your preferences. We do not use tracking or advertising cookies.'
+          body: 'GetHome uses essential cookies and similar storage to keep you logged in and remember your preferences. Our website also shows ads through Google AdSense. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this and other websites. Advertising cookies from Google enable it and its partners to serve ads to you based on those visits. These vendors may also collect information such as your IP address, browser and device details. You can opt out of personalised advertising in Google Ads Settings (https://adssettings.google.com) or at https://www.aboutads.info. To learn how Google uses this data, see https://policies.google.com/technologies/partner-sites.'
         },
         {
           title: '9. Children\'s Privacy',
@@ -452,7 +453,7 @@ function TermsOfUsePage() {
         { title: '4. Content Moderation', body: 'GetHome reviews all reported content within 24 hours. Content found to violate these terms will be removed immediately and the responsible user\'s account will be suspended or permanently banned. Users can report objectionable listings using the Report button on any listing.' },
         { title: '5. Blocking Users', body: 'Users may block agents whose content they find objectionable. Blocking notifies GetHome to review the agent\'s content and take action within 24 hours.' },
         { title: '6. Agent Verification', body: 'All agents must submit valid government-issued ID before listing properties. Nigerian agents submit NIN (National Identification Number). Business registration documents are recommended. GetHome reserves the right to revoke agent status at any time for violations of these terms.' },
-        { title: '7. Payments', body: 'All payments are processed securely through Flutterwave or Paystack. Inspection fees and deposits are non-refundable except where GetHome determines a fraudulent listing was involved.' },
+        { title: '7. Payments', body: 'All payments are processed securely through Flutterwave. Inspection fees and deposits are non-refundable except where GetHome determines a fraudulent listing was involved.' },
         { title: '8. Termination', body: 'GetHome may suspend or terminate your account at any time for violations of these terms. You may delete your account at any time via Profile → Settings → Delete My Account.' },
         { title: '9. Contact', body: 'To report abuse or content violations contact support@trygethome.online. We respond to all reports within 24 hours.' },
       ].map(function(section) {
@@ -552,7 +553,7 @@ var LEGAL_CONTENT = {
     { heading: "1. Acceptance", body: "By using GetHome you accept these Terms." },
     { heading: "2. Platform", body: "GetHome is a Nigerian real estate listing platform." },
     { heading: "3. Accounts", body: "You must be 18+ and provide accurate information." },
-    { heading: "4. Escrow", body: "Payments via Paystack escrow. 0.75% fee (capped NGN 5,000)." },
+    { heading: "4. Escrow", body: "Payments via Flutterwave, held in escrow. 0.75% fee (capped NGN 5,000)." },
     { heading: "5. Listings", body: "GetHome does not own listed properties." },
     { heading: "6. Prohibited", body: "No fraud, money laundering, or illegal activity." },
     { heading: "7. Liability", body: "GetHome is not liable for indirect damages." },
@@ -563,10 +564,10 @@ var LEGAL_CONTENT = {
   privacy: { title: "Privacy Policy", version: "1.0", sections: [
     { heading: "1. Data We Collect", body: "Account info, transaction data, and usage data." },
     { heading: "2. How We Use It", body: "To process transactions, send confirmations, and improve the platform." },
-    { heading: "3. Data Sharing", body: "Shared with Paystack, Supabase, Resend. Never sold." },
+    { heading: "3. Data Sharing", body: "Shared with Flutterwave, Supabase, Resend. Never sold." },
     { heading: "4. Security", body: "HTTPS encryption and Supabase Auth." },
     { heading: "5. Your Rights", body: "Access, correct, or delete your data. Contact gethome.realest@gmail.com." },
-    { heading: "6. Cookies", body: "Essential auth cookies only." },
+    { heading: "6. Cookies", body: "Essential login cookies. Our website also shows Google AdSense ads: Google and other third-party vendors use cookies to serve ads based on your visits to this and other websites. Opt out of personalised ads at https://adssettings.google.com." },
     { heading: "7. Retention", body: "Account data held while active. Transactions kept 7 years." },
     { heading: "8. Contact", body: "Privacy: gethome.realest@gmail.com" }
   ]},
@@ -2787,7 +2788,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
                   'Location: ' + property.location + '\n' +
                   'Amount Paid: NGN ' + grandTotal.toLocaleString('en-NG') + '\n' +
                   'My Email: ' + (user?.email || '') + '\n' +
-                  'Paystack Reference: ' + depositRef + '\n\n' +
+                  'Flutterwave Reference: ' + depositRef + '\n\n' +
                   'Please confirm and process my transaction. Thank you!'
                 );
                 window.open('https://wa.me/' + WHATSAPP_NUMBER + '?text=' + waMsg, '_blank');
@@ -3124,6 +3125,37 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
 // Settings without a redeploy. Renders nothing until globalSettings +
 // adsense_config are actually populated with real IDs.
 // =========================================================
+// AdSense is for websites only. Google does not allow it inside the Android/iOS
+// app's web view, so the native app shows no AdSense ads.
+var IS_NATIVE_APP = Capacitor.isNativePlatform();
+var LISTINGS_PER_AD = 6;
+var FIRST_AD_AFTER = 3; // below the 6 listings shown at first, so one ad is visible
+
+// Property cards with a listing ad after card 3, then every 6 cards. The
+// grid using this needs gridAutoFlow: 'row dense' so the full-width ad leaves no
+// holes when a row isn't full.
+function renderCardsWithAds(houses, onSelect) {
+  var settings = window.__gethomeSettings || {};
+  var config = settings.adsense_config || {};
+  var showAds = !IS_NATIVE_APP
+    && (settings.ads_enabled === 'true' || settings.ads_enabled === true)
+    && !!config.publisher_id && !!config.listing_slot;
+
+  return houses.map(function(h, i) {
+    var adFollows = showAds && (i + 1) % LISTINGS_PER_AD === FIRST_AD_AFTER && i + 1 < houses.length;
+    return (
+      <Fragment key={h.id}>
+        <PropertyCard house={h} onSelect={function(){ onSelect(h); }} />
+        {adFollows && (
+          <div style={{ gridColumn: '1 / -1', minWidth: 0 }}>
+            <GoogleAd type='listing' />
+          </div>
+        )}
+      </Fragment>
+    );
+  });
+}
+
 function GoogleAd({ type }) {
   var config = (window.__gethomeSettings || {}).adsense_config || {};
   var publisherId = config.publisher_id || '';
@@ -3139,7 +3171,7 @@ function GoogleAd({ type }) {
     : { display: 'block' };
 
   useEffect(function() {
-    if (!publisherId || !slot) return;
+    if (IS_NATIVE_APP || !publisherId || !slot) return;
     try {
       // Load the AdSense loader script once per publisher, then ask it to
       // fill this <ins> block. Injected dynamically (rather than statically
@@ -3158,7 +3190,7 @@ function GoogleAd({ type }) {
     } catch(e) {}
   }, [publisherId, slot]);
 
-  if (!publisherId || !slot) return null;
+  if (IS_NATIVE_APP || !publisherId || !slot) return null;
 
   return (
     <ins className="adsbygoogle"
@@ -18223,8 +18255,8 @@ function AppContent() {
                 {searchFiltered(rentProperties).length === 0
                   ? <div style={{ ...cardStyle, textAlign: 'center', padding: '48px 24px' }}><div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}><Search size={28} color="#cbd5e1" /></div><h3 style={{ color: '#0a2240', fontSize: '1rem', fontWeight: '800', margin: '0 0 8px 0' }}>No results found</h3><p style={{ color: '#94a3b8', fontSize: '0.86rem', lineHeight: '1.6', margin: '0 auto', maxWidth: '320px' }}>No listings in {activeCountry.name} match your search. Try different keywords or clear your filters.</p></div>
                   : <>
-                      <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                        {searchFiltered(rentProperties).slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                      <div style={{ display: 'grid', gridAutoFlow: 'row dense', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                        {renderCardsWithAds(searchFiltered(rentProperties).slice(0, rentLimit), setSelectedProperty)}
                       </div>
                       {searchFiltered(rentProperties).length > LISTINGS_INCREMENT && (
                         <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -18307,8 +18339,8 @@ function AppContent() {
                     </div>
                   )
                   : <>
-                      <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                        {rentProperties.slice(0, rentLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                      <div style={{ display: 'grid', gridAutoFlow: 'row dense', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                        {renderCardsWithAds(rentProperties.slice(0, rentLimit), setSelectedProperty)}
                       </div>
                       {rentProperties.length > LISTINGS_INCREMENT && (
                         <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -18443,8 +18475,8 @@ function AppContent() {
                 </div>
               )
               : <>
-                  <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                    {searchFiltered(saleProperties).slice(0, saleLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                  <div style={{ display: 'grid', gridAutoFlow: 'row dense', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                    {renderCardsWithAds(searchFiltered(saleProperties).slice(0, saleLimit), setSelectedProperty)}
                   </div>
                   {searchFiltered(saleProperties).length > LISTINGS_INCREMENT && (
                     <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -18564,8 +18596,8 @@ function AppContent() {
                 </div>
               )
               : <>
-                  <div style={{ display: 'grid', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
-                    {searchFiltered(shortletProperties).slice(0, shortletLimit).map(function(h){ return <PropertyCard key={h.id} house={h} onSelect={function(){ setSelectedProperty(h); }} />; })}
+                  <div style={{ display: 'grid', gridAutoFlow: 'row dense', gridTemplateColumns: isVerySmall ? 'repeat(auto-fill, minmax(160px, 1fr))' : isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(220px, 1fr))', gap: isMobile ? '8px' : '14px' }}>
+                    {renderCardsWithAds(searchFiltered(shortletProperties).slice(0, shortletLimit), setSelectedProperty)}
                   </div>
                   {searchFiltered(shortletProperties).length > LISTINGS_INCREMENT && (
                     <div style={{ textAlign: 'center', padding: '24px 0 8px 0' }}>
@@ -18783,7 +18815,7 @@ function AppContent() {
         )}
       </div>
       {/* Ad banner - sits just above footer */}
-      {(globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true) && (
+      {!IS_NATIVE_APP && (globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true) && (
         <div style={{
           width: '100%',
           display: 'flex',
