@@ -3130,6 +3130,7 @@ function PricingModal({ property, onClose, onBlockAgent, user, onUserChange, glo
 var IS_NATIVE_APP = Capacitor.isNativePlatform();
 var LISTINGS_PER_AD = 6;
 var FIRST_AD_AFTER = 3; // below the 6 listings shown at first, so one ad is visible
+var TEST_AD_SLOT = '1234567890'; // shows a labelled box the size of the footer banner
 
 // One responsive ad unit serves every placement. The older per-placement
 // names are read so a configuration saved before ad_slot keeps working.
@@ -3172,7 +3173,7 @@ function GoogleAd({ type }) {
     : { display: 'block' };
 
   useEffect(function() {
-    if (IS_NATIVE_APP || !publisherId || !slot) return;
+    if (IS_NATIVE_APP || !publisherId || !slot || (isFixedSize && slot === TEST_AD_SLOT)) return;
     try {
       // Load the AdSense loader script once per publisher, then ask it to
       // fill this <ins> block. Injected dynamically (rather than statically
@@ -3192,6 +3193,14 @@ function GoogleAd({ type }) {
   }, [publisherId, slot]);
 
   if (IS_NATIVE_APP || !publisherId || !slot) return null;
+
+  if (isFixedSize && slot === TEST_AD_SLOT) {
+    return (
+      <div className="gh-ad-placeholder" style={{ ...adStyle, boxSizing: 'border-box', border: '1px dashed #94a3b8', color: '#64748b', fontSize: '0.75rem', textAlign: 'center', lineHeight: (parseInt(adStyle.height, 10) - 2) + 'px', verticalAlign: 'top' }}>
+        Ad space {parseInt(adStyle.width, 10)} × {parseInt(adStyle.height, 10)}
+      </div>
+    );
+  }
 
   return (
     <ins className="adsbygoogle"
@@ -18179,7 +18188,7 @@ function AppContent() {
           </div>
         )}
       </nav>
-      <div style={{ padding: isMobile ? '20px 4% 48px' : '44px 5% 64px', maxWidth: '1440px', margin: '0 auto', width: '100%', flex: 1 }}>
+      <div style={{ padding: isMobile ? '20px 4% 16px' : '44px 5% 16px', maxWidth: '1440px', margin: '0 auto', width: '100%', flex: 1 }}>
         {currentTab === 'rent' && (
           <section>
             <div style={{ background: 'linear-gradient(140deg, #061b36 0%, #0d2d4e 50%, #0a2240 100%)', margin: isMobile ? '-20px -4% 24px' : '-40px -5% 40px', padding: isMobile ? '30px 4% 26px' : '64px 5% 48px', position: 'relative', overflow: 'hidden' }}>
@@ -18851,9 +18860,7 @@ function AppContent() {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '2px 0',
           backgroundColor: '#f8fafc',
-          borderTop: '1px solid #e2e8f0',
         }}>
           {isMobile ? (
             <div style={{ width: '320px', height: '50px', maxWidth: '100%', overflow: 'hidden' }}>

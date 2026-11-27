@@ -242,4 +242,6 @@ a, button, [role="button"] {
 
 /* ── AdSense: no empty space when Google has no ad ────── */
 ins.adsbygoogle[data-ad-status="unfilled"] { display: none !important; }
-.gh-footer-ad:has(ins[data-ad-status="unfilled"]) { display: none !important; }
+/* The footer strip takes no height until an ad (or the test box) is in it.
+   It keeps its width, which AdSense needs in order to fill it. */
+.gh-footer-ad:not(:has(ins[data-ad-status="filled"], .gh-ad-placeholder)) { height: 0; overflow: hidden; visibility: hidden; }
