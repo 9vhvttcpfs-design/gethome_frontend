@@ -3131,6 +3131,12 @@ var IS_NATIVE_APP = Capacitor.isNativePlatform();
 var LISTINGS_PER_AD = 6;
 var FIRST_AD_AFTER = 3; // below the 6 listings shown at first, so one ad is visible
 
+// One responsive ad unit serves every placement. The older per-placement
+// names are read so a configuration saved before ad_slot keeps working.
+function getAdSlot(config) {
+  return config.ad_slot || config.listing_slot || config.banner_slot || '';
+}
+
 // Property cards with a listing ad after card 3, then every 6 cards. The
 // grid using this needs gridAutoFlow: 'row dense' so the full-width ad leaves no
 // holes when a row isn't full.
@@ -3139,7 +3145,7 @@ function renderCardsWithAds(houses, onSelect) {
   var config = settings.adsense_config || {};
   var showAds = !IS_NATIVE_APP
     && (settings.ads_enabled === 'true' || settings.ads_enabled === true)
-    && !!config.publisher_id && !!config.listing_slot;
+    && !!config.publisher_id && !!getAdSlot(config);
 
   return houses.map(function(h, i) {
     var adFollows = showAds && (i + 1) % LISTINGS_PER_AD === FIRST_AD_AFTER && i + 1 < houses.length;
@@ -3159,12 +3165,7 @@ function renderCardsWithAds(houses, onSelect) {
 function GoogleAd({ type }) {
   var config = (window.__gethomeSettings || {}).adsense_config || {};
   var publisherId = config.publisher_id || '';
-  // 'mobile-banner' falls back to banner_slot if no dedicated mobile slot is
-  // configured yet, so the 320x50 placement still shows something on mobile
-  // rather than silently rendering nothing.
-  var slot = type === 'mobile-banner' ? (config.mobile_slot || config.banner_slot || '')
-    : type === 'banner' ? (config.banner_slot || '')
-    : (config.listing_slot || '');
+  var slot = getAdSlot(config);
   var isFixedSize = type === 'banner' || type === 'mobile-banner';
   var adStyle = type === 'mobile-banner' ? { display: 'inline-block', width: '320px', height: '50px' }
     : type === 'banner' ? { display: 'inline-block', width: '468px', height: '60px' }
@@ -5536,9 +5537,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [appSettings, setAppSettings]                   = useState({});
   const [adsEnabled, setAdsEnabled]                     = useState(false);
   const [adPublisherId, setAdPublisherId]               = useState('');
-  const [adListingSlot, setAdListingSlot]               = useState('');
-  const [adBannerSlot, setAdBannerSlot]                 = useState('');
-  const [adMobileSlot, setAdMobileSlot]                 = useState('');
+  const [adSlot, setAdSlot]                             = useState('');
   const [bankDetails, setBankDetails]                   = useState({ bank_name: '', account_number: '', account_name: '', bank_code: '' });
   const [loanLink, setLoanLink]                         = useState('https://creditdirect.ng/?ref=09077246534');
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
@@ -5619,9 +5618,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
         setAdsEnabled(data.ads_enabled === 'true' || data.ads_enabled === true);
         if (data.adsense_config) {
           setAdPublisherId(data.adsense_config.publisher_id || '');
-          setAdListingSlot(data.adsense_config.listing_slot || '');
-          setAdBannerSlot(data.adsense_config.banner_slot || '');
-          setAdMobileSlot(data.adsense_config.mobile_slot || '');
+          setAdSlot(getAdSlot(data.adsense_config));
         }
         if (data.bank_details) setBankDetails(data.bank_details);
         if (data.loan_link) setLoanLink(data.loan_link);
@@ -10130,24 +10127,10 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
                       </div>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Listing Ad Unit ID (between properties)</label>
+                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Ad Slot ID</label>
                         <input type='text' placeholder='1234567890'
-                          value={adListingSlot}
-                          onChange={function(e) { setAdListingSlot(e.target.value.trim()); }}
-                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Banner Ad Unit ID (468×60, above footer)</label>
-                        <input type='text' placeholder='0987654321'
-                          value={adBannerSlot}
-                          onChange={function(e) { setAdBannerSlot(e.target.value.trim()); }}
-                          style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
-                      </div>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Mobile Banner Slot ID (320×50)</label>
-                        <input type='text' placeholder='mobile ad unit ID'
-                          value={adMobileSlot}
-                          onChange={function(e) { setAdMobileSlot(e.target.value.trim()); }}
+                          value={adSlot}
+                          onChange={function(e) { setAdSlot(e.target.value.trim()); }}
                           style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
                       </div>
                       <button onClick={async function() {
@@ -10159,7 +10142,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
                             body: JSON.stringify({
                               setting_key: 'adsense_config',
-                              setting_json: { publisher_id: adPublisherId, listing_slot: adListingSlot, banner_slot: adBannerSlot, mobile_slot: adMobileSlot },
+                              setting_json: { publisher_id: adPublisherId, ad_slot: adSlot },
                             }),
                           });
                           if (!res.ok) throw new Error('Failed to save');
@@ -18815,13 +18798,13 @@ function AppContent() {
         )}
       </div>
       {/* Ad banner - sits just above footer */}
-      {!IS_NATIVE_APP && (globalSettings.ads_enabled === 'true' || globalSettings.ads_enabled === true) && (
-        <div style={{
+      {!IS_NATIVE_APP && adsEnabled && globalSettings.adsense_config?.publisher_id && getAdSlot(globalSettings.adsense_config) && (
+        <div className="gh-footer-ad" style={{
           width: '100%',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          padding: '8px 0',
+          padding: '2px 0',
           backgroundColor: '#f8fafc',
           borderTop: '1px solid #e2e8f0',
         }}>

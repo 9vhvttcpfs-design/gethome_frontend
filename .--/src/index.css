@@ -236,3 +236,7 @@ a, button, [role="button"] {
     font-size: 16px !important;
   }
 }
+
+/* ── AdSense: no empty space when Google has no ad ────── */
+ins.adsbygoogle[data-ad-status="unfilled"] { display: none !important; }
+.gh-footer-ad:has(ins[data-ad-status="unfilled"]) { display: none !important; }
