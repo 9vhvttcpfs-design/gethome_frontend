@@ -9,11 +9,11 @@ import GrowthCRM from './features/growth/GrowthCRM';
 import OutreachCommandCentre from './features/outreach/OutreachCommandCentre';
 import { matchesCity } from './constants/cityAreas';
 import { gxSignupMeta, linkAttribution, attachAiSession } from './utils/growth';
+import { updateAdMobBanner } from './utils/admob';
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY, {
   auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
 });
 const MASTER_ADMIN = "medibrhm07@gmail.com";
-const AD_CONFIG = { BANNER_ANDROID: 'ca-app-pub-3940256099942544/6300978111', BANNER_IOS: 'ca-app-pub-3940256099942544/2934735716' };
 const API_URL            = import.meta.env.VITE_API_URL;
 const PAYSTACK_PUB_KEY   = import.meta.env.VITE_PAYSTACK_PUB_KEY;
 const LOAN_PARTNER_URL    = import.meta.env.VITE_LOAN_PARTNER_URL;
@@ -406,7 +406,7 @@ function PrivacyPolicyPage() {
         },
         {
           title: '8. Cookies',
-          body: 'GetHome uses essential cookies and similar storage to keep you logged in and remember your preferences. Our website also shows ads through Google AdSense. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this and other websites. Advertising cookies from Google enable it and its partners to serve ads to you based on those visits. These vendors may also collect information such as your IP address, browser and device details. You can opt out of personalised advertising in Google Ads Settings (https://adssettings.google.com) or at https://www.aboutads.info. To learn how Google uses this data, see https://policies.google.com/technologies/partner-sites.'
+          body: 'GetHome uses essential cookies and similar storage to keep you logged in and remember your preferences. Our website also shows ads through Google AdSense, and our mobile app shows ads through Google AdMob, which may use your device advertising identifier. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this and other websites. Advertising cookies from Google enable it and its partners to serve ads to you based on those visits. These vendors may also collect information such as your IP address, browser and device details. You can opt out of personalised advertising in Google Ads Settings (https://adssettings.google.com) or at https://www.aboutads.info. To learn how Google uses this data, see https://policies.google.com/technologies/partner-sites.'
         },
         {
           title: '9. Children\'s Privacy',
@@ -567,7 +567,7 @@ var LEGAL_CONTENT = {
     { heading: "3. Data Sharing", body: "Shared with Flutterwave, Supabase, Resend. Never sold." },
     { heading: "4. Security", body: "HTTPS encryption and Supabase Auth." },
     { heading: "5. Your Rights", body: "Access, correct, or delete your data. Contact gethome.realest@gmail.com." },
-    { heading: "6. Cookies", body: "Essential login cookies. Our website also shows Google AdSense ads: Google and other third-party vendors use cookies to serve ads based on your visits to this and other websites. Opt out of personalised ads at https://adssettings.google.com." },
+    { heading: "6. Cookies", body: "Essential login cookies. Our mobile app shows Google AdMob ads, which may use your device advertising identifier. Our website also shows Google AdSense ads: Google and other third-party vendors use cookies to serve ads based on your visits to this and other websites. Opt out of personalised ads at https://adssettings.google.com." },
     { heading: "7. Retention", body: "Account data held while active. Transactions kept 7 years." },
     { heading: "8. Contact", body: "Privacy: gethome.realest@gmail.com" }
   ]},
@@ -5538,6 +5538,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
   const [adsEnabled, setAdsEnabled]                     = useState(false);
   const [adPublisherId, setAdPublisherId]               = useState('');
   const [adSlot, setAdSlot]                             = useState('');
+  const [admobConfig, setAdmobConfig]                   = useState({ enabled: false, android_banner_id: '', ios_banner_id: '' });
   const [bankDetails, setBankDetails]                   = useState({ bank_name: '', account_number: '', account_name: '', bank_code: '' });
   const [loanLink, setLoanLink]                         = useState('https://creditdirect.ng/?ref=09077246534');
   const [paymentWhatsapp, setPaymentWhatsapp]           = useState('+234 913 064 9368');
@@ -5620,6 +5621,7 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
           setAdPublisherId(data.adsense_config.publisher_id || '');
           setAdSlot(getAdSlot(data.adsense_config));
         }
+        if (data.admob_config) setAdmobConfig(data.admob_config);
         if (data.bank_details) setBankDetails(data.bank_details);
         if (data.loan_link) setLoanLink(data.loan_link);
         if (data.payment_whatsapp) setPaymentWhatsapp(data.payment_whatsapp);
@@ -10152,6 +10154,53 @@ function AdminDashboard({ user, onListingUpdated, onListingDeleted }) {
                         } catch(err) { setSettingsMsg('Error: ' + err.message); }
                       }} style={{ padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
                         Save AdSense Configuration
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AdMob (Android/iOS app) — super admin only */}
+                {isSuperAdmin && adsEnabled && (
+                  <div style={{ backgroundColor: '#fff', borderRadius: '14px', padding: '20px', marginBottom: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(10,34,64,0.05)' }}>
+                    <h3 style={{ margin: '0 0 4px 0', fontWeight: '800', color: '#0a2240', fontSize: '0.94rem' }}>AdMob (Android and iOS app)</h3>
+                    <p style={{ margin: '0 0 14px 0', color: '#64748b', fontSize: '0.78rem' }}>
+                      Banner at the bottom of the app. Paste the banner ad unit IDs from admob.google.com (they contain a /). A blank field shows Google's test ad.
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: '600', color: '#374151' }}>
+                        <input type='checkbox' checked={admobConfig.enabled === true}
+                          onChange={function(e) { setAdmobConfig({ ...admobConfig, enabled: e.target.checked }); }}
+                          style={{ width: '18px', height: '18px', WebkitAppearance: 'checkbox', appearance: 'auto' }} />
+                        Show the banner in the app
+                      </label>
+                      {[['android_banner_id', 'Android banner ad unit ID'], ['ios_banner_id', 'iOS banner ad unit ID']].map(function([key, label]) {
+                        return (
+                          <div key={key}>
+                            <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>{label}</label>
+                            <input type='text' placeholder='ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX'
+                              value={admobConfig[key] || ''}
+                              onChange={function(e) { setAdmobConfig({ ...admobConfig, [key]: e.target.value.trim() }); }}
+                              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '0.84rem', boxSizing: 'border-box' }} />
+                          </div>
+                        );
+                      })}
+                      <button onClick={async function() {
+                        var badId = [admobConfig.android_banner_id, admobConfig.ios_banner_id].some(function(id) { return id && !/^ca-app-pub-\d+\/\d+$/.test(id); });
+                        if (badId) { setSettingsMsg('Error: an ad unit ID looks like ca-app-pub-1234/5678 (with a /, not ~)'); return; }
+                        try {
+                          var token = localStorage.getItem('gh_token');
+                          var res = await fetch(API_URL + '/api/admin/settings', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+                            body: JSON.stringify({ setting_key: 'admob_config', setting_json: admobConfig }),
+                          });
+                          if (!res.ok) throw new Error('Failed to save');
+                          setSettingsMsg('AdMob configuration saved successfully');
+                          window.dispatchEvent(new CustomEvent('gethome-settings-changed'));
+                          setTimeout(function() { setSettingsMsg(''); }, 3000);
+                        } catch(err) { setSettingsMsg('Error: ' + err.message); }
+                      }} style={{ padding: '10px', backgroundColor: '#0a2240', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer', fontSize: '0.84rem' }}>
+                        Save AdMob Configuration
                       </button>
                     </div>
                   </div>
@@ -16694,10 +16743,8 @@ function AppContent() {
     } catch(e) { console.error('Settings fetch error:', e.message); }
   };
   useEffect(function() {
-    if (!adsEnabled) return;
-    async function initAdMob() { try { console.log('AdMob ready'); } catch(e) {} }
-    initAdMob();
-  }, [adsEnabled]);
+    updateAdMobBanner(adsEnabled, globalSettings.admob_config);
+  }, [adsEnabled, globalSettings]);
   useEffect(function() {
     if (document.getElementById('gh-fonts')) return;
     var link = document.createElement('link');
@@ -19092,7 +19139,7 @@ function GetHomeAIWidget({ globalSettings, user, onViewProperty }) {
   ];
 
   return (
-    <div style={{ position: 'fixed', bottom: 'calc(20px + var(--sab, 0px))', right: '20px', zIndex: 999999, fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ position: 'fixed', bottom: 'calc(20px + var(--sab, 0px) + var(--admob-h, 0px))', right: '20px', zIndex: 999999, fontFamily: "'Inter', sans-serif" }}>
 
       {/* Chat window */}
       {isOpen && (

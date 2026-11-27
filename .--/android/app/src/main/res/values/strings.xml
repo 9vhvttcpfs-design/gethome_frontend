@@ -4,4 +4,6 @@
     <string name="title_activity_main">GetHome Realestate</string>
     <string name="package_name">online.trygethome.app</string>
     <string name="custom_url_scheme">online.trygethome.app</string>
+    <!-- Google's TEST AdMob App ID: replace with your own Android App ID (has a ~) before release -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>

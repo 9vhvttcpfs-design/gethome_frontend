@@ -78,6 +78,9 @@
   --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px);
   --sar: env(safe-area-inset-right, 0px);
+
+  /* Height of the AdMob banner in the native app (set by utils/admob.js) */
+  --admob-h: 0px;
 }
 
 /* ── Base Reset ───────────────────────────────────────── */
@@ -104,7 +107,7 @@ body {
   overflow-x: hidden;
   line-height: 1.55;
   min-height: 100%;
-  padding: var(--sat) var(--sar) var(--sab) var(--sal);
+  padding: var(--sat) var(--sar) calc(var(--sab) + var(--admob-h)) var(--sal);
 }
 
 /* Solid strip behind the iPhone status bar so scrolled content never shows through it.
