@@ -406,7 +406,7 @@ function PrivacyPolicyPage() {
         },
         {
           title: '8. Cookies',
-          body: 'GetHome uses essential cookies and similar storage to keep you logged in and remember your preferences. Our website also shows ads through Google AdSense, and our mobile app shows ads through Google AdMob, which may use your device advertising identifier. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this and other websites. Advertising cookies from Google enable it and its partners to serve ads to you based on those visits. These vendors may also collect information such as your IP address, browser and device details. You can opt out of personalised advertising in Google Ads Settings (https://adssettings.google.com) or at https://www.aboutads.info. To learn how Google uses this data, see https://policies.google.com/technologies/partner-sites.'
+          body: 'GetHome uses essential cookies and similar storage to keep you logged in and remember your preferences. Our website also shows ads through Google AdSense, and our mobile app shows ads through Google AdMob, which may use your device advertising identifier. On iPhone and iPad, the app asks for your permission before this identifier is used to track you across apps and websites owned by other companies, and you can change your choice at any time in Settings > Privacy & Security > Tracking. Third-party vendors, including Google, use cookies to serve ads based on your prior visits to this and other websites. Advertising cookies from Google enable it and its partners to serve ads to you based on those visits. These vendors may also collect information such as your IP address, browser and device details. You can opt out of personalised advertising in Google Ads Settings (https://adssettings.google.com) or at https://www.aboutads.info. To learn how Google uses this data, see https://policies.google.com/technologies/partner-sites.'
         },
         {
           title: '9. Children\'s Privacy',
@@ -567,7 +567,7 @@ var LEGAL_CONTENT = {
     { heading: "3. Data Sharing", body: "Shared with Flutterwave, Supabase, Resend. Never sold." },
     { heading: "4. Security", body: "HTTPS encryption and Supabase Auth." },
     { heading: "5. Your Rights", body: "Access, correct, or delete your data. Contact gethome.realest@gmail.com." },
-    { heading: "6. Cookies", body: "Essential login cookies. Our mobile app shows Google AdMob ads, which may use your device advertising identifier. Our website also shows Google AdSense ads: Google and other third-party vendors use cookies to serve ads based on your visits to this and other websites. Opt out of personalised ads at https://adssettings.google.com." },
+    { heading: "6. Cookies", body: "Essential login cookies. Our mobile app shows Google AdMob ads, which may use your device advertising identifier. On iPhone and iPad the app asks permission before tracking, which you can change in Settings > Privacy & Security > Tracking. Our website also shows Google AdSense ads: Google and other third-party vendors use cookies to serve ads based on your visits to this and other websites. Opt out of personalised ads at https://adssettings.google.com." },
     { heading: "7. Retention", body: "Account data held while active. Transactions kept 7 years." },
     { heading: "8. Contact", body: "Privacy: gethome.realest@gmail.com" }
   ]},
